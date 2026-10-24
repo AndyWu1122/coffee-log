@@ -10,7 +10,7 @@
 ---
 
 > **目前的正式專案**：ref `rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），2026-10-24 建立；migration、`delete-account`、前端設定都已完成，Google 登入已實際測試成功。
-> 2026-10-25：意見回饋的 migration 與 `feedback` 已部署；**還沒設定 `RESEND_API_KEY`、`FEEDBACK_TO`**（回饋會存下來，但不寄信，見 5-2）
+> 2026-10-25：意見回饋的 migration 與 `feedback` 已部署，`RESEND_API_KEY`、`FEEDBACK_TO` 已設定（見 5-2）
 
 ## 1. 建立 Supabase 專案（你）
 
@@ -109,7 +109,8 @@ npx supabase@2.120.0 functions deploy delete-account   # 需要先完成第 2 �
    ```sh
    npx supabase@2.120.0 secrets set RESEND_API_KEY=re_xxx FEEDBACK_TO=你的Gmail
    ```
-   - 金鑰只存在 Supabase 的 secrets，**不要**寫進 repo 或 `config.toml`（`config.toml` 的 `[edge_runtime.secrets]` 是本機測試用的假值，不會上傳）
+   - 金鑰只存在 Supabase 的 secrets，**不要**寫進 repo 或 `config.toml`
+   - ⚠ `config.toml` 的 `[edge_runtime.secrets]` 會被 `secrets set` 一起上傳到正式專案，所以那裡什麼都不放（本機測試的假 Resend 寫在 function 裡，依網址判斷）
    - 沒設定時回饋照樣存下來，只是不寄信
 3. **部署（Claude，你確認後）**：
    ```sh

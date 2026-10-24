@@ -1,10 +1,9 @@
 // 意見回饋的端對端測試：☰ →「意見回饋」→ Edge Function feedback → 存進 feedback 表 → 寄 Email 給站長
-// 寄信：本機的 Edge Function 把 Email 寄到這支測試開的假 Resend 伺服器（config.toml 的 [edge_runtime.secrets]，port 54399），
+// 寄信：本機的 Edge Function 一律把 Email 寄到這支測試開的假 Resend 伺服器（port 54399，寫在 supabase/functions/feedback/index.ts），
 // 確認收件人、寄件人、主旨、內容；假伺服器回錯誤時回饋照樣存下來
 // 也確認：沒登入看不到表單、Edge Function 的權限、每天 5 則、誰都讀不到回饋、XSS 字串原樣保存、隱私說明
 //
-// 用法：先 npx supabase@2.120.0 start（改過 config.toml 的 [edge_runtime.secrets] 要 stop 再 start），
-// 再 node scripts/social-feedback-test.mjs
+// 用法：先 npx supabase@2.120.0 start，再 node scripts/social-feedback-test.mjs
 
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';

@@ -386,12 +386,10 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# 只給本機的 Edge Function 用（不是真的金鑰）：意見回饋的 Email 改寄到測試腳本開的假 Resend 伺服器
-# （scripts/social-feedback-test.mjs，port 54399）。正式專案用 `supabase secrets set` 設定真的 RESEND_API_KEY、FEEDBACK_TO
-[edge_runtime.secrets]
-RESEND_API_KEY = "local-test-key"
-FEEDBACK_TO = "developer@test.local"
-RESEND_API_URL = "http://host.docker.internal:54399/emails"
+# ⚠ 不要設定 [edge_runtime.secrets]：`supabase secrets set` 會把這裡的值一起上傳到正式專案，蓋掉真的金鑰
+# （意見回饋在本機寄到假 Resend 的設定寫在 supabase/functions/feedback/index.ts，依 SUPABASE_URL 判斷）
+# [edge_runtime.secrets]
+# secret_key = "env(SECRET_VALUE)"
 
 # 刪除我的帳號：閘道先驗證 JWT，函式裡再向 Auth 確認呼叫者是誰，只刪呼叫者自己
 [functions.delete-account]

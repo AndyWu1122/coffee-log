@@ -3,15 +3,18 @@
 // 先存檔再寄信：寄信失敗不影響回饋（站長在 Supabase 後台的 Table Editor 看得到全部）
 //
 // 金鑰：SUPABASE_URL、SUPABASE_ANON_KEY 由 Supabase 自動提供；
-// RESEND_API_KEY、FEEDBACK_TO 用 `supabase secrets set` 設定（不進 repo），沒設定時只存檔、不寄信
-// RESEND_API_URL 只在本機測試時設定（指向假的 Resend 伺服器，見 config.toml 的 [edge_runtime.secrets]）
+// 正式專案的 RESEND_API_KEY、FEEDBACK_TO 用 `supabase secrets set` 設定（不進 repo），沒設定時只存檔、不寄信
+// 本機（supabase start）不讀任何設定，一律寄到測試腳本開的假 Resend（scripts/social-feedback-test.mjs，port 54399）
+// ⚠ 不要用 config.toml 的 [edge_runtime.secrets]：`supabase secrets set` 會把它一起上傳到正式專案
 // 不用 supabase-js：直接呼叫 REST API，沒有第三方相依
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? '';
-const FEEDBACK_TO = Deno.env.get('FEEDBACK_TO') ?? '';
-const RESEND_API_URL = Deno.env.get('RESEND_API_URL') || 'https://api.resend.com/emails';
+// 正式專案的網址是 https://<ref>.supabase.co；本機是 http://kong:8000 之類
+const LOCAL = !new URL(SUPABASE_URL).hostname.endsWith('.supabase.co');
+const RESEND_API_URL = LOCAL ? 'http://host.docker.internal:54399/emails' : 'https://api.resend.com/emails';
+const RESEND_API_KEY = LOCAL ? 'local-test-key' : Deno.env.get('RESEND_API_KEY') ?? '';
+const FEEDBACK_TO = LOCAL ? 'developer@test.local' : Deno.env.get('FEEDBACK_TO') ?? '';
 // Resend 免費方案不用自己的網域：從 onboarding@resend.dev 只能寄給註冊 Resend 的那個 email（就是站長自己）
 const FROM = '手沖紀錄 <onboarding@resend.dev>';
 

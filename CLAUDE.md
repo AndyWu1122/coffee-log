@@ -193,7 +193,8 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - ☰ →「意見回饋」（`#/feedback`），要登入才能送（防灌送）；類型（bug/idea/other）、內容 ≤ 1000 字，附暱稱（author）與 App 版本號，不附 email
 - `feedback` 表和檢舉一樣：只能以自己的名義新增，誰都讀不到（連作者自己），站長在 Supabase 後台看；刪除帳號時 cascade 刪除
 - App 呼叫 Edge Function `feedback`：用**呼叫者的 JWT** 寫入（RLS、每日上限照常生效）→ 透過 Resend 寄**純文字** Email 給站長；先存檔再寄信，寄信失敗不影響回饋
-- 金鑰 `RESEND_API_KEY`、`FEEDBACK_TO` 只用 `supabase secrets set` 設定；`config.toml` 的 `[edge_runtime.secrets]` 是本機測試的假值（寄到 social-feedback-test 開的假 Resend，port 54399），改了要 `stop` 再 `start`
+- 金鑰 `RESEND_API_KEY`、`FEEDBACK_TO` 只用 `supabase secrets set` 設定；本機不讀設定，function 依 `SUPABASE_URL`（不是 `*.supabase.co`）判斷，一律寄到 social-feedback-test 開的假 Resend（port 54399）
+- **`config.toml` 不要設定 `[edge_runtime.secrets]`**：`supabase secrets set` 會把它一起上傳到正式專案、蓋掉真的金鑰（曾經發生過）
 - 正式專案要另外部署：`npx supabase@2.120.0 functions deploy feedback`（步驟見 `docs/supabase-setup.md` 5-2）
 
 ### 本機開發（不連正式專案）
