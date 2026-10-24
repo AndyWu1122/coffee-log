@@ -173,6 +173,10 @@ a { color: var(--accent); }
   font-size: 0.8rem;
 }
 
+.badge-warn { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+.stock-row { color: var(--text); }
+.stock-hint { margin: 0; }
+
 .empty {
   text-align: center;
   color: var(--text-dim);

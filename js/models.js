@@ -108,6 +108,7 @@ export function validateBean(b) {
     if (!isValidDateStr(b.roastDate)) errors.roastDate = '日期格式錯誤';
     else if (b.roastDate > todayLocal()) errors.roastDate = '烘焙日不能晚於今天';
   }
+  if (b.bagWeightG != null && !(b.bagWeightG > 0)) errors.bagWeightG = '整包重量需大於 0';
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
@@ -153,6 +154,7 @@ function normalizeBean(input) {
     process: input.process,
     roastLevel: input.roastLevel,
     roastDate: input.roastDate || '',
+    bagWeightG: toNum(input.bagWeightG), // 整包重量（選填）；剩餘量由紀錄的粉量算出，不另外儲存
     archived: Boolean(input.archived),
     createdAt: toIso(input.createdAt) ?? new Date().toISOString(),
   };
@@ -196,13 +198,76 @@ const byArchivedThenNewest = (a, b) =>
 
 /* ===== 豆子 ===== */
 
-/** 豆子列表：未封存在前，再依建立時間新→舊；附上「烘焙至今天數」 */
+/* ===== 豆子剩餘量（衍生值，不儲存） ===== */
+
+const RECENT_CUPS = 5; // 估算「約幾杯」用最近幾杯的平均粉量
+const LOW_CUPS = 2;    // 剩這麼多杯以下顯示「快沒了」
+
+const newestFirst = (a, b) => b.brewedAt.localeCompare(a.brewedAt);
+const recentAvgDose = (brews) => {
+  const doses = [...brews].sort(newestFirst).slice(0, RECENT_CUPS).map((b) => b.coffeeG).filter((g) => g > 0);
+  return doses.length ? doses.reduce((s, g) => s + g, 0) / doses.length : null;
+};
+
+/**
+ * 豆子剩餘量：整包重量 − 這支豆子所有紀錄的粉量
+ * 每杯用量：這支豆子最近 5 杯的平均；還沒沖過就用全部紀錄最近 5 杯的平均；都沒有則不估杯數
+ * 沒填整包重量回傳 null
+ */
+export function beanStock(bean, beanBrews, allBrews) {
+  if (!(bean.bagWeightG > 0)) return null;
+  const round1 = (g) => Math.round(g * 10) / 10; // 避免 15.5 + 0.1 這類浮點誤差讓「已用完」判斷失準
+  const usedG = round1(beanBrews.reduce((s, b) => s + (b.coffeeG || 0), 0));
+  const remainingG = round1(bean.bagWeightG - usedG);
+  const doseG = recentAvgDose(beanBrews) ?? recentAvgDose(allBrews);
+  const cupsLeft = doseG ? Math.floor(Math.max(remainingG, 0) / doseG) : null;
+  return {
+    usedG,
+    usedCups: beanBrews.length,
+    remainingG,
+    cupsLeft,
+    empty: remainingG <= 0,
+    low: remainingG > 0 && cupsLeft != null && cupsLeft <= LOW_CUPS,
+  };
+}
+
+/** 克數顯示：最多一位小數（15.5g、85g） */
+export const formatGrams = (g) => `${Number(g.toFixed(1))}g`;
+
+/** 剩餘量文字：「剩 85g，約 5 杯」「已用完」「已用完（超出 12g）」；short 只給克數（下拉選單用） */
+export function formatStock(stock, { short = false } = {}) {
+  if (!stock) return '';
+  if (stock.remainingG < 0) return short ? '已用完' : `已用完（超出 ${formatGrams(-stock.remainingG)}）`;
+  if (stock.remainingG === 0) return '已用完';
+  const grams = `剩 ${formatGrams(stock.remainingG)}`;
+  if (short || stock.cupsLeft == null) return grams;
+  return stock.cupsLeft === 0 ? `${grams}，不到 1 杯` : `${grams}，約 ${stock.cupsLeft} 杯`;
+}
+
+/** 豆子列表：未封存在前，再依建立時間新→舊；附上「烘焙至今天數」與剩餘量 stock */
 export async function listBeans({ includeArchived = false } = {}) {
-  const beans = await db.getAll('beans');
+  const [beans, brews] = await Promise.all([db.getAll('beans'), db.getAll('brews')]);
+  const brewsByBean = new Map(); // 不用 Map.groupBy：較舊的 iOS Safari 不支援
+  for (const b of brews) {
+    if (!brewsByBean.has(b.beanId)) brewsByBean.set(b.beanId, []);
+    brewsByBean.get(b.beanId).push(b);
+  }
   return beans
     .filter((b) => includeArchived || !b.archived)
     .sort(byArchivedThenNewest)
-    .map((b) => ({ ...b, daysSinceRoast: restDays(new Date(), b.roastDate) }));
+    .map((b) => ({
+      ...b,
+      daysSinceRoast: restDays(new Date(), b.roastDate),
+      stock: beanStock(b, brewsByBean.get(b.id) ?? [], brews),
+    }));
+}
+
+/** 單一豆子的剩餘量（豆子編輯頁用） */
+export async function getBeanStock(id) {
+  const [bean, beanBrews, allBrews] = await Promise.all([
+    db.get('beans', id), db.getAllByIndex('brews', 'beanId', id), db.getAll('brews'),
+  ]);
+  return bean ? beanStock(bean, beanBrews, allBrews) : null;
 }
 
 export const getBean = (id) => db.get('beans', id);

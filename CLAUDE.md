@@ -29,13 +29,14 @@ icons/
 views → models → db，每層只呼叫下一層。views 不可直接碰 IndexedDB。
 
 ## 資料模型（備份 schemaVersion: 2／IndexedDB DB_VERSION: 2）
-**beans**：id, name, origin, process(washed/natural/honey/other), roastLevel(light/light-medium/medium-light/medium/dark，即 淺/淺中/中淺/中/深焙), roastDate(YYYY-MM-DD), archived(bool), createdAt
+**beans**：id, name, origin, process(washed/natural/honey/other), roastLevel(light/light-medium/medium-light/medium/dark，即 淺/淺中/中淺/中/深焙), roastDate(YYYY-MM-DD), bagWeightG(整包重量 g，選填), archived(bool), createdAt
 **grinders**：id, name(必填), notes(選填，例如刻度說明), archived(bool), createdAt
 **brews**：id, beanId, grinderId(選填，'' ＝未指定；v1 舊紀錄沒有這個欄位), brewedAt, dripper, grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes
 - brews 建索引：beanId、brewedAt、grinderId（v2 加入）
 - 有紀錄引用的豆子、磨豆機不能刪除，只能封存
 - DB 升級：`onupgradeneeded` 每一步都先檢查是否已存在，既有 store 用升級交易取得後再加索引，絕不改動舊資料
 - 衍生值不儲存：粉水比 = waterG / coffeeG、養豆天數 = 沖煮日 − roastDate，在 models.js 計算
+- 豆子剩餘量（衍生值）= bagWeightG − 該豆子所有紀錄 coffeeG 加總；「約幾杯」用該豆子最近 5 杯平均粉量估算（沒沖過就用全部紀錄最近 5 杯），剩 2 杯以下顯示「快沒了」
 - id 用 crypto.randomUUID()
 
 ## 路由（hash）

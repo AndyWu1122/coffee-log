@@ -1,12 +1,14 @@
 // #/beans/new、#/beans/<id> 新增 / 編輯豆子
-import { getBean, saveBean, setBeanArchived, deleteBean, todayLocal, PROCESS, ROAST_LEVEL } from '../models.js';
+import {
+  getBean, getBeanStock, saveBean, setBeanArchived, deleteBean, todayLocal, formatGrams, formatStock, PROCESS, ROAST_LEVEL,
+} from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors } from './ui.js';
 
 const toOptions = (labels) => Object.entries(labels).map(([value, label]) => ({ value, label }));
 
 export async function render(container, { id, isCurrent }) {
   const isNew = id === null;
-  const bean = isNew ? null : await getBean(id);
+  const [bean, stock] = isNew ? [null, null] : await Promise.all([getBean(id), getBeanStock(id)]);
   if (!isCurrent()) return;
 
   if (!isNew && !bean) {
@@ -45,6 +47,13 @@ export async function render(container, { id, isCurrent }) {
         <input id="roastDate" name="roastDate" type="date" value="${esc(b.roastDate)}" max="${todayLocal()}">
         <div class="error"></div>
       </div>
+      <div class="field" data-field="bagWeightG">
+        <label for="bagWeightG">整包重量 (g)</label>
+        <input id="bagWeightG" name="bagWeightG" type="number" inputmode="decimal" step="1" min="0"
+          value="${esc(b.bagWeightG ?? '')}" placeholder="例：200（填了才會計算剩餘量）">
+        <div class="error"></div>
+        ${stock ? `<p class="hint stock-hint">已用 ${formatGrams(stock.usedG)}（${stock.usedCups} 杯）・${esc(formatStock(stock))}</p>` : ''}
+      </div>
 
       <div class="actions">
         <button class="btn btn-primary btn-block" type="submit">儲存</button>
@@ -68,6 +77,7 @@ export async function render(container, { id, isCurrent }) {
       process: segmentedValue(form, 'process'),
       roastLevel: segmentedValue(form, 'roastLevel'),
       roastDate: f.roastDate.value,
+      bagWeightG: f.bagWeightG.value,
     });
     if (!result.ok) return showErrors(form, result.errors);
     toast('已儲存');

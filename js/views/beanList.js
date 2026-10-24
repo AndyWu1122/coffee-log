@@ -1,5 +1,5 @@
 // #/beans 豆子列表
-import { listBeans, PROCESS, ROAST_LEVEL } from '../models.js';
+import { listBeans, formatStock, PROCESS, ROAST_LEVEL } from '../models.js';
 import { esc, setTitle } from './ui.js';
 
 let showArchived = false; // 切頁後保留勾選狀態
@@ -35,7 +35,7 @@ function beanCard(b) {
     <li><a class="card" href="#/beans/${esc(b.id)}">
       <div class="card-head">
         <span class="card-title">${esc(b.name)}</span>
-        ${b.archived ? '<span class="badge">已封存</span>' : ''}
+        ${b.archived ? '<span class="badge">已封存</span>' : stockBadge(b.stock)}
       </div>
       <div class="card-row">
         ${b.origin ? `<span>${esc(b.origin)}</span>` : ''}
@@ -43,5 +43,14 @@ function beanCard(b) {
         <span>${esc(ROAST_LEVEL[b.roastLevel] ?? '')}</span>
       </div>
       <div class="card-row"><span>${roast}</span></div>
+      ${b.stock && b.stock.remainingG !== 0 /* 剛好用完時標籤已寫「已用完」，不重複 */
+        ? `<div class="card-row stock-row"><span>${esc(formatStock(b.stock))}</span></div>` : ''}
     </a></li>`;
+}
+
+/** 快沒了／已用完的標籤（文字＋顏色，不只靠顏色） */
+function stockBadge(stock) {
+  if (stock?.empty) return '<span class="badge badge-warn">已用完</span>';
+  if (stock?.low) return '<span class="badge badge-warn">快沒了</span>';
+  return '';
 }

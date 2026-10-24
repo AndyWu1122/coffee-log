@@ -1,7 +1,7 @@
 // #/brew/new、#/brew/<id> 新增 / 編輯沖煮紀錄
 import {
   getBrew, saveBrew, deleteBrew, listBeans, listRecentDrippers, latestBrewByBean, brewTemplateFrom,
-  listGrinders, defaultGrinderId, ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
+  listGrinders, defaultGrinderId, formatStock, ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors } from './ui.js';
 import { createFlavorPicker } from './flavorPicker.js';
@@ -81,7 +81,7 @@ export async function render(container, { id, query, isCurrent }) {
         <select id="beanId" name="beanId">
           ${beanOptions.map((bean) => `
             <option value="${esc(bean.id)}" ${bean.id === b.beanId ? 'selected' : ''}>
-              ${esc(bean.name)}${bean.archived ? '（已封存）' : ''}
+              ${esc(bean.name)}${bean.archived ? '（已封存）' : ''}${bean.stock ? `（${esc(formatStock(bean.stock, { short: true }))}）` : ''}
             </option>`).join('')}
         </select>
         <div class="error"></div>
