@@ -47,7 +47,7 @@ export async function render(container, { params: [owner, id], isCurrent }) {
   const scores = Object.entries(FLAVOR).filter(([k]) => item.flavor[k] != null);
   const notes = item.flavorNotes.map(flavorNote).filter(Boolean);
 
-  container.innerHTML = `
+  container.innerHTML = `<div id="feed-detail-page">
     <ul class="list feed">${feedCardHtml(item, { detail: true })}</ul>
     ${bean.length ? `<section class="section"><h2>豆子</h2><p class="detail-text">${esc(bean.join('・'))}</p></section>` : ''}
     <section class="section">
@@ -92,9 +92,11 @@ export async function render(container, { params: [owner, id], isCurrent }) {
         </div>
         <button class="btn btn-primary btn-block" type="submit">送出檢舉</button>
       </form>
-    </section>`;
+    </section>
+  </div>`;
 
-  bindLikes(container, state.user.id, new Map([[`${item.owner}/${item.id}`, item]]));
+  // 綁在這頁自己的元素上（#app 換頁不會被替換，綁在上面的監聽器會殘留）
+  bindLikes(container.querySelector('#feed-detail-page'), state.user.id, new Map([[`${item.owner}/${item.id}`, item]]));
 
   // 檢舉：按「檢舉」才展開表單
   const form = container.querySelector('#report-form');

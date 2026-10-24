@@ -40,6 +40,7 @@ tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mj
 
 ## 分層規則
 views → models → db／cloud，每層只呼叫下一層。views 不可直接碰 IndexedDB 或 Supabase。
+- view 的事件監聽器掛在這一頁自己的元素上，**不要掛在 `render` 收到的 container（`#app`）**：`#app` 換頁不會被替換，監聽器會殘留並帶著舊資料處理之後的點擊
 
 ## 資料模型（備份 schemaVersion: 3／IndexedDB DB_VERSION: 5）
 **beans**：id, name, origin, process(washed/natural/honey/other), roastLevel(light/light-medium/medium-light/medium/dark，即 淺/淺中/中淺/中/深焙), roastDate(YYYY-MM-DD), bagWeightG(整包重量 g，選填), archived(bool), createdAt
@@ -162,7 +163,8 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - 暱稱上限 20 字，XSS 測試用 20 字以內的攻擊字串（`"><svg onload=pwn()>`）
 
 ### 動態牆與同步（階段 4）
-- 紀錄表單「誰看得到」：🔒 只有我（預設，「再沖一杯」也一律回到只有我）｜👥 好友；選好友時筆記 ≤ 500 字等雲端限制在表單就擋下（`sharedLimitErrors`）
+- 紀錄表單「誰看得到」：🔒 只有我（預設，「再沖一杯」也一律回到只有我）｜👥 好友；選好友時筆記 ≤ 500 字、風味輪 ≤ 30 個等雲端限制在表單就擋下（`sharedLimitErrors`）
+  - 豆子名稱、產地、磨豆機名稱跟著紀錄上傳（雲端 ≤ 100 字）：豆子、磨豆機表單存檔時就限制；匯入舊備份不擋，分享時由 `saveBrew` 再檢查
 - 同步不記動作佇列：每次比對「本機應該長怎樣」（`toSharedRow`，豆子、磨豆機轉成名稱）和 sync store 記的上次內容，有差異就補送；衝突一律以本機為準
   - 存檔、刪除、改豆子／磨豆機、匯入後由 models 觸發；app.js 在啟動、`online`、切回前景時觸發；沒登入（meta 沒有 session）或沒有要同步的就不載入 supabase-js
   - 雲端已有就 update、沒有才 insert（不用 upsert：欄位權限不能 update id、owner）

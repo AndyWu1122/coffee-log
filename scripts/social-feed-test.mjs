@@ -60,6 +60,22 @@ try {
   const bean = { name: ATTACK, origin: ATTR_ATTACK, process: 'washed', roastLevel: 'light', roastDate: '2026-10-01' };
   const beanId = await m(pa, `(await m.saveBean(${q(bean)})).bean.id`);
 
+  // 雲端的限制在存檔時就擋下（否則永遠同步不上去，只顯示「內容不符合雲端的限制」）
+  const sharedBrew = (extra) => q({ beanId, brewedAt: new Date().toISOString(), coffeeG: 15, waterG: 240, visibility: 'friends', ...extra });
+  const allNotes = `(() => { const ks = []; const walk = (n) => { ks.push(n.key); n.children.forEach(walk); }; m.FLAVOR_WHEEL.forEach(walk); return ks; })()`;
+  const tooManyNotes = await m(pa, `m.saveBrew({ ...${sharedBrew()}, flavorNotes: ${allNotes}.slice(0, 31) })`);
+  check('分享給好友時風味輪超過 30 個被擋下', tooManyNotes.ok === false && tooManyNotes.errors.flavorNotes?.includes('30'), q(tooManyNotes.errors));
+  const longBean = await m(pa, `m.saveBean(${q({ ...bean, name: 'あ'.repeat(101) })})`);
+  check('豆子名稱超過 100 字被擋下', longBean.ok === false && longBean.errors.name?.includes('100'), q(longBean.errors));
+  const longGrinder = await m(pa, `m.saveGrinder({ name: 'あ'.repeat(101) })`);
+  check('磨豆機名稱超過 100 字被擋下', longGrinder.ok === false && longGrinder.errors.name?.includes('100'), q(longGrinder.errors));
+  // 舊資料或匯入的豆子名稱可能超過：分享這支豆子的紀錄時擋下
+  const longBeanId = 'b0000000-0000-4000-8000-000000000001';
+  await pa.eval(`import('/js/db.js').then((db) => db.put('beans', ${q({ ...bean, id: longBeanId, name: 'あ'.repeat(101), archived: false, createdAt: new Date().toISOString() })})).then(() => true)`);
+  const longBeanBrew = await m(pa, `m.saveBrew(${sharedBrew({ beanId: longBeanId })})`);
+  check('豆子名稱超過 100 字時，分享這支豆子的紀錄被擋下', longBeanBrew.ok === false && longBeanBrew.errors.beanId?.includes('100'), q(longBeanBrew.errors));
+  await pa.eval(`import('/js/db.js').then((db) => db.remove('beans', ${q(longBeanId)})).then(() => true)`);
+
   await visit(pa, base, '#/brew/new');
   await pa.waitFor(`document.querySelector('[data-field="visibility"]')`, { label: '可見度切換' });
   check('可見度預設「只有我」', (await pa.eval(`document.querySelector('.segmented[data-name="visibility"]').dataset.value`)) === 'private');
@@ -127,6 +143,21 @@ try {
   await click(pb, '[data-action="like"]');
   await until(async () => rows(await rest(`likes?brew_id=eq.${brewId}`, { token: A.token }))?.length === 0, '收回讚');
   check('收回讚', true);
+
+  // 換頁後按讚的監聽器不能殘留：同一份頁面（只改 hash）換頁，舊頁面的資料（未讚）和新的（已讚）不一致時，
+  // 按一次「收回讚」只能送出收回（之前舊監聽器會同時送出按讚，互相抵消）
+  const likeBtn = `document.querySelector('.feed-card[data-key="${A.id}/${brewId}"] [data-action="like"]')`;
+  await pb.eval(`location.hash = '#/'`);
+  await pb.waitFor(`location.hash === '#/' && document.querySelector('.fab, .empty')`, { label: '紀錄列表' });
+  await rest('likes', { method: 'POST', token: B.token, body: { brew_owner: A.id, brew_id: brewId } }); // 另一台裝置按讚
+  await pb.eval(`location.hash = '#/feed'`);
+  await pb.waitFor(`${likeBtn}?.getAttribute('aria-pressed') === 'true'`, { label: '動態牆顯示已讚' });
+  await click(pb, `.feed-card[data-key="${A.id}/${brewId}"] [data-action="like"]`);
+  await until(async () => rows(await rest(`likes?brew_id=eq.${brewId}`, { token: A.token }))?.length === 0, '換頁後收回讚', 5000);
+  await sleep(500); // 等所有請求結束，確認沒有被另一個監聽器按回去
+  check('換頁後收回讚：雲端沒有讚、畫面顯示未讚',
+    rows(await rest(`likes?brew_id=eq.${brewId}`, { token: A.token }))?.length === 0
+      && (await pb.eval(`${likeBtn}.getAttribute('aria-pressed')`)) === 'false');
 
   /* ===== 改豆子名稱：分享出去的紀錄跟著更新 ===== */
   await m(pa, `m.saveBean(${q({ ...bean, id: beanId, name: '改名的豆子' })})`);

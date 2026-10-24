@@ -147,7 +147,8 @@ export function validateBrew(b) {
 
 // 分享給好友的紀錄要符合雲端資料庫的限制（shared_brews 的 check 約束），否則同步時會被拒絕
 const SHARED_NOTES_MAX = 500;
-const SHARED_TEXT_MAX = 100;
+const SHARED_TEXT_MAX = 100;         // 濾杯、研磨度，以及跟著紀錄上傳的豆子名稱、產地、磨豆機名稱
+const SHARED_FLAVOR_NOTES_MAX = 30;
 const charLength = (s) => [...String(s ?? '')].length; // 和資料庫的 char_length 一樣以字元計
 function sharedLimitErrors(b) {
   const errors = {};
@@ -157,6 +158,9 @@ function sharedLimitErrors(b) {
   if (b.totalTimeS > 3600) errors.totalTimeS = '分享給好友時總時間最多 60 分鐘';
   if (charLength(b.dripper) > SHARED_TEXT_MAX) errors.dripper = `分享給好友時最多 ${SHARED_TEXT_MAX} 字`;
   if (charLength(b.grindSetting) > SHARED_TEXT_MAX) errors.grindSetting = `分享給好友時最多 ${SHARED_TEXT_MAX} 字`;
+  if (b.flavorNotes?.length > SHARED_FLAVOR_NOTES_MAX) {
+    errors.flavorNotes = `分享給好友時風味輪最多選 ${SHARED_FLAVOR_NOTES_MAX} 個（目前 ${b.flavorNotes.length} 個）`;
+  }
   if (b.brewedAt && new Date(b.brewedAt) > new Date(Date.now() + 86400000)) errors.brewedAt = '分享給好友的紀錄，沖煮時間不能是未來';
   return errors;
 }
@@ -219,6 +223,16 @@ function normalizeGrinder(input) {
     archived: Boolean(input.archived),
     createdAt: toIso(input.createdAt) ?? new Date().toISOString(),
   };
+}
+
+/**
+ * 豆子、磨豆機的名稱會跟著分享的紀錄上傳，表單存檔時就限制在雲端的上限內
+ * 不放進 validateBean／validateGrinder：匯入舊備份不擋（分享時 saveBrew 會再檢查）
+ */
+function nameLengthErrors(obj, keys) {
+  const errors = {};
+  for (const key of keys) if (charLength(obj[key]) > SHARED_TEXT_MAX) errors[key] = `最多 ${SHARED_TEXT_MAX} 字`;
+  return errors;
 }
 
 /** 未封存在前，再依建立時間新→舊（豆子、磨豆機共用） */
@@ -308,8 +322,8 @@ export async function saveBean(input) {
   const bean = normalizeBean({
     ...input, id: existing?.id, archived: existing?.archived, createdAt: existing?.createdAt,
   });
-  const { ok, errors } = validateBean(bean);
-  if (!ok) return { ok, errors };
+  const errors = { ...nameLengthErrors(bean, ['name', 'origin']), ...validateBean(bean).errors };
+  if (Object.keys(errors).length) return { ok: false, errors };
   await db.put('beans', bean);
   requestSync(); // 分享出去的紀錄帶著豆子名稱等資訊
   return { ok: true, bean };
@@ -346,8 +360,8 @@ export async function saveGrinder(input) {
   const grinder = normalizeGrinder({
     ...input, id: existing?.id, archived: existing?.archived, createdAt: existing?.createdAt,
   });
-  const { ok, errors } = validateGrinder(grinder);
-  if (!ok) return { ok, errors };
+  const errors = { ...nameLengthErrors(grinder, ['name']), ...validateGrinder(grinder).errors };
+  if (Object.keys(errors).length) return { ok: false, errors };
   await db.put('grinders', grinder);
   requestSync(); // 分享出去的紀錄帶著磨豆機名稱
   return { ok: true, grinder };
@@ -437,8 +451,19 @@ export const getPhoto = (brewId) => db.get('photos', brewId);
 export async function saveBrew(input, { photo } = {}) {
   const brew = normalizeBrew(input);
   const { ok, errors } = validateBrew(brew);
-  if (ok && !(await db.get('beans', brew.beanId))) errors.beanId = '找不到這支豆子';
-  if (brew.grinderId && !(await db.get('grinders', brew.grinderId))) errors.grinderId = '找不到這台磨豆機';
+  const bean = ok ? await db.get('beans', brew.beanId) : null;
+  if (ok && !bean) errors.beanId = '找不到這支豆子';
+  const grinder = brew.grinderId ? await db.get('grinders', brew.grinderId) : null;
+  if (brew.grinderId && !grinder) errors.grinderId = '找不到這台磨豆機';
+  if (brew.visibility === 'friends') {
+    // 豆子、磨豆機的名稱跟著紀錄上傳，也要符合雲端的限制（舊資料或匯入的可能超過）
+    if (bean && (charLength(bean.name) > SHARED_TEXT_MAX || charLength(bean.origin) > SHARED_TEXT_MAX)) {
+      errors.beanId ??= `分享給好友時，豆子的名稱和產地最多 ${SHARED_TEXT_MAX} 字，請先到豆子頁修改`;
+    }
+    if (grinder && charLength(grinder.name) > SHARED_TEXT_MAX) {
+      errors.grinderId ??= `分享給好友時，磨豆機名稱最多 ${SHARED_TEXT_MAX} 字，請先到磨豆機頁修改`;
+    }
+  }
   if (photo && !(photo.blob instanceof Blob && photo.thumb instanceof Blob)) errors.photo = '照片資料錯誤，請重新選擇';
   if (Object.keys(errors).length) return { ok: false, errors };
   await db.transact(PHOTO_STORES, (s) => {

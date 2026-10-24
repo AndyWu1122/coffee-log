@@ -24,12 +24,12 @@ export async function render(container, { id, isCurrent }) {
     <form class="form" novalidate>
       <div class="field" data-field="name">
         <label for="name">名稱 *</label>
-        <input id="name" name="name" value="${esc(b.name)}" placeholder="例：衣索比亞 耶加雪菲" autocomplete="off">
+        <input id="name" name="name" value="${esc(b.name)}" placeholder="例：衣索比亞 耶加雪菲" autocomplete="off" maxlength="100">
         <div class="error"></div>
       </div>
       <div class="field" data-field="origin">
         <label for="origin">產地 / 莊園</label>
-        <input id="origin" name="origin" value="${esc(b.origin)}" autocomplete="off">
+        <input id="origin" name="origin" value="${esc(b.origin)}" autocomplete="off" maxlength="100">
         <div class="error"></div>
       </div>
       <div class="field" data-field="process">

@@ -4,7 +4,7 @@ import {
   formatDaysAgo,
 } from '../models.js';
 import { esc, setTitle, toast } from './ui.js';
-import { exportBackup } from './backup.js';
+import { exportBackup, errorReason } from './backup.js';
 
 const dateFmt = new Intl.DateTimeFormat('zh-TW', {
   month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
@@ -101,7 +101,13 @@ export async function render(container, { isCurrent }) {
     rerender();
   });
   container.querySelector('#backup-now')?.addEventListener('click', async () => {
-    await exportBackup();
+    try {
+      await exportBackup();
+    } catch (err) {
+      console.error(err);
+      toast(`匯出失敗：${errorReason(err)}`);
+      return;
+    }
     toast('已匯出備份');
     rerender();
   });

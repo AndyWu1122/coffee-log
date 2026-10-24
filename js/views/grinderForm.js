@@ -20,7 +20,7 @@ export async function render(container, { id, isCurrent }) {
     <form class="form" novalidate>
       <div class="field" data-field="name">
         <label for="name">名稱 *</label>
-        <input id="name" name="name" value="${esc(g.name)}" placeholder="例：C40、Ode Gen 2" autocomplete="off">
+        <input id="name" name="name" value="${esc(g.name)}" placeholder="例：C40、Ode Gen 2" autocomplete="off" maxlength="100">
         <div class="error"></div>
       </div>
       <div class="field" data-field="notes">

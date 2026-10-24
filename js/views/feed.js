@@ -43,7 +43,7 @@ export async function render(container, { isCurrent }) {
 
   const myId = state.user.id;
   const items = new Map(page.items.map((item) => [keyOf(item), item]));
-  container.innerHTML = `
+  container.innerHTML = `<div id="feed-page">
     <div class="toolbar"><a class="link-btn" href="#/friends">好友管理</a></div>
     ${items.size ? `
       <ul class="list feed" id="feed">${page.items.map((item) => feedCardHtml(item)).join('')}</ul>
@@ -52,9 +52,12 @@ export async function render(container, { isCurrent }) {
         <p>好友還沒有分享紀錄</p>
         <p class="hint">在沖煮紀錄的「誰看得到」選「👥 好友」，就會分享給好友。</p>
         <a class="btn" href="#/friends">加好友</a>
-      </div>`}`;
+      </div>`}
+  </div>`;
 
-  bindLikes(container, myId, items);
+  // 綁在這頁自己的元素上：#app 換頁不會被替換，綁在 container 上的監聽器會殘留，
+  // 帶著舊的 items 和新的一起處理同一次點擊（舊的按讚、新的收回，互相抵消）
+  bindLikes(container.querySelector('#feed-page'), myId, items);
 
   const moreBtn = container.querySelector('[data-action="more"]');
   moreBtn?.addEventListener('click', async () => {
@@ -137,6 +140,7 @@ function likeHtml(item) {
 /**
  * 按讚：先更新畫面，失敗再改回來
  * items：Map<"owner/id", item>，卡片用 data-key 對應
+ * root 必須是這一頁自己的元素（不能是 #app，換頁後監聽器會殘留）
  */
 export function bindLikes(root, myId, items) {
   const busy = new Set();

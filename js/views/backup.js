@@ -17,6 +17,9 @@ export async function exportBackup({ includePhotos = true } = {}) {
   await recordBackup();
 }
 
+/** 匯出、匯入失敗的原因（可直接顯示） */
+export const errorReason = (err) => (err?.name === 'QuotaExceededError' ? '手機的儲存空間不足' : err?.message || '發生錯誤');
+
 export function lastBackupText({ lastBackupAt, daysSince }) {
   return lastBackupAt
     ? `上次備份：${shortDate.format(new Date(lastBackupAt))}（${formatDaysAgo(daysSince)}）`
@@ -73,6 +76,10 @@ export async function render(container, { isCurrent }) {
     exportBtn.disabled = true; // 照片多時轉 base64 需要一點時間，避免重複按
     try {
       await exportBackup({ includePhotos: includePhotos.checked });
+    } catch (err) {
+      console.error(err);
+      toast(`匯出失敗：${errorReason(err)}`);
+      return;
     } finally {
       exportBtn.disabled = false;
     }
@@ -97,10 +104,17 @@ export async function render(container, { isCurrent }) {
     }
 
     resultEl.innerHTML = '<p class="hint">讀取備份檔中…</p>';
-    const result = await importData(await file.text(), {
-      replace,
-      onProgress: (n, total) => { resultEl.innerHTML = `<p class="hint">處理照片中… ${n}／${total}</p>`; },
-    });
+    let result;
+    try {
+      result = await importData(await file.text(), {
+        replace,
+        onProgress: (n, total) => { resultEl.innerHTML = `<p class="hint">處理照片中… ${n}／${total}</p>`; },
+      });
+    } catch (err) {
+      // 讀檔或寫入失敗（例如空間不足）：寫入是單一交易，失敗時整個回滾，資料不會只匯入一半
+      console.error(err);
+      result = { ok: false, errors: [`無法完成匯入：${errorReason(err)}`] };
+    }
     if (!result.ok) {
       resultEl.innerHTML = `
         <div class="notice notice-error">
