@@ -75,13 +75,13 @@ export function formatSeconds(s) {
   return `${Math.floor(s / 60)}:${pad(Math.round(s % 60))}`;
 }
 
-/** "2:30" 或 "150" → 秒；空字串回傳 null，格式錯誤回傳 NaN */
-export function parseDuration(text) {
-  const t = String(text ?? '').trim();
-  if (!t) return null;
-  const m = t.match(/^(\d+):([0-5]?\d)$/);
-  if (m) return Number(m[1]) * 60 + Number(m[2]);
-  return /^\d+$/.test(t) ? Number(t) : NaN;
+/** 分、秒欄位（字串）→ 總秒數；兩者皆空回傳 null，格式錯誤回傳 NaN */
+export function toSeconds(min, sec) {
+  if (min === '' && sec === '') return null;
+  const m = min === '' ? 0 : Number(min);
+  const s = sec === '' ? 0 : Number(sec);
+  if (!Number.isInteger(m) || !Number.isInteger(s) || m < 0 || s < 0 || s > 59) return NaN;
+  return m * 60 + s;
 }
 
 /* ===== 驗證 ===== */
@@ -110,7 +110,7 @@ export function validateBrew(b) {
   if (!(b.waterG > 0)) errors.waterG = '水量需大於 0';
   if (b.tempC != null && !inRange(b.tempC, 70, 100)) errors.tempC = '水溫需介於 70–100°C';
   if (b.totalTimeS != null && !(Number.isInteger(b.totalTimeS) && b.totalTimeS >= 0)) {
-    errors.totalTimeS = '時間格式為 分:秒，例如 2:30';
+    errors.totalTimeS = '請輸入正確的分、秒（秒為 0–59）';
   }
   if (b.rating != null && !inRange(b.rating, 1, 5)) errors.rating = '評分需為 1–5';
   for (const key of Object.keys(FLAVOR)) {
