@@ -2,9 +2,12 @@
 import * as db from './db.js';
 import { isFlavorNote, sortFlavorNotes } from './flavorWheel.js';
 import { compressPhoto, makeThumb, blobToBase64, base64ToBytes, base64Length, jpegSize } from './image.js';
+import { shareFileName } from './cardLayout.js';
 
-// views 只依賴 models，風味輪資料由這裡轉出
+// views 只依賴 models，風味輪資料、圖片解碼、分享卡片的計算由這裡轉出
 export { FLAVOR_WHEEL, flavorNote, sortFlavorNotes } from './flavorWheel.js';
+export { decodeImage } from './image.js';
+export { coverCrop, radarPoints, wrapText } from './cardLayout.js';
 
 // 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos。匯入時接受所有舊版
 export const SCHEMA_VERSION = 3;
@@ -420,6 +423,44 @@ export async function saveBrew(input, { photo } = {}) {
     }
   });
   return { ok: true, brew };
+}
+
+/* ===== 分享卡片 ===== */
+
+/**
+ * 分享卡片需要的資料（中文標籤、衍生值都算好）；找不到紀錄回傳 null
+ * 數值欄位保留原值（null＝沒填），由卡片決定要不要顯示
+ */
+export async function getShareCardData(id) {
+  const brew = await db.get('brews', id);
+  if (!brew) return null;
+  const [bean, grinder, photo] = await Promise.all([
+    db.get('beans', brew.beanId),
+    brew.grinderId ? db.get('grinders', brew.grinderId) : null,
+    db.get('photos', id),
+  ]);
+  const date = toLocalDateStr(brew.brewedAt);
+  return {
+    beanName: bean?.name ?? '（已刪除的豆子）',
+    origin: bean?.origin ?? '',
+    process: PROCESS[bean?.process] ?? '',
+    roastLevel: ROAST_LEVEL[bean?.roastLevel] ?? '',
+    restDays: restDays(brew.brewedAt, bean?.roastDate),
+    date,
+    coffeeG: brew.coffeeG,
+    waterG: brew.waterG,
+    ratio: ratio(brew),
+    tempC: brew.tempC ?? null,
+    totalTimeS: brew.totalTimeS ?? null,
+    dripper: brew.dripper ?? '',
+    grinderName: grinder?.name ?? '',
+    grindSetting: brew.grindSetting ?? '',
+    rating: brew.rating ?? null,
+    flavor: Object.fromEntries(Object.keys(FLAVOR).map((k) => [k, brew.flavor?.[k] ?? null])),
+    notes: brew.notes ?? '',
+    photo: photo ?? null, // { blob, width, height, … }
+    fileName: shareFileName(bean?.name, date),
+  };
 }
 
 /** 刪除紀錄，連同照片、縮圖（同一個交易） */

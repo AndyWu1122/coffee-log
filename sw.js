@@ -1,6 +1,6 @@
 // Service Worker：安裝時預先快取所有檔案，之後一律從快取讀取（離線可用）
 // ⚠ 修改任何前端檔案後，CACHE_VERSION 要 +1，使用者才會收到新版本
-const CACHE_VERSION = 7;
+const CACHE_VERSION = 8;
 const CACHE_NAME = `coffee-log-v${CACHE_VERSION}`;
 
 const ASSETS = [
@@ -13,6 +13,7 @@ const ASSETS = [
   'js/models.js',
   'js/flavorWheel.js',
   'js/image.js',
+  'js/cardLayout.js',
   'js/views/ui.js',
   'js/views/flavorPicker.js',
   'js/views/brewList.js',
@@ -20,6 +21,7 @@ const ASSETS = [
   'js/views/beanList.js',
   'js/views/beanForm.js',
   'js/views/backup.js',
+  'js/views/shareCard.js',
   'js/views/grinderList.js',
   'js/views/grinderForm.js',
   'icons/icon.svg',

@@ -23,7 +23,8 @@ js/db.js           # 唯一存取 IndexedDB 的地方
 js/models.js       # 驗證、計算（粉水比、養豆天數）
 js/flavorWheel.js  # SCA 風味輪靜態資料（三層、中英、大類顏色），由 models.js 轉出給 views
 js/image.js        # 照片處理：解碼、縮小、重新編碼 JPEG、base64、JPEG 檔頭驗證（只由 models.js 使用）
-js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, flavorPicker（風味輪 SVG）, ui（共用 DOM 工具）
+js/cardLayout.js   # 分享卡片的純計算：cover 裁切、雷達圖座標、文字換行（含避頭）、檔名；由 models.js 轉出給 views
+js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, ui（共用 DOM 工具）
 icons/
 ```
 
@@ -48,7 +49,7 @@ views → models → db，每層只呼叫下一層。views 不可直接碰 Index
 - id 用 crypto.randomUUID()
 
 ## 路由（hash）
-`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`
+`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`
 
 ## 介面配置
 - 底部分頁列：紀錄｜豆子（只放每天會用的頁面；之後的統計頁也放這裡）
@@ -61,6 +62,7 @@ views → models → db，每層只呼叫下一層。views 不可直接碰 Index
 - 顏色一律用 `css/style.css` 的變數（`--bg`、`--text`…），**不要寫死顏色**；新增顏色時兩個主題都要定義
 - 淺色主題對比已驗證：文字 ≥ 14:1、次要文字 ≥ 6.9:1、強調色 ≥ 5.2:1、邊框 ≥ 3:1；改色時要重新驗證
 - 風味輪實色格子的字色依底色選白或深（`js/flavorWheel.js` 的 `INK`），淡化格子用 `--text`
+- **例外**：分享卡片是一張輸出的圖，不跟主題切換，固定用深色主題的咖啡色系；色碼常數在 `js/views/shareCard.js` 頂端，要和 style.css 的深色變數一致
 
 ## 不做計時器
 使用者的秤本身有計時功能，App 不做計時器；總時間在表單手動輸入（分、秒兩欄）。
@@ -93,3 +95,11 @@ views → models → db，每層只呼叫下一層。views 不可直接碰 Index
 - 本地開發時 Service Worker 會快取檔案：在 DevTools → Application → Service Workers 勾選「Update on reload」
 - 手機用區網 http 測試時不是 secure context，Service Worker 不會啟用（其他功能正常）
 - 每完成一個功能就 git commit
+
+## 分享卡片
+- 編輯頁（已儲存的紀錄）有「分享」按鈕 → `#/brew/<id>/share`；尺寸 IG 貼文 1080×1350／限時動態 1080×1920
+- 開關：包含照片（有照片才出現，預設開）、包含筆記（有筆記才出現，預設關，避免分享私人內容）
+- 繪製前 `await document.fonts.ready`；版面先量文字區塊高度，照片高度＝剩餘空間，筆記用剩下的行數截斷，保證不跑版
+- 每次選項改變就先 `toBlob` 成 PNG（iOS Safari 的 `navigator.share` 必須在點擊當下呼叫）；`navigator.canShare({ files })` 不支援就改下載
+- 檔名 `coffee-<豆子名稱>-<YYYY-MM-DD>.png`，名稱只留文字、數字、`_`、`-`
+- 不上傳任何資料，離線可用

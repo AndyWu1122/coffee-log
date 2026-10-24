@@ -6,6 +6,7 @@ const routes = [
   { pattern: /^\/$/, tab: 'brews', load: () => import('./views/brewList.js') },
   { pattern: /^\/brew\/new$/, tab: 'brews', load: () => import('./views/brewForm.js') },
   { pattern: /^\/brew\/([\w-]+)$/, tab: 'brews', load: () => import('./views/brewForm.js') },
+  { pattern: /^\/brew\/([\w-]+)\/share$/, tab: 'brews', load: () => import('./views/shareCard.js') },
   { pattern: /^\/beans$/, tab: 'beans', load: () => import('./views/beanList.js') },
   { pattern: /^\/beans\/new$/, tab: 'beans', load: () => import('./views/beanForm.js') },
   { pattern: /^\/beans\/([\w-]+)$/, tab: 'beans', load: () => import('./views/beanForm.js') },

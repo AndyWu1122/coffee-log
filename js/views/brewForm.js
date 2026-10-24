@@ -186,6 +186,7 @@ export async function render(container, { id, query, isCurrent }) {
       <div class="actions">
         <button class="btn btn-primary btn-block" type="submit">儲存</button>
         ${isNew ? '' : `
+          <a class="btn btn-block" href="#/brew/${esc(id)}/share">分享</a>
           <a class="btn btn-block" href="#/brew/new?from=${esc(id)}">用這次參數再沖一杯</a>
           <button class="btn btn-danger btn-block" type="button" data-action="delete">刪除這筆紀錄</button>`}
       </div>
