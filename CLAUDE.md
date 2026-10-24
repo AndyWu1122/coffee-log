@@ -30,11 +30,11 @@ js/config.js       # Supabase 連線設定（依網址：localhost → 本機、
 js/cloud.js        # 唯一存取 Supabase 的地方（角色和 db.js 一樣）；supabase-js 用到才載入
 js/sync.js         # 好友紀錄的同步（本機 friends 紀錄 → shared_brews），只由 models.js 使用
 js/vendor/         # 第三方檔案原封不動（supabase-js UMD、qrcode-generator），來源與 SRI 見 js/vendor/README.md
-js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, account（帳號）, friends（好友管理）, feed（好友動態）, feedDetail（好友紀錄詳細、檢舉、封鎖）, privacy（隱私說明）, feedback（意見回饋）, ui（共用 DOM 工具）
+js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, privacy（隱私說明）, feedback（意見回饋）, ui（共用 DOM 工具）
 icons/
-docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟）
-supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）、functions/feedback（意見回饋：存檔＋寄 Email 給站長）
-scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs
+docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟、部署指令）、overnight-report.md（2026-10-26 通宵工作的報告）
+supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）、functions/feedback（意見回饋：存檔＋寄 Email 給站長；mail.ts 是設定檢查與錯誤說明的純函式）
+scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、feedback-mail-test.mjs（不需要 Supabase）
 tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mjs 用 headless Chrome 開；不屬於 App、不放進 ASSETS）
 ```
 
@@ -46,7 +46,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 **beans**：id, name, origin, process(washed/natural/honey/other), roastLevel(light/light-medium/medium-light/medium/dark，即 淺/淺中/中淺/中/深焙), roastDate(YYYY-MM-DD), bagWeightG(整包重量 g，選填), archived(bool), createdAt
 **grinders**：id, name(必填), notes(選填，例如刻度說明), archived(bool), createdAt
 **brews**：id, beanId, grinderId(選填，'' ＝未指定；v1 舊紀錄沒有這個欄位), brewedAt, dripper, grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes, visibility(private/friends，舊資料沒有這個欄位＝private)
-**meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil、社群登入狀態 `auth:*`、動態牆看到哪 `feedSeenAt`）；**不匯出、匯入取代全部時也不清除**（token 不會進備份檔，匯入也不會被登出）
+**meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil、社群登入狀態 `auth:*`、社群通知看到哪 `feedSeenAt`／`commentsSeenAt`／`repliesSeenAt`）；**不匯出、匯入取代全部時也不清除**（token 不會進備份檔，匯入也不會被登出）
 **photos**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 1600px、品質 0.8，約 200KB), width, height, createdAt；每筆紀錄最多 1 張，跟 brews 分開存
 **thumbs**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 300px)；列表只讀這個，不載入原圖；不匯出，匯入時由照片重新產生
 **sync**（DB v5 加入，keyPath brewId）：brewId, userId, row(上次同步的 shared_brews 內容 JSON), photoAt(上次同步的照片 createdAt), error(''/rate_limited/invalid/failed), failedRow, failedOn；**不匯出、匯入取代全部時也不清除**
@@ -62,14 +62,17 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - id 用 crypto.randomUUID()
 
 ## 路由（hash）
-`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/account` 帳號｜`#/friends` 好友管理｜`#/feed` 好友動態｜`#/feed/<owner>/<id>` 好友紀錄詳細｜`#/privacy` 隱私說明｜`#/feedback` 意見回饋｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）
+`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/account` 帳號｜`#/friends` 好友管理｜`#/social` 社群（全部）｜`#/social?mine=1` 社群（我的）｜`#/social/<owner>/<id>` 紀錄詳細（`?comments=1` 捲到留言區）｜`#/privacy` 隱私說明｜`#/feedback` 意見回饋｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）
+- 1.1.0 以前的 `#/feed`、`#/feed/<owner>/<id>` 由 app.js 轉址到 `#/social…`
 
 ## 介面配置
-- 底部分頁列：紀錄｜豆子｜好友（只放每天會用的頁面；之後的統計頁也放這裡）；「好友」是動態牆，有 `data-social`，`js/config.js` 沒設定時隱藏
+- 底部分頁列：紀錄｜豆子｜社群（只放每天會用的頁面；之後的統計頁也放這裡）；「社群 💬」是動態牆，有 `data-social`，`js/config.js` 沒設定時隱藏
 - **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：帳號、好友管理、磨豆機、備份、隱私說明、意見回饋；帳號、好友管理、意見回饋有 `data-social`，`js/config.js` 沒設定時隱藏）
 - ☰ 選單裡的頁面不屬於任何分頁，路由設 `tab: null`，底部分頁都不亮
-- 社群提示「!」（`app.js` 的 `setupBadges`，`models.getSocialBadges`）：☰ 按鈕＝收到好友邀請（`--accent`）；底部「好友」分頁＝好友有新貼文（`--badge-new`，兩種顏色要能區分）
-  - 新貼文＝好友最新貼文的 `created_at` 比 meta 的 `feedSeenAt`（讀動態牆第一頁時記下，雲端時間、記 userId）新；好友修改舊紀錄不算
+- 社群提示（`app.js` 的 `setupBadges`，`models.getSocialBadges`）：☰ 按鈕的「!」＝收到好友邀請（`--accent`）；底部「社群」分頁的**數字**（`--badge-new`，兩種顏色要能區分）
+  - 數字＝好友新貼文＋我貼文的新留言＋回覆我的留言；各自最多算 100，>99 顯示「99+」（`models.badgeText`），0 隱藏
+  - 「新」＝雲端 `created_at` 比 meta 記下的 seenAt 新（`feedSeenAt`／`commentsSeenAt`／`repliesSeenAt`，雲端時間、記 userId）；好友修改舊紀錄不算
+  - 歸零：讀社群頁第一頁時記下；「全部」三種都記，「我的」只記留言的兩種
   - 檢查時機和同步一樣（啟動、`online`、切回前景），views 操作完用 `notifyBadgesChanged()` 發事件；沒登入不載入 supabase-js；不做即時推播
 
 ## 主題（深色／淺色）
@@ -127,7 +130,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 
 ## 咖啡社群（後端：Supabase）
 規格見 `docs/social-spec.md`（分 5 階段，每階段通過測試、使用者確認後才進下一階段）；待決事項與決定見 `docs/social-open-questions.md`。
-目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）、階段 3（帳號與好友）、階段 4（動態牆與同步）、階段 5（安全與隱私收尾）。正式專案：`rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），migration 與 `delete-account` 已部署；建立與設定步驟見 `docs/supabase-setup.md`。
+目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）、階段 3（帳號與好友）、階段 4（動態牆與同步）、階段 5（安全與隱私收尾），之後加上留言與回覆（`feature/comments`，正式專案尚未部署，步驟見 `docs/supabase-setup.md` 5-3）。正式專案：`rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），migration 與 `delete-account` 已部署；建立與設定步驟見 `docs/supabase-setup.md`。
 
 ### 資安規則（每個階段都必須遵守）
 - 每張表和 Storage bucket 都必須開 RLS，預設拒絕
@@ -146,7 +149,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 profiles、friendships、blocks、shared_brews、likes、reports（public，API 公開、RLS 保護）；rate_events（private，每日／每小時上限的計數）
 - 加好友只能透過 `send_friend_request(code)`，不能直接新增 friendships；沒有「搜尋所有使用者」
 - shared_brews 主鍵 `(owner, id)`，id 沿用本機紀錄 id；雲端只放 friends 紀錄，所以不存可見度
-- 上限：每天 20 個好友邀請、30 筆上傳、10 次檢舉、5 則意見回饋（台灣時間日曆日，只算新增，刪掉不還）；每小時打錯代碼 10 次
+- 上限：每天 20 個好友邀請、30 筆上傳、10 次檢舉、5 則意見回饋、100 則留言（台灣時間日曆日，只算新增，刪掉不還）；每小時打錯代碼 10 次
 
 ### 照片 Storage（階段 2）
 - 私有 bucket `brew-photos`：單檔 ≤ 1MB（`image.CLOUD_PHOTO_MAX_BYTES` 要一致）、只收 `image/jpeg`；路徑 `<user_id>/<brew_id>.jpg`（`models.cloudPhotoPath`，一律小寫）
@@ -191,6 +194,18 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
   - **`js/config.js` 新增或改網址時，CSP 要一起改**（social-safety-test 會檢查）；新增外部資源一律先改 CSP
 - Service Worker 只攔截同網域的 GET，不會快取 API 或 signed URL（social-safety-test 會檢查快取內容）
 
+### 留言與回覆
+- `comments`：id, brew_owner, brew_id, author, parent_id, reply_to_user, author_nickname, reply_to_nickname, body, created_at
+- **只有兩層**：回覆只能掛在同一篇貼文的主留言下（複合外鍵 `(brew_owner, brew_id, parent_id)`＋trigger）；回覆別人的回覆也掛在主留言下，`reply_to_user` 記對象，畫面顯示「@暱稱」
+- `reply_to_user` 只能是貼文作者或在這一串留過言的人（必定讀得到貼文，也不能拿來探測好友關係），且和自己沒有封鎖
+- 1–300 字（除了換行不可有控制字元）、每天 100 則、**不能修改**（沒有 update 權限）
+- 讀取：讀得到貼文、且和留言者之間沒有封鎖（`private.blocked_with`）；封鎖的雙方在共同好友的貼文上也互相看不到；對被封鎖者的錯誤碼和「不是好友」相同
+- 刪除：留言作者或貼文作者；刪主留言時回覆一起刪（外鍵 cascade）；貼文刪除／改回只有我、刪除帳號時 cascade；**解除好友（含封鎖）時刪掉雙方在對方貼文的留言**（`friendships_after_delete`，重新加好友不會恢復）
+- 暱稱：留言者常常不是讀者的好友（profiles 讀不到），所以留言當下由 trigger 記下 `author_nickname`／`reply_to_nickname`（前端不能指定），不擴大 profiles 的讀取範圍（裡面有好友代碼）；畫面上看得到 profile 就用即時暱稱與頭像，否則用快照＋首字頭像；回覆對象刪除帳號時快照一起清掉
+- 通知：`public.comment_activity(post_since, reply_since)`（security invoker，只看 auth.uid()）回傳我貼文的新留言、別人貼文上回覆我的（不重複計算）、最新時間、有新留言的貼文
+- 畫面（`js/views/comments.js`）：主留言舊→新、回覆縮排；回覆 >3 則先收起「查看其他 N 則回覆」；送出時按鈕停用、先顯示「傳送中」，失敗移除並把文字放回輸入框；刪除前 `confirm`；字數「n／300」接近上限變色、超過擋下
+- 社群頁「全部｜我的」：全部包含自己的紀錄，自己的卡片標「我」；自己的紀錄詳細頁有「編輯」（這台裝置有這筆才顯示）、沒有檢舉／封鎖；卡片顯示讚數、留言數
+
 ### 意見回饋
 - ☰ →「意見回饋」（`#/feedback`），要登入才能送（防灌送）；類型（bug/idea/other）、內容 ≤ 1000 字，附暱稱（author）與 App 版本號（`feedback.app_version` 是文字：`x.y.z` 或舊版的整數字串），不附 email
 - `feedback` 表和檢舉一樣：只能以自己的名義新增，誰都讀不到（連作者自己），站長在 Supabase 後台看；刪除帳號時 cascade 刪除
@@ -207,11 +222,13 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - `node scripts/supabase-api-test.mjs`：用真的 JWT 從 API 層測權限；金鑰執行時從 `supabase status` 讀，只允許連本機
 - `node scripts/supabase-storage-test.mjs`：從 Storage API 測照片權限、1MB 與 MIME 限制
 - `node scripts/photo-exif-test.mjs`：headless Chrome（找不到時設 `CHROME_PATH`）跑 `tests/photo.html`，把處理後的照片上傳再下載，確認沒有 EXIF
-- `node scripts/social-feed-test.mjs`：兩個 headless Chrome（A、B）測分享、同步（含模擬離線）、動態牆、按讚、改回只有我、封鎖、每日上限，豆名／筆記／暱稱的 XSS
+- `node scripts/social-feed-test.mjs`：兩個 headless Chrome（A、B）測分享、同步（含模擬離線）、社群頁、按讚、改回只有我、封鎖、每日上限，豆名／筆記／暱稱的 XSS
 - `node scripts/social-safety-test.mjs`：檢舉、從詳細頁封鎖、刪除帳號（用 admin 確認雲端全部刪除、本機保留）、Edge Function 的權限、CSP（每一頁沒有違規、注入的 inline script 被擋）、SW 快取
 - `node scripts/social-feedback-test.mjs`：意見回饋的畫面、Edge Function 權限、寄給站長的 Email（假 Resend）、寄信失敗仍存檔、function log 寫出看得懂的原因且不含金鑰（讀 `docker logs`）、每天 5 則、誰都讀不到
 - `node scripts/feedback-mail-test.mjs`：不需要 Supabase；Node 直接載入 `functions/feedback/mail.ts` 測設定檢查與 Resend 錯誤說明
 - **改了 Edge Function 之後要 `docker restart supabase_edge_runtime_coffee-log`**，本機才會載入新程式
+- `node scripts/supabase-comments-test.mjs`：留言的權限從 API 層測（A、B 好友，C 非好友，D 被封鎖）：兩層、回覆對象、內容、每日上限、封鎖、解除好友、改回只有我、刪除帳號（delete-account）
+- `node scripts/social-comments-test.mjs`：三個 headless Chrome（A、B、D）測留言畫面：回覆位置、@暱稱、收起、刪除權限與確認、送出失敗改回、300 字、數字徽章與 99+、全部／我的、封鎖、XSS、CSP
 - `node scripts/social-ui-test.mjs`：兩個隔離的 headless Chrome 環境（A、B）操作真的畫面：加好友、封鎖、XSS、頭像 EXIF、登出；登入用 admin API 拿真的 session（Google 登入無法自動化）
 - 本機頁面用 `python -m http.server 8000` 開 `http://localhost:8000/`（`config.toml` 的 site_url／redirect URL 是這個；本機沒有設定 Google，無法真的登入）
 - 本機 Studio：http://127.0.0.1:54323

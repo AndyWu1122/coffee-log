@@ -10,7 +10,8 @@
 ---
 
 > **目前的正式專案**：ref `rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），2026-10-24 建立；migration、`delete-account`、前端設定都已完成，Google 登入已實際測試成功。
-> 2026-10-25：意見回饋的 migration 與 `feedback` 已部署，`RESEND_API_KEY`、`FEEDBACK_TO` 已設定（見 5-2）
+> 2026-10-25：意見回饋的 migration 與 `feedback` 已部署，`RESEND_API_KEY`、`FEEDBACK_TO` 已設定（見 5-2）；但 Email 沒收到，排查見 5-2 的「沒收到 Email」
+> 2026-10-26：`feature/comments` 分支（版本號 x.y.z、留言與回覆）**尚未部署**，步驟見 5-3
 
 ## 1. 建立 Supabase 專案（你）
 
@@ -120,6 +121,40 @@ npx supabase@2.120.0 functions deploy delete-account   # 需要先完成第 2 �
    - Supabase 後台 → Edge Functions → feedback：確認 **Verify JWT** 是開著的
 4. **實際送一則（你）**：App 登入後 ☰ →「意見回饋」送出 → Gmail 收得到信（第一次可能在垃圾郵件匣，標成「不是垃圾郵件」）、Table Editor 看得到這一則
 
+### 沒收到 Email（照順序檢查）
+1. **Table Editor → feedback**：有沒有剛送的那一則？沒有 → 問題在 App 或資料表（App 會顯示錯誤），不是寄信
+2. **Edge Functions → feedback → Logs**：找 `[feedback]` 開頭的那一行（新版 function 才有，舊版只有 `feedback email failed`）
+   - `已交給 Resend 寄出（id …）`：Resend 收下了 → 看第 5 步
+   - `沒有寄信：沒有設定 …`／`…是本機測試用的假值…`／`…格式不對…` → 第 3 步重設 secrets
+   - `沒有寄信：Resend 回傳 403（validation_error）…一字不差` → `FEEDBACK_TO` 和 Resend 帳號的 email 不一樣
+   - `沒有寄信：Resend 回傳 403（invalid_api_key）` → 到 Resend 重新建立 API key
+3. **secrets 是不是假值**：`npx supabase@2.120.0 secrets list` 只顯示 digest（SHA-256）。如果是下面這兩個，就是被以前 config.toml 的本機假值蓋掉了：
+   - `RESEND_API_KEY` = `ed80667ec3d95b40e0d38f0ca5661b5c2765c1dd62682640d0976f20bbd8254a`（`local-test-key`）
+   - `FEEDBACK_TO` = `0b5a059eb0b290fcf38eafebb2c5658edd76990577bf65b9b9a46cea0e2c72ad`（`developer@test.local`）
+   - 不確定就直接重設一次：`npx supabase@2.120.0 secrets set RESEND_API_KEY=re_xxx FEEDBACK_TO=你的Gmail`（不用重新部署）
+4. **FEEDBACK_TO 要和 Resend 帳號的 email 一字不差**：Resend 後台右上角 → Settings／Account 看註冊的 email（免費方案只能寄給它）
+5. **Resend 後台 → Emails（或 Logs）**：有沒有這封、狀態是 Delivered／Bounced
+6. **Gmail 的垃圾郵件匣**、「促銷內容」分頁；搜尋 `onboarding@resend.dev`
+
+## 5-3. 部署 feature/comments（版本號 x.y.z、留言與回覆）
+
+先合併到 main 前，**後端先上**（舊版 App 不會用到新的表，先部署不影響使用中的人）：
+
+```sh
+npx supabase@2.120.0 login                 # 已登入可略過
+npx supabase@2.120.0 link --project-ref rygsjrzddhhhdqpoayoa
+npx supabase@2.120.0 db push --dry-run      # 應該只列出下面兩個 migration
+npx supabase@2.120.0 db push                # 套用（確認後輸入 Y）
+npx supabase@2.120.0 functions deploy feedback
+```
+
+- 套用的 migration：
+  - `20261025130000_feedback_app_version_text.sql`：`feedback.app_version` 改文字（舊資料 18 → '18'）
+  - `20261025140000_comments.sql`：留言表、權限、通知函式、解除好友時刪留言的 trigger
+- `feedback` 一定要重新部署：新版 App 送的是 `"1.1.0"` 字串，舊版 function 只收整數（會記成「不明」，不會壞）；新版也會在 log 寫出沒寄信的原因
+- 部署後確認：Supabase 後台 → Edge Functions → feedback 的 **Verify JWT** 開著；Table Editor 有 `comments`，RLS enabled
+- 最後才把分支合併到 main 並 push（前端部署）。順序反過來的話，新版 App 會在留言區顯示錯誤，直到後端部署完成
+
 ## 6. 實際登入一次（你）
 
 1. 手機用 Safari／Chrome 開 <https://andywu1122.github.io/coffee-log/> → ☰ →「帳號」→「用 Google 登入」→ 設定暱稱
@@ -133,5 +168,6 @@ npx supabase@2.120.0 functions deploy delete-account   # 需要先完成第 2 �
 - [ ] Authentication → Providers：只有 Google 開著，Email 關閉
 - [ ] Project Settings → Data API → Exposed schemas：只有 `public`、`graphql_public`（**不能有 `private`**）
 - [ ] Edge Functions：`delete-account`、`feedback` 已部署，Verify JWT 開著
+- [ ] Table Editor：`comments` 存在、RLS enabled
 - [ ] Edge Functions → Secrets：有 `RESEND_API_KEY`、`FEEDBACK_TO`
 - [ ] repo 裡沒有 secret／service_role key、資料庫密碼、Google Client Secret
