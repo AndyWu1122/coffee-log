@@ -125,6 +125,8 @@ export async function launchChrome({ extraArgs = [] } = {}) {
 
     const page = {
       errors,
+      /** 直接送 DevTools Protocol 指令（截圖、模擬裝置等） */
+      cdp: send,
       /** 在頁面執行運算式（可以是 Promise），回傳 JSON 可序列化的結果 */
       async eval(expression) {
         const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
@@ -157,6 +159,11 @@ export async function launchChrome({ extraArgs = [] } = {}) {
         const { nodeId } = await send('DOM.querySelector', { nodeId: doc.nodeId, selector });
         if (!nodeId) throw new Error(`找不到 ${selector}`);
         await send('DOM.setFileInputFiles', { nodeId, files });
+      },
+      /** 模擬斷網／恢復網路（navigator.onLine 會跟著變，並觸發 offline／online 事件） */
+      async setOffline(offline) {
+        await send('Network.enable');
+        await send('Network.emulateNetworkConditions', { offline, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
       },
       close: () => client.send('Target.closeTarget', { targetId }),
     };
@@ -201,3 +208,75 @@ export function inspectJpeg(bytes) {
 /** 中繼資料段（APP0–APP15、COM）裡，JFIF 以外的 */
 export const extraMetadata = (info) =>
   info.segments.filter((s) => ((s.marker >= 0xe0 && s.marker <= 0xef) || s.marker === 0xfe) && !(s.marker === 0xe0 && s.id === 'JFIF'));
+
+/* ===== 操作 App 畫面的小工具（社群的端對端測試共用） ===== */
+
+const q = JSON.stringify;
+
+/** 每次整頁載入後：confirm 一律按確定、prompt 不開、pwn() 被呼叫就記下來（XSS 偵測） */
+export async function prepare(page) {
+  await page.eval(`
+    window.confirm = () => true;
+    window.prompt = () => null;
+    window.pwn = () => { window.__pwned = (window.__pwned || 0) + 1; };
+    true`);
+}
+export async function visit(page, base, hash) {
+  if ((await page.eval('location.hash')) === hash) await page.reload();
+  else await page.goto(base + hash);
+  await prepare(page);
+}
+// 換頁後畫面可能還在等網路資料：先等元素出現再操作
+const ready = (page, sel) => page.waitFor(`Boolean(document.querySelector(${q(sel)}))`, { label: `出現 ${sel}` });
+export async function click(page, sel) {
+  await ready(page, sel);
+  return page.eval(`(document.querySelector(${q(sel)}).click(), true)`);
+}
+export async function fill(page, sel, value) {
+  await ready(page, sel);
+  return page.eval(`(() => {
+    const el = document.querySelector(${q(sel)});
+    el.value = ${q(value)};
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`);
+}
+export async function submit(page, sel) {
+  await ready(page, sel);
+  return page.eval(`(document.querySelector(${q(sel)}).requestSubmit(), true)`);
+}
+export const text = (page, sel) => page.eval(`document.querySelector(${q(sel)})?.textContent ?? null`);
+export const toast = (page, includes) => page.waitFor(`(() => {
+  const t = document.getElementById('toast');
+  return t.classList.contains('show') && t.textContent.includes(${q(includes)}) && t.textContent;
+})()`, { label: `toast「${includes}」` });
+export const fieldError = (page, sel) => page.waitFor(`document.querySelector(${q(`${sel} .error`)})?.textContent`, { label: `${sel} 的錯誤訊息` });
+export const metaKeys = (page) => page.eval(`import('/js/db.js').then((db) => db.getAllKeys('meta'))`);
+/** 他人內容沒有變成 HTML：pwn() 沒被呼叫、沒有 <b>、沒有帶 onload 的 svg */
+export const noInjection = (page) => page.eval(`!window.__pwned && !document.querySelector('#app b') && !document.querySelector('svg[onload]')`);
+
+/** 用 App 自己的 IndexedDB 存放登入狀態（和 supabase-js 登入後存的位置、格式相同） */
+export async function signIn(page, session) {
+  await page.eval(`import('/js/db.js').then((db) => db.setMeta('auth:supabase-auth', ${q(JSON.stringify(session))})).then(() => true)`);
+}
+
+/** 做一張帶 EXIF（含相機型號、GPS 標記）的 JPEG 給頭像測試 */
+export async function exifJpeg(page) {
+  const b64 = await page.eval(`(async () => {
+    const c = Object.assign(document.createElement('canvas'), { width: 600, height: 400 });
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#8a5a3b'; ctx.fillRect(0, 0, 600, 400);
+    ctx.fillStyle = '#f2d7b6'; ctx.fillRect(200, 50, 200, 300);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.9));
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let s = ''; for (const b of bytes) s += String.fromCharCode(b);
+    return btoa(s);
+  })()`);
+  const jpeg = Buffer.from(b64, 'base64');
+  const payload = Buffer.concat([Buffer.from('Exif\0\0', 'latin1'), Buffer.from('II*\0\x08\0\0\0TestCam-EXIF-MARKER GPS 22.99N 120.21E', 'latin1')]);
+  const seg = Buffer.alloc(4);
+  seg.writeUInt16BE(0xffe1, 0);
+  seg.writeUInt16BE(payload.length + 2, 2);
+  return Buffer.concat([jpeg.subarray(0, 2), seg, payload, jpeg.subarray(2)]);
+}
+

@@ -8,6 +8,8 @@ const SUPABASE_JS = {
 };
 const SIGNED_URL_SECONDS = 3600; // signed URL 有效 1 小時（規格）
 const AVATARS = 'avatars';
+const BREW_PHOTOS = 'brew-photos';
+const PAGE = 1000; // PostgREST 一次最多回傳的筆數（max_rows）
 
 /** 這個環境有沒有社群功能（config.js 沒設定就沒有） */
 export const available = SUPABASE !== null;
@@ -187,3 +189,96 @@ export const unblock = (otherId) => run(async (sb) => {
 
 export const listBlocks = () => run(async (sb) =>
   unwrap(await sb.from('blocks').select('blocked, blocked_nickname, created_at').order('created_at', { ascending: false })));
+
+/* ===== 自己的 shared_brews（同步用） ===== */
+
+/** 自己在雲端的所有紀錄 [{ id, photo_path }]（分批讀，避開一次 1000 筆的上限） */
+export const listMySharedBrews = (userId) => run(async (sb) => {
+  const all = [];
+  for (let from = 0; ; from += PAGE) {
+    const rows = unwrap(await sb.from('shared_brews').select('id, photo_path')
+      .eq('owner', uuid(userId)).order('id').range(from, from + PAGE - 1));
+    all.push(...rows);
+    if (rows.length < PAGE) return all;
+  }
+});
+
+/** 新增（owner 由資料庫用 auth.uid() 決定；每天 30 筆的上限由 trigger 檢查） */
+export const insertSharedBrew = (row) => run(async (sb) => {
+  unwrap(await sb.from('shared_brews').insert({ ...row, id: uuid(row.id) }));
+});
+
+/** 修改自己的紀錄（id、owner 不能改，不放進 update）；回傳有沒有改到 */
+export const updateSharedBrew = (userId, row) => run(async (sb) => {
+  const { id, ...fields } = row;
+  const rows = unwrap(await sb.from('shared_brews').update(fields)
+    .eq('owner', uuid(userId)).eq('id', uuid(id)).select('id'));
+  return rows.length === 1;
+});
+
+/** 刪除自己的紀錄（讚、檢舉由外鍵 on delete cascade 一起刪掉） */
+export const deleteSharedBrew = (userId, id) => run(async (sb) => {
+  unwrap(await sb.from('shared_brews').delete().eq('owner', uuid(userId)).eq('id', uuid(id)));
+});
+
+/** 上傳（覆蓋）紀錄的照片：紀錄的 photo_path 必須已經指向這個路徑（Storage 政策） */
+export const uploadBrewPhoto = (path, blob) => run(async (sb) => {
+  unwrap(await sb.storage.from(BREW_PHOTOS).upload(path, blob, { upsert: true, contentType: 'image/jpeg', cacheControl: '0' }));
+});
+
+/** 刪除照片（只能刪自己資料夾裡的）；SQL 刪不了 storage.objects，一律走 Storage API */
+export const removeBrewPhotos = (paths) => run(async (sb) => {
+  if (paths.length) unwrap(await sb.storage.from(BREW_PHOTOS).remove(paths));
+});
+
+/** 照片路徑 → signed URL（讀不到的不會出現在結果裡） */
+export const brewPhotoUrls = (paths) => run(async (sb) => {
+  const unique = [...new Set(paths.filter(Boolean))];
+  if (!unique.length) return {};
+  const rows = unwrap(await sb.storage.from(BREW_PHOTOS).createSignedUrls(unique, SIGNED_URL_SECONDS));
+  return Object.fromEntries(rows.filter((r) => r.signedUrl && !r.error).map((r) => [r.path, r.signedUrl]));
+});
+
+/* ===== 好友動態 ===== */
+
+const BREW_COLUMNS = [
+  'owner', 'id', 'bean_name', 'bean_origin', 'bean_process', 'roast_level', 'roast_date', 'brewed_at',
+  'dripper', 'grinder_name', 'grind_setting', 'coffee_g', 'water_g', 'temp_c', 'total_time_s',
+  'rating', 'acidity', 'sweetness', 'bitterness', 'body', 'flavor_notes', 'notes', 'photo_path',
+].join(', ');
+
+/** 好友的紀錄（RLS 只回傳已接受、沒有封鎖的好友），依沖煮時間新→舊 */
+export const listFeed = (myId, { offset, limit }) => run(async (sb) =>
+  unwrap(await sb.from('shared_brews').select(BREW_COLUMNS).neq('owner', uuid(myId))
+    .order('brewed_at', { ascending: false }).order('id', { ascending: false })
+    .range(offset, offset + limit - 1)));
+
+/** 單筆紀錄；讀不到（不是好友、被封鎖、已刪除）回傳 null */
+export const getSharedBrew = (owner, id) => run(async (sb) =>
+  unwrap(await sb.from('shared_brews').select(BREW_COLUMNS).eq('owner', uuid(owner)).eq('id', uuid(id)).maybeSingle()));
+
+/** 這些紀錄的讚 [{ brew_owner, brew_id, user_id }]（RLS：讀得到紀錄才讀得到讚） */
+export const listLikes = (brews) => run(async (sb) => {
+  if (!brews.length) return [];
+  const ids = [...new Set(brews.map((b) => uuid(b.id)))];
+  const rows = unwrap(await sb.from('likes').select('brew_owner, brew_id, user_id').in('brew_id', ids));
+  const keys = new Set(brews.map((b) => `${b.owner}/${b.id}`));
+  return rows.filter((r) => keys.has(`${r.brew_owner}/${r.brew_id}`));
+});
+
+/** 按讚（user_id 由資料庫用 auth.uid() 決定）；已經按過不算錯誤 */
+export const like = (owner, id) => run(async (sb) => {
+  const { error } = await sb.from('likes').insert({ brew_owner: uuid(owner), brew_id: uuid(id) });
+  if (error && error.code !== '23505') unwrap({ error });
+});
+
+export const unlike = (myId, owner, id) => run(async (sb) => {
+  unwrap(await sb.from('likes').delete().eq('user_id', uuid(myId)).eq('brew_owner', uuid(owner)).eq('brew_id', uuid(id)));
+});
+
+/** 這些人的 profile（RLS 只回傳看得到的：自己、好友、有待處理邀請的對方） */
+export const listProfiles = (ids) => run(async (sb) => {
+  const unique = [...new Set(ids)].map(uuid);
+  if (!unique.length) return [];
+  return unwrap(await sb.from('profiles').select('id, nickname, avatar_path').in('id', unique));
+});

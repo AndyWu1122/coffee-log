@@ -2,17 +2,19 @@
 import {
   getBrew, saveBrew, deleteBrew, listBeans, listRecentDrippers, latestBrewByBean, brewTemplateFrom,
   listGrinders, defaultGrinderId, formatStock, ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
-  getPhoto, preparePhoto, PHOTO_ACCEPT,
+  getPhoto, preparePhoto, PHOTO_ACCEPT, VISIBILITY, socialAvailable, getShareStatus,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors } from './ui.js';
 import { createFlavorPicker } from './flavorPicker.js';
 
 const SCORE_OPTIONS = [1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n) }));
+const VISIBILITY_ICON = { private: '🔒', friends: '👥' };
+const VISIBILITY_OPTIONS = Object.entries(VISIBILITY).map(([value, label]) => ({ value, label: `${VISIBILITY_ICON[value]} ${label}` }));
 const shortDate = new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric' });
 
 export async function render(container, { id, query, isCurrent }) {
   const isNew = id === null;
-  const [brew, photo, beans, grinders, drippers, latestByBean, source, defaultGrinder] = await Promise.all([
+  const [brew, photo, beans, grinders, drippers, latestByBean, source, defaultGrinder, shareStatus] = await Promise.all([
     isNew ? null : getBrew(id),
     isNew ? null : getPhoto(id),
     listBeans({ includeArchived: true }),
@@ -21,6 +23,7 @@ export async function render(container, { id, query, isCurrent }) {
     isNew ? latestBrewByBean() : new Map(),
     isNew && query.from ? getBrew(query.from) : null,
     isNew ? defaultGrinderId() : '',
+    isNew || !socialAvailable ? null : getShareStatus(id),
   ]);
   if (!isCurrent()) return;
 
@@ -53,7 +56,7 @@ export async function render(container, { id, query, isCurrent }) {
     brewedAt: new Date().toISOString(),
     dripper: drippers[0] ?? '',
     grindSetting: '', coffeeG: '', waterG: '', tempC: '',
-    totalTimeS: null, rating: null, flavor: {}, flavorNotes: [], notes: '',
+    totalTimeS: null, rating: null, flavor: {}, flavorNotes: [], notes: '', visibility: 'private',
   };
 
   // #/brew/new?from=<id>：複製該筆紀錄的參數
@@ -174,6 +177,7 @@ export async function render(container, { id, query, isCurrent }) {
       <div class="field" data-field="notes">
         <label for="notes">筆記</label>
         <textarea id="notes" name="notes" placeholder="風味、下次想調整的地方…">${esc(b.notes)}</textarea>
+        <div class="error"></div>
       </div>
 
       <div class="field" data-field="photo">
@@ -182,6 +186,15 @@ export async function render(container, { id, query, isCurrent }) {
         <input type="file" id="photo-input" accept="${PHOTO_ACCEPT}" hidden>
         <div class="error"></div>
       </div>
+
+      ${socialAvailable ? `
+        <div class="field" data-field="visibility">
+          <span class="label">誰看得到</span>
+          ${segmentedHtml('visibility', VISIBILITY_OPTIONS, b.visibility ?? 'private')}
+          <p class="hint" id="visibility-hint"></p>
+          <p class="share-status" id="share-status" hidden></p>
+          <div class="error"></div>
+        </div>` : ''}
 
       <div class="actions">
         <button class="btn btn-primary btn-block" type="submit">儲存</button>
@@ -195,7 +208,24 @@ export async function render(container, { id, query, isCurrent }) {
 
   const form = container.querySelector('form');
   const f = form.elements;
-  bindSegmented(form);
+
+  // 可見度：選「好友」時提醒會分享哪些內容；分享狀態只在可見度沒改過時顯示（改了要存檔後才算數）
+  const visibilityHint = form.querySelector('#visibility-hint');
+  const statusEl = form.querySelector('#share-status');
+  const updateVisibility = (value) => {
+    if (!visibilityHint) return;
+    visibilityHint.textContent = value === 'friends'
+      ? '豆子、參數、風味、筆記和照片都會讓好友看到（只有互相加好友的人）'
+      : '只存在這支手機，不會上傳';
+    const showStatus = Boolean(shareStatus) && value === (b.visibility ?? 'private');
+    statusEl.hidden = !showStatus;
+    if (showStatus) {
+      statusEl.textContent = shareStatus.text;
+      statusEl.dataset.tone = shareStatus.tone;
+    }
+  };
+  updateVisibility(b.visibility ?? 'private');
+  bindSegmented(form, (name, value) => { if (name === 'visibility') updateVisibility(value); });
   const flavorPicker = createFlavorPicker(form.querySelector('#flavor-picker'), b.flavorNotes ?? []);
 
   // 粉水比即時更新
@@ -328,11 +358,13 @@ export async function render(container, { id, query, isCurrent }) {
       flavor: Object.fromEntries(Object.keys(FLAVOR).map((k) => [k, segmentedValue(form, `flavor.${k}`)])),
       flavorNotes: flavorPicker.value(),
       notes: f.notes.value,
+      visibility: socialAvailable ? segmentedValue(form, 'visibility') : (brew?.visibility ?? 'private'),
     }, { photo: photoChange });
   }
 
   form.querySelector('[data-action="delete"]')?.addEventListener('click', async () => {
-    if (!confirm(photo ? '確定刪除這筆紀錄？照片也會一起刪除。' : '確定刪除這筆紀錄？')) return;
+    const extra = [photo ? '照片也會一起刪除。' : '', brew.visibility === 'friends' ? '好友也會看不到。' : ''].join('');
+    if (!confirm(`確定刪除這筆紀錄？${extra}`)) return;
     await deleteBrew(id);
     toast('已刪除');
     location.hash = '#/';

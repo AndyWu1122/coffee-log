@@ -1,4 +1,4 @@
-// #/friends 好友（從右上角 ☰ 選單進入）：用代碼加好友、收到／送出的邀請、好友名單、封鎖名單
+// #/friends 好友管理（從右上角 ☰ 選單進入）：用代碼加好友、收到／送出的邀請、好友名單、封鎖名單
 // #/friends/add?code=XXX：QR code 連到這裡，代碼已填好，按「送出邀請」才會送出
 // 他人的暱稱一律經過 esc() 才放進畫面
 import {
@@ -8,7 +8,7 @@ import {
 import { esc, setTitle, toast, showErrors, avatarHtml, showMessage, copyText } from './ui.js';
 
 export async function render(container, { query, isCurrent }) {
-  setTitle('好友');
+  setTitle('好友管理');
   const code = normalizeFriendCode(query.code ?? '');
   const rerender = () => render(container, { query, isCurrent });
   if (!navigator.onLine) return showMessage(container, '社群功能需要網路連線', rerender);
@@ -43,7 +43,7 @@ function renderNotReady(container, state, code) {
         <div class="friend-code">${esc(formatFriendCode(code))}</div>
         <button type="button" class="btn btn-block" data-action="copy">複製代碼</button>
         <p class="hint">如果你平常是從 iPhone 主畫面的「手沖紀錄」使用，請複製代碼後回到那個 App，
-          在 ☰ →「好友」貼上（主畫面的 App 和 Safari 的登入狀態是分開的）。</p>
+          在 ☰ →「好友管理」貼上（主畫面的 App 和 Safari 的登入狀態是分開的）。</p>
       </section>` : ''}
     <div class="empty">
       <p>要先${action}才能加好友</p>

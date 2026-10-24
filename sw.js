@@ -1,6 +1,6 @@
 // Service Worker：安裝時預先快取所有檔案，之後一律從快取讀取（離線可用）
 // ⚠ 修改任何前端檔案後，CACHE_VERSION 要 +1，使用者才會收到新版本
-const CACHE_VERSION = 11;
+const CACHE_VERSION = 12;
 const CACHE_NAME = `coffee-log-v${CACHE_VERSION}`;
 
 const ASSETS = [
@@ -16,6 +16,7 @@ const ASSETS = [
   'js/cardLayout.js',
   'js/config.js',
   'js/cloud.js',
+  'js/sync.js',
   'js/vendor/supabase-js-2.117.3.js',
   'js/vendor/qrcode-generator-2.0.4.js',
   'js/views/ui.js',
@@ -30,6 +31,8 @@ const ASSETS = [
   'js/views/grinderForm.js',
   'js/views/account.js',
   'js/views/friends.js',
+  'js/views/feed.js',
+  'js/views/feedDetail.js',
   'icons/icon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png',

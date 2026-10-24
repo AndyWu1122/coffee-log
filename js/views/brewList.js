@@ -128,7 +128,8 @@ function brewCard(b) {
     <li><a class="card${b.thumb ? ' has-thumb' : ''}" href="#/brew/${esc(b.id)}">
       <div class="card-body">
         <div class="card-head">
-          <span class="card-title">${esc(b.beanName)}</span>
+          <span class="card-title">${esc(b.beanName)}${b.visibility === 'friends'
+            ? ' <span class="shared-badge" title="好友看得到" aria-label="好友看得到">👥</span>' : ''}</span>
           <span class="stars" aria-label="評分 ${b.rating ?? '未評'}">${stars}</span>
         </div>
         <div class="card-row">${details.map((d) => `<span>${esc(d)}</span>`).join('')}</div>

@@ -27,25 +27,27 @@ js/image.js        # 照片處理：解碼、縮小、重新編碼 JPEG、base64
 js/cardLayout.js   # 分享卡片的純計算：cover 裁切、雷達圖座標、文字換行（含避頭）、檔名；由 models.js 轉出給 views
 js/config.js       # Supabase 連線設定（依網址：localhost → 本機、github.io → 正式；null ＝ 沒有社群功能）
 js/cloud.js        # 唯一存取 Supabase 的地方（角色和 db.js 一樣）；supabase-js 用到才載入
+js/sync.js         # 好友紀錄的同步（本機 friends 紀錄 → shared_brews），只由 models.js 使用
 js/vendor/         # 第三方檔案原封不動（supabase-js UMD、qrcode-generator），來源與 SRI 見 js/vendor/README.md
-js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, account（帳號）, friends（好友）, ui（共用 DOM 工具）
+js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, account（帳號）, friends（好友管理）, feed（好友動態）, feedDetail（好友紀錄詳細）, ui（共用 DOM 工具）
 icons/
 docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟）
 supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）
-scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、photo-exif-test.mjs、social-ui-test.mjs
+scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs
 tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mjs 用 headless Chrome 開；不屬於 App、不放進 ASSETS）
 ```
 
 ## 分層規則
 views → models → db／cloud，每層只呼叫下一層。views 不可直接碰 IndexedDB 或 Supabase。
 
-## 資料模型（備份 schemaVersion: 3／IndexedDB DB_VERSION: 4）
+## 資料模型（備份 schemaVersion: 3／IndexedDB DB_VERSION: 5）
 **beans**：id, name, origin, process(washed/natural/honey/other), roastLevel(light/light-medium/medium-light/medium/dark，即 淺/淺中/中淺/中/深焙), roastDate(YYYY-MM-DD), bagWeightG(整包重量 g，選填), archived(bool), createdAt
 **grinders**：id, name(必填), notes(選填，例如刻度說明), archived(bool), createdAt
-**brews**：id, beanId, grinderId(選填，'' ＝未指定；v1 舊紀錄沒有這個欄位), brewedAt, dripper, grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes
+**brews**：id, beanId, grinderId(選填，'' ＝未指定；v1 舊紀錄沒有這個欄位), brewedAt, dripper, grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes, visibility(private/friends，舊資料沒有這個欄位＝private)
 **meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil、社群登入狀態 `auth:*`）；**不匯出、匯入取代全部時也不清除**（token 不會進備份檔，匯入也不會被登出）
 **photos**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 1600px、品質 0.8，約 200KB), width, height, createdAt；每筆紀錄最多 1 張，跟 brews 分開存
 **thumbs**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 300px)；列表只讀這個，不載入原圖；不匯出，匯入時由照片重新產生
+**sync**（DB v5 加入，keyPath brewId）：brewId, userId, row(上次同步的 shared_brews 內容 JSON), photoAt(上次同步的照片 createdAt), error(''/rate_limited/invalid/failed), failedRow, failedOn；**不匯出、匯入取代全部時也不清除**
 - brews 建索引：beanId、brewedAt、grinderId（v2 加入）
 - 有紀錄引用的豆子、磨豆機不能刪除，只能封存
 - **照片一律在前端重新編碼成 JPEG（移除 EXIF）後才儲存**（`models.preparePhoto` → `image.compressPhoto`，經 Canvas 重畫，GPS 等資訊不會留下）
@@ -58,11 +60,11 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - id 用 crypto.randomUUID()
 
 ## 路由（hash）
-`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/account` 帳號｜`#/friends` 好友｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）
+`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/account` 帳號｜`#/friends` 好友管理｜`#/feed` 好友動態｜`#/feed/<owner>/<id>` 好友紀錄詳細｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）
 
 ## 介面配置
-- 底部分頁列：紀錄｜豆子（只放每天會用的頁面；之後的統計頁也放這裡）
-- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：帳號、好友、磨豆機、備份；帳號、好友有 `data-social`，`js/config.js` 沒設定時隱藏）
+- 底部分頁列：紀錄｜豆子｜好友（只放每天會用的頁面；之後的統計頁也放這裡）；「好友」是動態牆，有 `data-social`，`js/config.js` 沒設定時隱藏
+- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：帳號、好友管理、磨豆機、備份；帳號、好友管理有 `data-social`，`js/config.js` 沒設定時隱藏）
 - ☰ 選單裡的頁面不屬於任何分頁，路由設 `tab: null`，底部分頁都不亮
 
 ## 主題（深色／淺色）
@@ -117,7 +119,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 
 ## 咖啡社群（後端：Supabase）
 規格見 `docs/social-spec.md`（分 5 階段，每階段通過測試、使用者確認後才進下一階段）；待決事項與決定見 `docs/social-open-questions.md`。
-目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）、階段 3（帳號與好友）。還沒有正式的 Supabase 專案（`js/config.js` 的 `PRODUCTION` 是 null，正式網站不顯示社群功能）；建立步驟見 `docs/supabase-setup.md`。
+目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）、階段 3（帳號與好友）、階段 4（動態牆與同步）。還沒有正式的 Supabase 專案（`js/config.js` 的 `PRODUCTION` 是 null，正式網站不顯示社群功能）；建立步驟見 `docs/supabase-setup.md`。
 
 ### 資安規則（每個階段都必須遵守）
 - 每張表和 Storage bucket 都必須開 RLS，預設拒絕
@@ -158,6 +160,16 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - QR code 內容是 `#/friends/add?code=...` 的網址，用手機相機掃；iPhone 主畫面 App 和 Safari 登入狀態分開，沒登入時頁面顯示代碼讓使用者複製
 - 暱稱上限 20 字，XSS 測試用 20 字以內的攻擊字串（`"><svg onload=pwn()>`）
 
+### 動態牆與同步（階段 4）
+- 紀錄表單「誰看得到」：🔒 只有我（預設，「再沖一杯」也一律回到只有我）｜👥 好友；選好友時筆記 ≤ 500 字等雲端限制在表單就擋下（`sharedLimitErrors`）
+- 同步不記動作佇列：每次比對「本機應該長怎樣」（`toSharedRow`，豆子、磨豆機轉成名稱）和 sync store 記的上次內容，有差異就補送；衝突一律以本機為準
+  - 存檔、刪除、改豆子／磨豆機、匯入後由 models 觸發；app.js 在啟動、`online`、切回前景時觸發；沒登入（meta 沒有 session）或沒有要同步的就不載入 supabase-js
+  - 雲端已有就 update、沒有才 insert（不用 upsert：欄位權限不能 update id、owner）
+  - 改回只有我或刪除：先刪紀錄、再用 Storage API 刪照片；**只刪這台裝置認得的**（sync store 有、或本機有這筆），別台裝置上傳的不刪
+  - 撞到每天 30 筆上限：記下台灣時間的日期，同一天不再重送；被 check 拒絕的內容沒改就不重送
+- 動態牆依沖煮時間新→舊，每次 20 筆；照片沒有縮圖（每張約 200KB，`loading="lazy"`）；按讚先更新畫面、失敗改回來
+- 讀不到的紀錄（不是好友、封鎖、已刪除、改回只有我）一律顯示同一個「找不到」
+
 ### 本機開發（不連正式專案）
 - 需要 Docker Desktop 執行中；CLI 用 `npx supabase@2.120.0`（固定版本，不全域安裝）
 - `npx supabase@2.120.0 start`／`stop`；`db reset` 重建資料庫並套用所有 migration
@@ -165,6 +177,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - `node scripts/supabase-api-test.mjs`：用真的 JWT 從 API 層測權限；金鑰執行時從 `supabase status` 讀，只允許連本機
 - `node scripts/supabase-storage-test.mjs`：從 Storage API 測照片權限、1MB 與 MIME 限制
 - `node scripts/photo-exif-test.mjs`：headless Chrome（找不到時設 `CHROME_PATH`）跑 `tests/photo.html`，把處理後的照片上傳再下載，確認沒有 EXIF
+- `node scripts/social-feed-test.mjs`：兩個 headless Chrome（A、B）測分享、同步（含模擬離線）、動態牆、按讚、改回只有我、封鎖、每日上限，豆名／筆記／暱稱的 XSS
 - `node scripts/social-ui-test.mjs`：兩個隔離的 headless Chrome 環境（A、B）操作真的畫面：加好友、封鎖、XSS、頭像 EXIF、登出；登入用 admin API 拿真的 session（Google 登入無法自動化）
 - 本機頁面用 `python -m http.server 8000` 開 `http://localhost:8000/`（`config.toml` 的 site_url／redirect URL 是這個；本機沒有設定 Google，無法真的登入）
 - 本機 Studio：http://127.0.0.1:54323

@@ -10,7 +10,10 @@ import { writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { api, anonKey, check, failures, summary, createUser, realSession, cleanup, call } from './supabase-local.mjs';
-import { startServer, launchChrome, inspectJpeg, extraMetadata } from './chrome.mjs';
+import {
+  startServer, launchChrome, inspectJpeg, extraMetadata,
+  prepare, visit, click, fill, submit, text, toast, fieldError, metaKeys, noInjection, signIn, exifJpeg,
+} from './chrome.mjs';
 
 // 暱稱上限 20 字，規格的 <script>alert(1)</script> 放不進去，改用 20 字以內的攻擊字串
 const A_NICK = 'Alice <b>&amp;</b>';
@@ -21,67 +24,6 @@ const q = JSON.stringify;
 let server;
 let chrome;
 let fixtureDir;
-
-/** 每次整頁載入後：confirm 一律按確定、prompt 不開、pwn() 被呼叫就記下來（XSS 偵測） */
-async function prepare(page) {
-  await page.eval(`
-    window.confirm = () => true;
-    window.prompt = () => null;
-    window.pwn = () => { window.__pwned = (window.__pwned || 0) + 1; };
-    true`);
-}
-async function visit(page, base, hash) {
-  if ((await page.eval('location.hash')) === hash) await page.reload();
-  else await page.goto(base + hash);
-  await prepare(page);
-}
-const click = (page, sel) => page.eval(`(() => {
-  const el = document.querySelector(${q(sel)});
-  if (!el) throw new Error('找不到 ' + ${q(sel)});
-  el.click();
-  return true;
-})()`);
-const fill = (page, sel, value) => page.eval(`(() => {
-  const el = document.querySelector(${q(sel)});
-  el.value = ${q(value)};
-  el.dispatchEvent(new Event('input', { bubbles: true }));
-  return true;
-})()`);
-const submit = (page, sel) => page.eval(`document.querySelector(${q(sel)}).requestSubmit(), true`);
-const text = (page, sel) => page.eval(`document.querySelector(${q(sel)})?.textContent ?? null`);
-const toast = (page, includes) => page.waitFor(`(() => {
-  const t = document.getElementById('toast');
-  return t.classList.contains('show') && t.textContent.includes(${q(includes)}) && t.textContent;
-})()`, { label: `toast「${includes}」` });
-const fieldError = (page, sel) => page.waitFor(`document.querySelector(${q(`${sel} .error`)})?.textContent`, { label: `${sel} 的錯誤訊息` });
-const metaKeys = (page) => page.eval(`import('/js/db.js').then((db) => db.getAllKeys('meta'))`);
-/** 他人內容沒有變成 HTML：pwn() 沒被呼叫、沒有 <b>、沒有帶 onload 的 svg */
-const noInjection = (page) => page.eval(`!window.__pwned && !document.querySelector('#app b') && !document.querySelector('svg[onload]')`);
-
-/** 用 App 自己的 IndexedDB 存放登入狀態（和 supabase-js 登入後存的位置、格式相同） */
-async function signIn(page, session) {
-  await page.eval(`import('/js/db.js').then((db) => db.setMeta('auth:supabase-auth', ${q(JSON.stringify(session))})).then(() => true)`);
-}
-
-/** 做一張帶 EXIF（含相機型號、GPS 標記）的 JPEG 給頭像測試 */
-async function exifJpeg(page) {
-  const b64 = await page.eval(`(async () => {
-    const c = Object.assign(document.createElement('canvas'), { width: 600, height: 400 });
-    const ctx = c.getContext('2d');
-    ctx.fillStyle = '#8a5a3b'; ctx.fillRect(0, 0, 600, 400);
-    ctx.fillStyle = '#f2d7b6'; ctx.fillRect(200, 50, 200, 300);
-    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.9));
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    let s = ''; for (const b of bytes) s += String.fromCharCode(b);
-    return btoa(s);
-  })()`);
-  const jpeg = Buffer.from(b64, 'base64');
-  const payload = Buffer.concat([Buffer.from('Exif\0\0', 'latin1'), Buffer.from('II*\0\x08\0\0\0TestCam-EXIF-MARKER GPS 22.99N 120.21E', 'latin1')]);
-  const seg = Buffer.alloc(4);
-  seg.writeUInt16BE(0xffe1, 0);
-  seg.writeUInt16BE(payload.length + 2, 2);
-  return Buffer.concat([jpeg.subarray(0, 2), seg, payload, jpeg.subarray(2)]);
-}
 
 try {
   server = await startServer();

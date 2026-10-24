@@ -4,11 +4,13 @@ import { isFlavorNote, sortFlavorNotes, flavorNote } from './flavorWheel.js';
 import { compressPhoto, compressAvatar, makeThumb, blobToBase64, base64ToBytes, base64Length, jpegSize, PHOTO_TYPES } from './image.js';
 import { shareFileName } from './cardLayout.js';
 import * as cloud from './cloud.js';
+import * as sync from './sync.js';
 
 // views 只依賴 models，風味輪資料、圖片解碼、分享卡片的計算由這裡轉出
 export { FLAVOR_WHEEL, flavorNote, sortFlavorNotes } from './flavorWheel.js';
 export { decodeImage, photoForUpload } from './image.js';
 export { coverCrop, radarPoints, wrapText, layoutChips } from './cardLayout.js';
+export { cloudPhotoPath } from './sync.js';
 
 // 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos。匯入時接受所有舊版
 export const SCHEMA_VERSION = 3;
@@ -20,6 +22,8 @@ export const ROAST_LEVEL = {
   light: '淺焙', 'light-medium': '淺中焙', 'medium-light': '中淺焙', medium: '中焙', dark: '深焙',
 };
 export const FLAVOR = { acidity: '酸度', sweetness: '甜度', bitterness: '苦度', body: '醇厚度' };
+// 紀錄的可見度：private 只存在這支手機（預設）；friends 同步到雲端給好友看
+export const VISIBILITY = { private: '只有我', friends: '好友' };
 
 /* ===== ID 與日期工具 ===== */
 
@@ -135,7 +139,26 @@ export function validateBrew(b) {
   if (!Array.isArray(b.flavorNotes) || !b.flavorNotes.every(isFlavorNote)) {
     errors.flavorNotes = '包含不認得的風味';
   }
+  if (b.visibility === 'friends') {
+    for (const [key, msg] of Object.entries(sharedLimitErrors(b))) errors[key] ??= msg; // 基本錯誤優先顯示
+  }
   return { ok: Object.keys(errors).length === 0, errors };
+}
+
+// 分享給好友的紀錄要符合雲端資料庫的限制（shared_brews 的 check 約束），否則同步時會被拒絕
+const SHARED_NOTES_MAX = 500;
+const SHARED_TEXT_MAX = 100;
+const charLength = (s) => [...String(s ?? '')].length; // 和資料庫的 char_length 一樣以字元計
+function sharedLimitErrors(b) {
+  const errors = {};
+  if (charLength(b.notes) > SHARED_NOTES_MAX) errors.notes = `分享給好友的筆記最多 ${SHARED_NOTES_MAX} 字（目前 ${charLength(b.notes)} 字）`;
+  if (b.coffeeG > 100) errors.coffeeG = '分享給好友時粉量最多 100g';
+  if (b.waterG > 2000) errors.waterG = '分享給好友時水量最多 2000g';
+  if (b.totalTimeS > 3600) errors.totalTimeS = '分享給好友時總時間最多 60 分鐘';
+  if (charLength(b.dripper) > SHARED_TEXT_MAX) errors.dripper = `分享給好友時最多 ${SHARED_TEXT_MAX} 字`;
+  if (charLength(b.grindSetting) > SHARED_TEXT_MAX) errors.grindSetting = `分享給好友時最多 ${SHARED_TEXT_MAX} 字`;
+  if (b.brewedAt && new Date(b.brewedAt) > new Date(Date.now() + 86400000)) errors.brewedAt = '分享給好友的紀錄，沖煮時間不能是未來';
+  return errors;
 }
 
 export function validateGrinder(g) {
@@ -184,6 +207,7 @@ function normalizeBrew(input) {
       ? [...sortFlavorNotes(input.flavorNotes), ...input.flavorNotes.filter((k) => !isFlavorNote(k))]
       : [],
     notes: String(input.notes ?? '').trim(),
+    visibility: input.visibility === 'friends' ? 'friends' : 'private', // 舊紀錄沒有這個欄位：只有我
   };
 }
 
@@ -287,6 +311,7 @@ export async function saveBean(input) {
   const { ok, errors } = validateBean(bean);
   if (!ok) return { ok, errors };
   await db.put('beans', bean);
+  requestSync(); // 分享出去的紀錄帶著豆子名稱等資訊
   return { ok: true, bean };
 }
 
@@ -324,6 +349,7 @@ export async function saveGrinder(input) {
   const { ok, errors } = validateGrinder(grinder);
   if (!ok) return { ok, errors };
   await db.put('grinders', grinder);
+  requestSync(); // 分享出去的紀錄帶著磨豆機名稱
   return { ok: true, grinder };
 }
 
@@ -400,13 +426,6 @@ export const preparePhoto = (file) => compressPhoto(file);
 /** 照片 <input type="file"> 的 accept */
 export const PHOTO_ACCEPT = PHOTO_TYPES.join(',');
 
-/**
- * 雲端照片路徑 <user_id>/<brew_id>.jpg
- * 要和 shared_brews.photo_path 的 check 約束、Storage 政策一致（uuid 轉成文字一律小寫）
- * 上傳前先用 photoForUpload 做最後檢查並移除中繼資料
- */
-export const cloudPhotoPath = (userId, brewId) => `${String(userId).toLowerCase()}/${String(brewId).toLowerCase()}.jpg`;
-
 /** { brewId, blob, width, height, createdAt } 或 undefined */
 export const getPhoto = (brewId) => db.get('photos', brewId);
 
@@ -433,6 +452,7 @@ export async function saveBrew(input, { photo } = {}) {
       s.thumbs.put({ brewId: brew.id, blob: thumb });
     }
   });
+  requestSync();
   return { ok: true, brew };
 }
 
@@ -476,10 +496,13 @@ export async function getShareCardData(id) {
   };
 }
 
-/** 刪除紀錄，連同照片、縮圖（同一個交易） */
-export const deleteBrew = (id) => db.transact(PHOTO_STORES, (s) => {
-  for (const store of Object.values(s)) store.delete(id);
-});
+/** 刪除紀錄，連同照片、縮圖（同一個交易）；分享出去的會在同步時從雲端刪除 */
+export async function deleteBrew(id) {
+  await db.transact(PHOTO_STORES, (s) => {
+    for (const store of Object.values(s)) store.delete(id);
+  });
+  requestSync();
+}
 
 /** 每支豆子最新一筆紀錄：Map<beanId, brew> */
 export async function latestBrewByBean() {
@@ -701,10 +724,11 @@ export async function importData(text, { replace = false, onProgress } = {}) {
   if (errors.length) return fail();
 
   await db.bulkPut({ beans, grinders, brews, photos, thumbs }, { clear: replace });
+  requestSync(); // 本機為準：取代全部後，雲端上這台裝置分享過、現在不在的紀錄會被刪除
   return { ok: true, beans: beans.length, grinders: grinders.length, brews: brews.length, photos: photos.length };
 }
 
-/** 「再沖一杯」要複製的參數；評分、風味、筆記、總時間是每杯的結果，不複製 */
+/** 「再沖一杯」要複製的參數；評分、風味、筆記、總時間是每杯的結果，不複製；可見度一律回到預設（只有我） */
 export function brewTemplateFrom(brew) {
   const { beanId, grinderId = '', dripper, grindSetting, coffeeG, waterG, tempC } = brew;
   return { beanId, grinderId, dripper, grindSetting, coffeeG, waterG, tempC };
@@ -911,3 +935,102 @@ export const removeFriendship = (myId, otherId) => cloud.deleteFriendship(myId, 
 /** 封鎖：同時解除好友、刪掉邀請；對方不會知道被封鎖 */
 export const blockUser = (otherId) => cloud.block(otherId);
 export const unblockUser = (otherId) => cloud.unblock(otherId);
+
+/* ----- 同步（本機 friends 紀錄 → 雲端） ----- */
+
+/**
+ * 要求在背景同步（不等結果、不丟錯誤）；沒登入或沒有要同步的紀錄時不會載入 supabase-js
+ * 存檔、刪除、匯入後自動呼叫；app.js 在啟動、恢復網路、切回前景時呼叫
+ */
+export function requestSync() {
+  if (!socialAvailable) return;
+  sync.request().catch((err) => console.warn('同步失敗', err));
+}
+
+/** 立即同步並等結果 { status, uploaded, deleted, failed }（測試、重試按鈕用） */
+export const syncNow = () => sync.request();
+
+const SHARE_STATUS = {
+  'signed-out': { tone: 'warn', text: '還沒登入：登入並設定暱稱後才會分享給好友' },
+  synced: { tone: 'ok', text: '已分享給好友' },
+  pending: { tone: '', text: '等待上傳：連上網路後會自動分享給好友' },
+  rate_limited: { tone: 'warn', text: '今天的分享額度（30 筆）已用完，明天會自動上傳' },
+  invalid: { tone: 'warn', text: '內容不符合雲端的限制，無法分享，請修改內容' },
+  failed: { tone: 'warn', text: '上傳失敗，稍後會自動再試' },
+};
+
+/** 紀錄的分享狀態 { tone, text }（只讀本機）；只有我的紀錄回傳 null */
+export async function getShareStatus(brewId) {
+  const brew = await db.get('brews', brewId);
+  return SHARE_STATUS[await sync.brewStatus(brew)] ?? null;
+}
+
+/* ----- 好友動態 ----- */
+
+export const FEED_PAGE_SIZE = 20;
+
+/** 雲端的一列 → 畫面用的資料（中文標籤、衍生值算好）；所有文字都來自他人，顯示時一律要跳脫 */
+function toFeedItem(row, { myId, profiles, avatarUrls, photoUrls, likes }) {
+  const owner = profiles.get(row.owner);
+  const brewLikes = likes.filter((l) => l.brew_owner === row.owner && l.brew_id === row.id);
+  const likers = brewLikes.map((l) => profiles.get(l.user_id)).filter(Boolean);
+  const num = (v) => (v == null ? null : Number(v)); // numeric 欄位
+  const brew = { coffeeG: num(row.coffee_g), waterG: num(row.water_g) };
+  return {
+    owner: row.owner,
+    id: row.id,
+    nickname: owner?.nickname ?? '（不明）',
+    avatarUrl: avatarUrls[owner?.avatar_path] ?? null,
+    beanName: row.bean_name,
+    origin: row.bean_origin,
+    process: PROCESS[row.bean_process] ?? '',
+    roastLevel: ROAST_LEVEL[row.roast_level] ?? '',
+    restDays: restDays(row.brewed_at, row.roast_date),
+    brewedAt: row.brewed_at,
+    dripper: row.dripper,
+    grinderName: row.grinder_name,
+    grindSetting: row.grind_setting,
+    ...brew,
+    ratio: ratio(brew),
+    tempC: num(row.temp_c),
+    totalTimeS: row.total_time_s,
+    rating: row.rating,
+    flavor: Object.fromEntries(Object.keys(FLAVOR).map((k) => [k, row[k] ?? null])),
+    flavorNotes: sortFlavorNotes((row.flavor_notes ?? []).filter(isFlavorNote)),
+    notes: row.notes,
+    photoUrl: photoUrls[row.photo_path] ?? null,
+    likeCount: brewLikes.length,
+    likedByMe: brewLikes.some((l) => l.user_id === myId),
+    // 按讚的人：看得到 profile 的列出暱稱（自己排最前面），其他人（不是我的好友）只算人數
+    likers: likers.sort((a, b) => Number(b.id === myId) - Number(a.id === myId)).map((p) => (p.id === myId ? '你' : p.nickname)),
+    otherLikers: brewLikes.length - likers.length,
+  };
+}
+
+/** 一批雲端紀錄 → 畫面用的資料（一起查讚、profile、頭像與照片的 signed URL） */
+async function toFeedItems(myId, rows) {
+  if (!rows.length) return [];
+  const likes = await cloud.listLikes(rows);
+  const profileRows = await cloud.listProfiles([...rows.map((r) => r.owner), ...likes.map((l) => l.user_id)]);
+  const [avatarUrls, photoUrls] = await Promise.all([
+    cloud.avatarUrls(profileRows.map((p) => p.avatar_path)),
+    cloud.brewPhotoUrls(rows.map((r) => r.photo_path)),
+  ]);
+  const profiles = new Map(profileRows.map((p) => [p.id, p]));
+  return rows.map((row) => toFeedItem(row, { myId, profiles, avatarUrls, photoUrls, likes }));
+}
+
+/** 好友動態（依沖煮時間新→舊）：{ items, hasMore }；offset 是已載入的筆數 */
+export async function listFeed(myId, { offset = 0 } = {}) {
+  const rows = await cloud.listFeed(myId, { offset, limit: FEED_PAGE_SIZE + 1 }); // 多拿一筆判斷還有沒有
+  return { items: await toFeedItems(myId, rows.slice(0, FEED_PAGE_SIZE)), hasMore: rows.length > FEED_PAGE_SIZE };
+}
+
+/** 好友的一筆紀錄；讀不到（不是好友、被封鎖、已刪除或改回只有我）回傳 null */
+export async function getFeedBrew(myId, owner, id) {
+  const row = await cloud.getSharedBrew(owner, id);
+  return row ? (await toFeedItems(myId, [row]))[0] : null;
+}
+
+/** 按讚／收回讚 */
+export const setLike = (myId, owner, id, liked) => (liked ? cloud.like(owner, id) : cloud.unlike(myId, owner, id));

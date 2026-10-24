@@ -1,6 +1,6 @@
 // 進入點 + hash 路由
 import { esc, toast } from './views/ui.js';
-import { socialAvailable, completeSignIn } from './models.js';
+import { socialAvailable, completeSignIn, requestSync } from './models.js';
 
 // 各 view 用動態 import 延遲載入；每個 view 匯出 render(container, params)
 const routes = [
@@ -11,6 +11,9 @@ const routes = [
   { pattern: /^\/beans$/, tab: 'beans', load: () => import('./views/beanList.js') },
   { pattern: /^\/beans\/new$/, tab: 'beans', load: () => import('./views/beanForm.js') },
   { pattern: /^\/beans\/([\w-]+)$/, tab: 'beans', load: () => import('./views/beanForm.js') },
+  // 好友動態（底部分頁，js/config.js 沒設定時不顯示）
+  { pattern: /^\/feed$/, tab: 'feed', load: () => import('./views/feed.js') },
+  { pattern: /^\/feed\/([\w-]+)\/([\w-]+)$/, tab: 'feed', load: () => import('./views/feedDetail.js') },
   // ☰ 選單裡的頁面：不屬於任何底部分頁（tab: null）
   { pattern: /^\/backup$/, tab: null, load: () => import('./views/backup.js') },
   { pattern: /^\/grinders$/, tab: null, load: () => import('./views/grinderList.js') },
@@ -56,7 +59,9 @@ async function navigate() {
     container.innerHTML = '';
     window.scrollTo(0, 0);
 
-    const result = await view.render(container, { id: match[1] ?? null, query, isCurrent: () => token === navToken });
+    const result = await view.render(container, {
+      id: match[1] ?? null, params: match.slice(1), query, isCurrent: () => token === navToken,
+    });
     if (token === navToken) cleanup = result ?? null;
   } catch (err) {
     console.error(err);
@@ -76,8 +81,8 @@ function setupMenu() {
   };
   const isOpen = () => !list.hidden;
 
-  // 社群項目只在有設定 Supabase 的環境顯示
-  for (const el of list.querySelectorAll('[data-social]')) el.hidden = !socialAvailable;
+  // 社群項目（☰ 選單、底部分頁）只在有設定 Supabase 的環境顯示
+  for (const el of document.querySelectorAll('[data-social]')) el.hidden = !socialAvailable;
 
   btn.addEventListener('click', () => {
     setOpen(!isOpen());
@@ -179,6 +184,19 @@ async function start() {
   }
   window.addEventListener('hashchange', navigate);
   navigate();
+  setupSync();
+}
+
+/* ===== 咖啡社群：分享給好友的紀錄在背景同步 ===== */
+// 存檔、刪除、匯入時由 models.js 觸發；這裡補上啟動、恢復網路、切回前景（離線時改的紀錄會在這些時候送出）
+
+function setupSync() {
+  if (!socialAvailable) return;
+  requestSync();
+  window.addEventListener('online', requestSync);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') requestSync();
+  });
 }
 
 start();

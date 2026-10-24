@@ -4,7 +4,8 @@ const DB_NAME = 'coffee-log';
 // v2：新增 grinders；brews 加 grinderId 索引（只加索引，不改舊紀錄）
 // v3：新增 meta（App 自己的設定／狀態，例如上次備份時間；不匯出）
 // v4：新增 photos（每筆紀錄的照片，keyPath brewId）與 thumbs（列表用 300px 縮圖）
-const DB_VERSION = 4;
+// v5：新增 sync（咖啡社群：每筆紀錄上次同步到雲端的內容，keyPath brewId；不匯出）
+const DB_VERSION = 5;
 
 let dbPromise = null;
 
@@ -38,6 +39,9 @@ export function openDB() {
       }
       if (!db.objectStoreNames.contains('thumbs')) {
         db.createObjectStore('thumbs', { keyPath: 'brewId' });
+      }
+      if (!db.objectStoreNames.contains('sync')) {
+        db.createObjectStore('sync', { keyPath: 'brewId' });
       }
     };
     req.onsuccess = () => {
