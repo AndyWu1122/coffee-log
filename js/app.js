@@ -144,7 +144,7 @@ function setupServiceWorker() {
   let waitingWorker = null;
   let updateRequested = false;
 
-  // ☰ 選單的版本號（sw.js 的 CACHE_VERSION）；問不到（舊版 Service Worker 不會回覆）就維持隱藏
+  // ☰ 選單的版本號（sw.js 的 APP_VERSION）；問不到（更舊的 Service Worker 不會回覆）就維持隱藏
   const showVersion = async () => {
     const version = await appVersion();
     if (version == null) return;

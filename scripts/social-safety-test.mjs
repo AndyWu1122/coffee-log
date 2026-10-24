@@ -104,11 +104,17 @@ try {
 
   /* ===== Service Worker 沒有快取 Supabase 的網址（API、signed URL） ===== */
   await pb.waitFor(`navigator.serviceWorker.controller !== null`, { label: 'Service Worker 接手', timeout: 15000 });
-  // ☰ 選單的版本號＝sw.js 的 CACHE_VERSION（要在受 Service Worker 控制的頁面檢查：visit 的強制重新整理會略過 Service Worker）
-  const swVersion = (await readFile(path.join(root, 'sw.js'), 'utf8')).match(/const CACHE_VERSION = (\d+);/)?.[1];
+  // ☰ 選單的版本號＝sw.js 的 APP_VERSION（要在受 Service Worker 控制的頁面檢查：visit 的強制重新整理會略過 Service Worker）
+  const swVersion = (await readFile(path.join(root, 'sw.js'), 'utf8')).match(/const APP_VERSION = '(\d+\.\d+\.\d+)';/)?.[1];
   const shownVersion = await pb.waitFor(`(() => { const el = document.querySelector('#app-version'); return !el.hidden && el.textContent; })()`,
     { label: '選單的版本號' });
-  check('☰ 選單顯示的版本號等於 sw.js 的 CACHE_VERSION', Boolean(swVersion) && shownVersion === `版本 ${swVersion}`, shownVersion);
+  check('☰ 選單顯示的版本號等於 sw.js 的 APP_VERSION（x.y.z）', Boolean(swVersion) && shownVersion === `版本 ${swVersion}`, shownVersion);
+  const cacheNames = await pb.eval(`caches.keys()`);
+  check('快取名稱由 APP_VERSION 產生', JSON.stringify(cacheNames) === JSON.stringify([`coffee-log-v${swVersion}`]), JSON.stringify(cacheNames));
+  // 舊版 Service Worker（1.0.0 以前）回的是整數：新版頁面照樣顯示、送出成字串
+  const legacy = await pb.eval(`import('./js/views/ui.js').then((ui) => [18, '1.0.0', '1.0', 'abc', 0, 1.5, null, {}].map(ui.normalizeAppVersion))`);
+  check('舊版 SW 回整數 18 → 字串 "18"；格式不對 → null', JSON.stringify(legacy) === JSON.stringify(['18', '1.0.0', null, null, null, null, null, null]),
+    JSON.stringify(legacy));
   await visit(pb, base, `#/feed/${A.id}/${brewId}`);
   await pb.waitFor(`document.querySelector('.feed-photo')?.complete`, { label: '照片載入' });
   const cached = await pb.eval(`(async () => {

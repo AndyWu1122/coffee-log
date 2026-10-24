@@ -86,7 +86,7 @@ Supabase 後台 → **Project Settings → API Keys**，把這兩個值告訴 Cl
 Claude 會：
 1. 填進 `js/config.js` 的 `PRODUCTION`
 2. 把 Project URL 加進 `index.html` CSP 的 `connect-src`、`img-src`（不加的話 App 連不到 Supabase）
-3. `sw.js` 的 `CACHE_VERSION` +1、commit、push（push 到 main 就會部署）
+3. `sw.js` 的 `APP_VERSION` 升版（規則見 CLAUDE.md）、commit、push（push 到 main 就會部署）
 
 ## 5-1. 部署「刪除帳號」的 Edge Function（你，或讓 Claude 在你登入後執行）
 

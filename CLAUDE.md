@@ -101,8 +101,10 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 
 ## PWA / 離線
 - `sw.js` 安裝時預先快取 `ASSETS` 清單中的所有檔案，之後一律從快取讀取
-- **修改任何前端檔案後，`sw.js` 的 `CACHE_VERSION` 要 +1**，否則使用者不會收到新版本
-  - 它也是 ☰ 選單最下面顯示的「版本 N」：app.js 用 `'version'` 訊息問目前接管頁面的 Service Worker（沒有 Service Worker 時不顯示），不另外維護版本號
+- **修改任何前端檔案後，`sw.js` 的 `APP_VERSION` 至少第三碼 +1**，否則使用者不會收到新版本（`CACHE_NAME` 由它產生，不另外維護）
+  - 版本號（semver `x.y.z`，從 1.0.0 開始）：修 bug → 第三碼 +1；新功能 → 第二碼 +1、第三碼歸零；資料不相容的大改 → 第一碼 +1
+  - 它也是 ☰ 選單最下面顯示的「版本 x.y.z」、意見回饋附的版本：app.js 用 `'version'` 訊息問目前接管頁面的 Service Worker（沒有 Service Worker 時不顯示）
+  - 1.0.0 以前的舊版 Service Worker 回的是整數（`CACHE_VERSION`）：`ui.normalizeAppVersion` 轉成字串 `'18'`，Edge Function `feedback` 也接受整數
 - **新增前端檔案時，要加進 `sw.js` 的 `ASSETS`**，否則離線時載不到
 - 有新版時畫面底部顯示「有新版本可用」，使用者按「更新」才切換（避免填表單時被重新整理）
 - 圖示來源是 `icons/icon.svg`（滿版、圖案在中心安全區），PNG 由它用 headless Chrome 轉出
@@ -190,9 +192,10 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - Service Worker 只攔截同網域的 GET，不會快取 API 或 signed URL（social-safety-test 會檢查快取內容）
 
 ### 意見回饋
-- ☰ →「意見回饋」（`#/feedback`），要登入才能送（防灌送）；類型（bug/idea/other）、內容 ≤ 1000 字，附暱稱（author）與 App 版本號，不附 email
+- ☰ →「意見回饋」（`#/feedback`），要登入才能送（防灌送）；類型（bug/idea/other）、內容 ≤ 1000 字，附暱稱（author）與 App 版本號（`feedback.app_version` 是文字：`x.y.z` 或舊版的整數字串），不附 email
 - `feedback` 表和檢舉一樣：只能以自己的名義新增，誰都讀不到（連作者自己），站長在 Supabase 後台看；刪除帳號時 cascade 刪除
 - App 呼叫 Edge Function `feedback`：用**呼叫者的 JWT** 寫入（RLS、每日上限照常生效）→ 透過 Resend 寄**純文字** Email 給站長；先存檔再寄信，寄信失敗不影響回饋
+- 沒寄出信時 function log 一定有一行 `[feedback] 沒有寄信：<原因>`（設定缺漏、假值、Resend 的錯誤翻成中文，`mail.ts`）；寄出時記 Resend 的 email id；log 不可含金鑰
 - 金鑰 `RESEND_API_KEY`、`FEEDBACK_TO` 只用 `supabase secrets set` 設定；本機不讀設定，function 依 `SUPABASE_URL`（不是 `*.supabase.co`）判斷，一律寄到 social-feedback-test 開的假 Resend（port 54399）
 - **`config.toml` 不要設定 `[edge_runtime.secrets]`**：`supabase secrets set` 會把它一起上傳到正式專案、蓋掉真的金鑰（曾經發生過）
 - 正式專案要另外部署：`npx supabase@2.120.0 functions deploy feedback`（步驟見 `docs/supabase-setup.md` 5-2）
@@ -206,7 +209,9 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - `node scripts/photo-exif-test.mjs`：headless Chrome（找不到時設 `CHROME_PATH`）跑 `tests/photo.html`，把處理後的照片上傳再下載，確認沒有 EXIF
 - `node scripts/social-feed-test.mjs`：兩個 headless Chrome（A、B）測分享、同步（含模擬離線）、動態牆、按讚、改回只有我、封鎖、每日上限，豆名／筆記／暱稱的 XSS
 - `node scripts/social-safety-test.mjs`：檢舉、從詳細頁封鎖、刪除帳號（用 admin 確認雲端全部刪除、本機保留）、Edge Function 的權限、CSP（每一頁沒有違規、注入的 inline script 被擋）、SW 快取
-- `node scripts/social-feedback-test.mjs`：意見回饋的畫面、Edge Function 權限、寄給站長的 Email（假 Resend）、寄信失敗仍存檔、每天 5 則、誰都讀不到
+- `node scripts/social-feedback-test.mjs`：意見回饋的畫面、Edge Function 權限、寄給站長的 Email（假 Resend）、寄信失敗仍存檔、function log 寫出看得懂的原因且不含金鑰（讀 `docker logs`）、每天 5 則、誰都讀不到
+- `node scripts/feedback-mail-test.mjs`：不需要 Supabase；Node 直接載入 `functions/feedback/mail.ts` 測設定檢查與 Resend 錯誤說明
+- **改了 Edge Function 之後要 `docker restart supabase_edge_runtime_coffee-log`**，本機才會載入新程式
 - `node scripts/social-ui-test.mjs`：兩個隔離的 headless Chrome 環境（A、B）操作真的畫面：加好友、封鎖、XSS、頭像 EXIF、登出；登入用 admin API 拿真的 session（Google 登入無法自動化）
 - 本機頁面用 `python -m http.server 8000` 開 `http://localhost:8000/`（`config.toml` 的 site_url／redirect URL 是這個；本機沒有設定 Google，無法真的登入）
 - 本機 Studio：http://127.0.0.1:54323

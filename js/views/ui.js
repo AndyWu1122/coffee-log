@@ -103,7 +103,17 @@ export const BADGES_EVENT = 'social-badges-changed';
 export const notifyBadgesChanged = () => window.dispatchEvent(new Event(BADGES_EVENT));
 
 /**
- * App 的版本號：問目前接管這個頁面的 Service Worker（它的 CACHE_VERSION 就是正在跑的版本）
+ * Service Worker 回覆的版本號 → 字串：'1.2.3'（sw.js 的 APP_VERSION）
+ * 舊版 Service Worker（1.0.0 以前）回的是整數 CACHE_VERSION，轉成 '18' 這樣的字串；其他一律 null
+ */
+export function normalizeAppVersion(data) {
+  if (typeof data === 'string' && /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(data)) return data;
+  if (Number.isInteger(data) && data >= 1 && data <= 1000000) return String(data);
+  return null;
+}
+
+/**
+ * App 的版本號（字串）：問目前接管這個頁面的 Service Worker（它的 APP_VERSION 就是正在跑的版本）
  * 沒有 Service Worker、或舊版 Service Worker 不認得這個訊息時回傳 null
  */
 export function appVersion({ timeout = 1000 } = {}) {
@@ -114,7 +124,7 @@ export function appVersion({ timeout = 1000 } = {}) {
     const timer = setTimeout(() => resolve(null), timeout);
     port1.onmessage = (e) => {
       clearTimeout(timer);
-      resolve(Number.isInteger(e.data) ? e.data : null);
+      resolve(normalizeAppVersion(e.data));
     };
     worker.postMessage('version', [port2]);
   });

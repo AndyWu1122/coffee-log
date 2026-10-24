@@ -36,7 +36,7 @@ select throws_ok($$ insert into public.feedback (category, message) values ('bug
 select throws_ok($$ select * from public.feedback $$, '42501', null, '未登入：讀不到回饋');
 
 select tests.login_as('aaaaaaaa-0000-0000-0000-000000000000');
-select lives_ok($$ insert into public.feedback (category, message, app_version) values ('bug', '按讚收不回來 <script>', 17) $$,
+select lives_ok($$ insert into public.feedback (category, message, app_version) values ('bug', '按讚收不回來 <script>', '1.0.0') $$,
   'A 送出回饋（author 預設是自己）');
 select throws_ok($$ select * from public.feedback $$, '42501', null, '送出的人自己也讀不到回饋');
 select throws_ok($$ update public.feedback set message = 'x' $$, '42501', null, '不能修改回饋');
@@ -61,7 +61,7 @@ select throws_ok($$ insert into public.feedback (category, message) values ('spa
 select throws_ok($$ insert into public.feedback (category, message) values ('bug', '   ') $$, '23514', null, '內容不能只有空白');
 select throws_ok($$ insert into public.feedback (category, message) values ('bug', repeat('あ', 1001)) $$, '23514', null,
   '內容最多 1000 字');
-select throws_ok($$ insert into public.feedback (category, message, app_version) values ('bug', 'x', 0) $$, '23514', null,
+select throws_ok($$ insert into public.feedback (category, message, app_version) values ('bug', 'x', '0') $$, '23514', null,
   '版本號要在合理範圍');
 select tests.as_admin();
 select is((select count(*) from private.rate_events where user_id = 'bbbbbbbb-0000-0000-0000-000000000000'), 0::bigint,
@@ -78,8 +78,8 @@ select lives_ok($$ insert into public.feedback (category, message) values ('othe
 
 select tests.as_admin();
 select is((select count(*) from public.feedback where author = 'bbbbbbbb-0000-0000-0000-000000000000'), 5::bigint, 'B 存下 5 則');
-select is((select message from public.feedback where app_version = 17), '按讚收不回來 <script>', '內容原樣保存');
-select ok((select created_at > now() - interval '1 minute' from public.feedback where app_version = 17), '建立時間由資料庫決定');
+select is((select message from public.feedback where app_version = '1.0.0'), '按讚收不回來 <script>', '內容原樣保存');
+select ok((select created_at > now() - interval '1 minute' from public.feedback where app_version = '1.0.0'), '建立時間由資料庫決定');
 
 /* ========== 刪除帳號時一起刪除 ========== */
 delete from auth.users where id = 'aaaaaaaa-0000-0000-0000-000000000000';

@@ -1,8 +1,8 @@
 // Service Worker：安裝時預先快取所有檔案，之後一律從快取讀取（離線可用）
-// ⚠ 修改任何前端檔案後，CACHE_VERSION 要 +1，使用者才會收到新版本
-// 它也是 ☰ 選單顯示的版本號（app.js 用 'version' 訊息詢問）
-const CACHE_VERSION = 18;
-const CACHE_NAME = `coffee-log-v${CACHE_VERSION}`;
+// ⚠ 修改任何前端檔案後，APP_VERSION 至少第三碼 +1，使用者才會收到新版本（規則見 CLAUDE.md「版本號」）
+// 它也是 ☰ 選單顯示的版本號、意見回饋附的版本（app.js 用 'version' 訊息詢問）
+const APP_VERSION = '1.0.0';
+const CACHE_NAME = `coffee-log-v${APP_VERSION}`;
 
 const ASSETS = [
   './',
@@ -63,7 +63,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data === 'skipWaiting') self.skipWaiting();
   // ☰ 選單的版本號：回覆到頁面傳來的 MessagePort
-  if (event.data === 'version') event.ports[0]?.postMessage(CACHE_VERSION);
+  if (event.data === 'version') event.ports[0]?.postMessage(APP_VERSION);
 });
 
 self.addEventListener('fetch', (event) => {

@@ -52,13 +52,23 @@ const asCaller = (auth: string, path: string, init: RequestInit = {}) =>
     headers: { apikey: ANON_KEY, Authorization: auth, 'Content-Type': 'application/json', ...(init.headers ?? {}) },
   });
 
+/**
+ * App 版本號 → 字串：'1.2.3'（sw.js 的 APP_VERSION）；舊版 App 送的是整數 CACHE_VERSION，轉成 '18'
+ * 格式不對就當作不明（null），不擋下回饋；和資料庫的 feedback_app_version_format 一致
+ */
+function toAppVersion(v: unknown): string | null {
+  if (typeof v === 'string' && /^(\d{1,4}\.\d{1,4}\.\d{1,4}|[1-9]\d{0,6})$/.test(v)) return v;
+  if (typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 1000000) return String(v);
+  return null;
+}
+
 /** 驗證內容；不合格回傳 null（資料庫也會再檢查一次） */
 function parse(body: unknown) {
   const b = body as { category?: unknown; message?: unknown; appVersion?: unknown } | null;
   const category = typeof b?.category === 'string' && Object.hasOwn(CATEGORIES, b.category) ? b.category : null;
   const message = typeof b?.message === 'string' ? b.message.trim() : '';
   const length = [...message].length;
-  const appVersion = Number.isInteger(b?.appVersion) ? (b!.appVersion as number) : null;
+  const appVersion = toAppVersion(b?.appVersion);
   if (!category || length < 1 || length > MESSAGE_MAX) return null;
   return { category, message, appVersion };
 }
@@ -70,7 +80,7 @@ const subjectLine = (s: string) => {
 };
 
 /** 寄 Email 給站長（純文字，不用 HTML：回饋內容不會被當成 HTML）；回傳有沒有寄出 */
-async function notify(f: { category: string; message: string; appVersion: number | null }, userId: string, nickname: string) {
+async function notify(f: { category: string; message: string; appVersion: string | null }, userId: string, nickname: string) {
   if (!MAIL.ok) {
     console.error(`[feedback] 沒有寄信：${MAIL.reason}`);
     return false;

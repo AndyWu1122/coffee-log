@@ -49,7 +49,7 @@ let chrome;
 try {
   await new Promise((resolve) => mock.listen(MOCK_PORT, '0.0.0.0', resolve));
   const logSince = new Date(Date.now() - 2000).toISOString();
-  const swVersion = Number((await readFile(path.join(root, 'sw.js'), 'utf8')).match(/const CACHE_VERSION = (\d+);/)[1]);
+  const swVersion = (await readFile(path.join(root, 'sw.js'), 'utf8')).match(/const APP_VERSION = '(\d+\.\d+\.\d+)';/)[1];
 
   /* ===== Edge Function：權限 ===== */
   const ok = { category: 'bug', message: 'x' };
@@ -98,7 +98,7 @@ try {
 
   const [saved] = await adminRows(`feedback?author=eq.${A.id}`);
   check('存進資料庫：作者是 A、類型、內容原樣保存', saved?.category === 'bug' && saved?.message === XSS, JSON.stringify(saved));
-  check('附上 App 版本號（＝sw.js 的 CACHE_VERSION）', saved?.app_version === swVersion, `${saved?.app_version} / ${swVersion}`);
+  check('附上 App 版本號（＝sw.js 的 APP_VERSION，字串）', saved?.app_version === swVersion, `${saved?.app_version} / ${swVersion}`);
   check('畫面沒有被注入 HTML', !(await pa.eval(`window.__pwned || document.querySelector('#app script, #app img[onerror]')`)));
 
   /* ===== 寄給站長的 Email ===== */
@@ -124,6 +124,7 @@ try {
   const bSend = await feedbackFn(B.token, { category: 'idea', message: '想要統計頁', appVersion: 3 });
   check('寄信失敗時仍回傳成功（notified: false）', bSend.status === 200 && bSend.json?.notified === false, bSend.text);
   check('寄信失敗時回饋照樣存下來', (await adminRows(`feedback?author=eq.${B.id}`)).length === 1);
+  check('舊版 App 送整數版本 3 → 存成字串 "3"', (await adminRows(`feedback?author=eq.${B.id}`))[0]?.app_version === '3');
 
   /* ===== function log：寄信的結果看得懂、不含金鑰 ===== */
   // Resend 免費方案收件人不是註冊的 email 時，回的就是這個（正式環境最常見的原因）

@@ -1112,10 +1112,12 @@ export async function reportBrew(owner, id, { reason, detail = '' }) {
 export const FEEDBACK_CATEGORIES = { bug: '問題回報', idea: '功能建議', other: '其他' };
 export const FEEDBACK_MAX = 1000;      // 和資料庫的 check 一致
 export const FEEDBACK_DAILY_MAX = 5;   // 每天上限（資料庫強制）
+// 'x.y.z'，或舊版 Service Worker 的整數版本（'18'）；和資料庫 feedback_app_version_format 一致
+const APP_VERSION_FORMAT = /^(\d{1,4}\.\d{1,4}\.\d{1,4}|[1-9]\d{0,6})$/;
 
 /**
  * 送出意見回饋（只有開發者在 Supabase 後台看得到，送出後寄 Email 通知開發者）；回傳 { ok, errors }
- * appVersion：送出時的 App 版本號（沒有就 null）；作者由資料庫用 auth.uid() 決定
+ * appVersion：送出時的 App 版本號字串（ui.js 的 appVersion()，'1.2.3' 或舊版的 '18'；沒有就 null）；作者由資料庫用 auth.uid() 決定
  */
 export async function sendFeedback({ category, message, appVersion = null }) {
   const errors = {};
@@ -1124,7 +1126,8 @@ export async function sendFeedback({ category, message, appVersion = null }) {
   if (!text) errors.message = '請輸入內容';
   else if (charLength(text) > FEEDBACK_MAX) errors.message = `最多 ${FEEDBACK_MAX} 字（目前 ${charLength(text)} 字）`;
   if (Object.keys(errors).length) return { ok: false, errors };
-  await cloud.sendFeedback({ category, message: text, appVersion: Number.isInteger(appVersion) ? appVersion : null });
+  const version = typeof appVersion === 'string' && APP_VERSION_FORMAT.test(appVersion) ? appVersion : null;
+  await cloud.sendFeedback({ category, message: text, appVersion: version });
   return { ok: true };
 }
 
