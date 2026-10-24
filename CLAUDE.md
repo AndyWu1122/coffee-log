@@ -6,7 +6,9 @@
 - 純 HTML / CSS / JavaScript（ES Modules），**不使用框架、不使用打包工具**
 - 儲存：IndexedDB（可用 `idb` 小型 wrapper，或自己包一層）
 - PWA：manifest.json + Service Worker，需可離線使用
-- 部署：GitHub Pages（repo 名稱預定 `coffee-log`，所有路徑用相對路徑）
+- 部署：GitHub Pages（main 分支根目錄），push 到 main 即自動部署
+  - repo：https://github.com/AndyWu1122/coffee-log
+  - 網址：https://andywu1122.github.io/coffee-log/（在子路徑下，所有路徑必須用相對路徑）
 - 介面以手機直向為主（mobile-first），按鈕要大，方便沖咖啡時單手操作
 
 ## 資料夾結構
