@@ -205,6 +205,73 @@ input:focus, select:focus, textarea:focus {
 .segmented.wrap { flex-wrap: wrap; }
 .segmented.wrap button { flex: 1 1 calc(50% - 6px); }
 
+/* ===== 風味輪 ===== */
+.flavor-picker { display: grid; gap: 10px; }
+.wheel {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.wheel-body { animation: wheel-in 0.2s ease-out; }
+@keyframes wheel-in { from { opacity: 0.3; } to { opacity: 1; } }
+.wheel .sector,
+.wheel .center-back {
+  stroke: var(--bg);        /* 扇區之間 1.5px 背景色間隔 */
+  stroke-width: 1.5;
+  cursor: pointer;
+  outline: none;
+}
+.wheel .sector.dim { fill-opacity: 0.35; }
+.wheel .sector:focus-visible,
+.wheel .center-back:focus-visible { stroke: var(--text); stroke-width: 2.5; }
+.wheel text {
+  fill: #fff;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+.wheel .is-selected + text { font-weight: 700; }
+.wheel .center-count, .wheel .center-title { font-weight: 700; }
+.wheel .center-count { fill: var(--accent); }
+.wheel .center-sub { fill: var(--text-dim); }
+.wheel.is-zoomed .center-sub { fill: #fff; opacity: 0.85; }
+.wheel-hint { text-align: center; margin: 0; }
+
+.note-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.note-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+}
+.note-chip i, .note-tag i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.note-chip span { color: var(--text-dim); margin-left: 2px; }
+
+/* 列表卡片上的風味標籤 */
+.note-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.note-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.8rem;
+}
+.note-tag.more { color: var(--text-dim); }
+
 /* ===== 按鈕 ===== */
 .btn {
   display: inline-flex;

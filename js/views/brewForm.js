@@ -4,6 +4,7 @@ import {
   ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors } from './ui.js';
+import { createFlavorPicker } from './flavorPicker.js';
 
 const SCORE_OPTIONS = [1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n) }));
 const shortDate = new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric' });
@@ -43,7 +44,7 @@ export async function render(container, { id, query, isCurrent }) {
     brewedAt: new Date().toISOString(),
     dripper: drippers[0] ?? '',
     grindSetting: '', coffeeG: '', waterG: '', tempC: '',
-    totalTimeS: null, rating: null, flavor: {}, notes: '',
+    totalTimeS: null, rating: null, flavor: {}, flavorNotes: [], notes: '',
   };
 
   // #/brew/new?from=<id>：複製該筆紀錄的參數
@@ -140,6 +141,12 @@ export async function render(container, { id, query, isCurrent }) {
           <div class="error"></div>
         </div>`).join('')}
 
+      <div class="field" data-field="flavorNotes">
+        <span class="label">風味輪</span>
+        <div class="flavor-picker" id="flavor-picker"></div>
+        <div class="error"></div>
+      </div>
+
       <div class="field" data-field="notes">
         <label for="notes">筆記</label>
         <textarea id="notes" name="notes" placeholder="風味、下次想調整的地方…">${esc(b.notes)}</textarea>
@@ -157,6 +164,7 @@ export async function render(container, { id, query, isCurrent }) {
   const form = container.querySelector('form');
   const f = form.elements;
   bindSegmented(form);
+  const flavorPicker = createFlavorPicker(form.querySelector('#flavor-picker'), b.flavorNotes ?? []);
 
   // 粉水比即時更新
   const ratioEl = form.querySelector('#ratio');
@@ -192,6 +200,7 @@ export async function render(container, { id, query, isCurrent }) {
       totalTimeS: toSeconds(f.totalMin.value, f.totalSec.value),
       rating: segmentedValue(form, 'rating'),
       flavor: Object.fromEntries(Object.keys(FLAVOR).map((k) => [k, segmentedValue(form, `flavor.${k}`)])),
+      flavorNotes: flavorPicker.value(),
       notes: f.notes.value,
     });
     if (!result.ok) return showErrors(form, result.errors);

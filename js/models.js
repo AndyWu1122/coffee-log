@@ -1,5 +1,9 @@
 // 驗證、計算，以及提供給 views 的資料操作（views 只透過這裡存取資料）
 import * as db from './db.js';
+import { isFlavorNote, sortFlavorNotes } from './flavorWheel.js';
+
+// views 只依賴 models，風味輪資料由這裡轉出
+export { FLAVOR_WHEEL, flavorNote, sortFlavorNotes } from './flavorWheel.js';
 
 export const SCHEMA_VERSION = 1;
 
@@ -120,6 +124,9 @@ export function validateBrew(b) {
     const v = b.flavor?.[key];
     if (v != null && !inRange(v, 1, 5)) errors[`flavor.${key}`] = '需為 1–5';
   }
+  if (!Array.isArray(b.flavorNotes) || !b.flavorNotes.every(isFlavorNote)) {
+    errors.flavorNotes = '包含不認得的風味';
+  }
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
@@ -156,6 +163,10 @@ function normalizeBrew(input) {
     totalTimeS: toNum(input.totalTimeS),
     rating: toNum(input.rating),
     flavor: Object.fromEntries(Object.keys(FLAVOR).map((k) => [k, toNum(input.flavor?.[k])])),
+    // 風味輪選到的風味（依輪盤順序）；未知的 key 保留，交給驗證擋下
+    flavorNotes: Array.isArray(input.flavorNotes)
+      ? [...sortFlavorNotes(input.flavorNotes), ...input.flavorNotes.filter((k) => !isFlavorNote(k))]
+      : [],
     notes: String(input.notes ?? '').trim(),
   };
 }

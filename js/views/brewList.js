@@ -1,5 +1,5 @@
 // #/ 沖煮紀錄列表
-import { listBrews, listBeans, latestBrewByBean, formatRatio, formatSeconds } from '../models.js';
+import { listBrews, listBeans, latestBrewByBean, formatRatio, formatSeconds, flavorNote } from '../models.js';
 import { esc, setTitle } from './ui.js';
 
 const dateFmt = new Intl.DateTimeFormat('zh-TW', {
@@ -95,5 +95,17 @@ function brewCard(b) {
         <span>${esc(dateFmt.format(new Date(b.brewedAt)))}</span>
         ${b.restDays != null ? `<span>養豆 ${b.restDays} 天</span>` : ''}
       </div>
+      ${noteTags(b.flavorNotes)}
     </a></li>`;
+}
+
+/** 卡片上的風味標籤：最多 3 個，其餘顯示 +N */
+function noteTags(keys = []) {
+  const MAX = 3;
+  const notes = keys.map(flavorNote).filter(Boolean);
+  if (!notes.length) return '';
+  return `<div class="note-tags">
+    ${notes.slice(0, MAX).map((n) => `<span class="note-tag"><i style="background:${n.color}"></i>${esc(n.zh)}</span>`).join('')}
+    ${notes.length > MAX ? `<span class="note-tag more">+${notes.length - MAX}</span>` : ''}
+  </div>`;
 }
