@@ -1,0 +1,93 @@
+# 正式 Supabase 專案與 Google 登入設定
+
+咖啡社群上線前，要用你自己的帳號完成以下設定。標「你」的步驟需要登入你的 Supabase／Google 帳號；標「Claude」的可以交給 Claude 做。
+
+**金鑰規則**
+- **可以進 repo**：Project URL、anon／publishable key（公開的，權限全部由資料庫 RLS 把關）
+- **絕對不能進 repo、不能貼到前端、不能貼到聊天裡**：service_role／secret key、資料庫密碼、Google Client Secret
+- 資料庫密碼、Google Client Secret 存在密碼管理器；Google Client Secret 只填在 Supabase 後台
+
+---
+
+## 1. 建立 Supabase 專案（你）
+
+1. 到 <https://supabase.com/dashboard> → **New project**
+2. Name：`coffee-log`；Region：**Northeast Asia (Tokyo)**（離台灣最近）
+3. Database Password：按 **Generate a password**，**存進密碼管理器**（之後套用 migration 要用）
+4. 建好後記下 **Project ref**（網址 `https://supabase.com/dashboard/project/<ref>` 裡的那串）
+
+> 免費方案：一週沒有任何活動會自動暫停，要到後台按「Restore」恢復。
+
+## 2. 套用資料庫 migration（你，或讓 Claude 在你登入後執行）
+
+```sh
+npx supabase@2.120.0 login                          # 會開瀏覽器登入 Supabase
+npx supabase@2.120.0 link --project-ref <ref>       # 會要求輸入資料庫密碼
+npx supabase@2.120.0 db push                        # 列出要套用的 migration，確認後輸入 Y
+```
+
+- 套用的是 `supabase/migrations/` 裡全部的檔案：資料表、RLS、Storage bucket（brew-photos、avatars）
+- ⚠ **套用到正式專案之後，這些 migration 檔案就不能再修改**；之後要改權限一律新增 migration
+
+## 3. Auth 基本設定（你）
+
+Supabase 後台 → **Authentication**：
+
+1. **Sign In / Providers**
+   - **Email：關閉**（Enable Email provider 取消勾選）。只用 Google 登入；開著的話任何人都能用 email 註冊或收登入信
+   - Phone：關閉
+   - Allow anonymous sign-ins：關閉
+2. **URL Configuration**
+   - Site URL：`https://andywu1122.github.io/coffee-log/`
+   - Redirect URLs：只加 `https://andywu1122.github.io/coffee-log/`（結尾要有 `/`，要完全一致）
+
+## 4. Google OAuth 用戶端（你）
+
+到 <https://console.cloud.google.com/>：
+
+1. 上方選單 → **新增專案**，名稱 `coffee-log`
+2. 左側 **Google Auth Platform**（或「API 和服務 → OAuth 同意畫面」）→ **開始使用**
+   - 應用程式名稱：`手沖紀錄`；使用者支援電子郵件：你的 Gmail
+   - 目標對象：**外部**
+   - 聯絡資訊：你的 Gmail → 建立
+3. **品牌（Branding）**
+   - 已授權網域：加入 `<ref>.supabase.co`
+   - **不要上傳標誌**（上傳標誌就要送 Google 審核）
+4. **資料存取（Data Access）**→ 新增範圍：只勾 `openid`、`.../auth/userinfo.email`、`.../auth/userinfo.profile`
+5. **目標對象（Audience）**→ 發布狀態按 **發布應用程式**
+   - 只用基本範圍不需要審核；如果一直停在「測試中」，只有加進「測試使用者」的帳號能登入（最多 100 個）
+6. **用戶端（Clients）**→ **建立用戶端**
+   - 應用程式類型：**網頁應用程式**；名稱：`coffee-log`
+   - 已授權的 JavaScript 來源：`https://andywu1122.github.io`
+   - 已授權的重新導向 URI：`https://<ref>.supabase.co/auth/v1/callback`
+     （Supabase 後台 Authentication → Providers → Google 頁面上有這個網址可以直接複製）
+   - 建立後會顯示 **Client ID** 和 **Client Secret**
+7. 回到 Supabase 後台 → **Authentication → Sign In / Providers → Google**
+   - Enable：開啟
+   - 貼上 Client ID、Client Secret → Save
+   - Client Secret 只存在這裡和你的密碼管理器，**不要貼到任何其他地方**
+
+## 5. 前端連到正式專案（Claude）
+
+Supabase 後台 → **Project Settings → API Keys**，把這兩個值告訴 Claude：
+- Project URL：`https://<ref>.supabase.co`
+- **publishable key**（`sb_publishable_...`），或舊版的 **anon public** key
+  - ⚠ 不是 secret／service_role key
+
+Claude 會：
+1. 填進 `js/config.js` 的 `PRODUCTION`
+2. `sw.js` 的 `CACHE_VERSION` +1、commit、push（push 到 main 就會部署）
+
+## 6. 實際登入一次（你）
+
+1. 手機用 Safari／Chrome 開 <https://andywu1122.github.io/coffee-log/> → ☰ →「帳號」→「用 Google 登入」→ 設定暱稱
+2. **iPhone 主畫面的 App 也要試一次**：登入完是否回到 App 本身，iOS 的行為要實機才知道。如果回到 Safari 而不是 App，告訴 Claude
+3. Supabase 後台 → Authentication → Users 應該看得到你的帳號
+
+## 7. 上線前檢查（你，看一眼就好）
+
+- [ ] Table Editor：每張表都顯示 RLS enabled
+- [ ] Storage：`brew-photos`、`avatars` 都是 Private
+- [ ] Authentication → Providers：只有 Google 開著，Email 關閉
+- [ ] Project Settings → Data API → Exposed schemas：只有 `public`、`graphql_public`（**不能有 `private`**）
+- [ ] repo 裡沒有 secret／service_role key、資料庫密碼、Google Client Secret

@@ -6,6 +6,7 @@
 - 純 HTML / CSS / JavaScript（ES Modules），**不使用框架、不使用打包工具**
 - 儲存：IndexedDB（可用 `idb` 小型 wrapper，或自己包一層）
   - **唯一例外**：外觀偏好（`localStorage['theme']` = auto/light/dark）。它只是這支手機的顯示偏好、不需備份，且必須在 `<head>` 同步讀取才能避免主題閃爍
+  - 社群的登入狀態（supabase-js 的 session）也不放 localStorage，存在 IndexedDB 的 meta（key 前綴 `auth:`）
 - PWA：manifest.json + Service Worker，需可離線使用
 - 部署：GitHub Pages（main 分支根目錄），push 到 main 即自動部署
   - repo：https://github.com/AndyWu1122/coffee-log
@@ -24,22 +25,25 @@ js/models.js       # 驗證、計算（粉水比、養豆天數）
 js/flavorWheel.js  # SCA 風味輪靜態資料（三層、中英、大類顏色），由 models.js 轉出給 views
 js/image.js        # 照片處理：解碼、縮小、重新編碼 JPEG、base64、JPEG 檔頭驗證、上傳前移除中繼資料（只由 models.js 使用）
 js/cardLayout.js   # 分享卡片的純計算：cover 裁切、雷達圖座標、文字換行（含避頭）、檔名；由 models.js 轉出給 views
-js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, ui（共用 DOM 工具）
+js/config.js       # Supabase 連線設定（依網址：localhost → 本機、github.io → 正式；null ＝ 沒有社群功能）
+js/cloud.js        # 唯一存取 Supabase 的地方（角色和 db.js 一樣）；supabase-js 用到才載入
+js/vendor/         # 第三方檔案原封不動（supabase-js UMD、qrcode-generator），來源與 SRI 見 js/vendor/README.md
+js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, account（帳號）, friends（好友）, ui（共用 DOM 工具）
 icons/
-docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）
+docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟）
 supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）
-scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、photo-exif-test.mjs
+scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、photo-exif-test.mjs、social-ui-test.mjs
 tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mjs 用 headless Chrome 開；不屬於 App、不放進 ASSETS）
 ```
 
 ## 分層規則
-views → models → db，每層只呼叫下一層。views 不可直接碰 IndexedDB。
+views → models → db／cloud，每層只呼叫下一層。views 不可直接碰 IndexedDB 或 Supabase。
 
 ## 資料模型（備份 schemaVersion: 3／IndexedDB DB_VERSION: 4）
 **beans**：id, name, origin, process(washed/natural/honey/other), roastLevel(light/light-medium/medium-light/medium/dark，即 淺/淺中/中淺/中/深焙), roastDate(YYYY-MM-DD), bagWeightG(整包重量 g，選填), archived(bool), createdAt
 **grinders**：id, name(必填), notes(選填，例如刻度說明), archived(bool), createdAt
 **brews**：id, beanId, grinderId(選填，'' ＝未指定；v1 舊紀錄沒有這個欄位), brewedAt, dripper, grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes
-**meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil）；**不匯出、匯入取代全部時也不清除**
+**meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil、社群登入狀態 `auth:*`）；**不匯出、匯入取代全部時也不清除**（token 不會進備份檔，匯入也不會被登出）
 **photos**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 1600px、品質 0.8，約 200KB), width, height, createdAt；每筆紀錄最多 1 張，跟 brews 分開存
 **thumbs**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 300px)；列表只讀這個，不載入原圖；不匯出，匯入時由照片重新產生
 - brews 建索引：beanId、brewedAt、grinderId（v2 加入）
@@ -54,11 +58,11 @@ views → models → db，每層只呼叫下一層。views 不可直接碰 Index
 - id 用 crypto.randomUUID()
 
 ## 路由（hash）
-`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`
+`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/account` 帳號｜`#/friends` 好友｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）
 
 ## 介面配置
 - 底部分頁列：紀錄｜豆子（只放每天會用的頁面；之後的統計頁也放這裡）
-- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：磨豆機、備份）
+- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：帳號、好友、磨豆機、備份；帳號、好友有 `data-social`，`js/config.js` 沒設定時隱藏）
 - ☰ 選單裡的頁面不屬於任何分頁，路由設 `tab: null`，底部分頁都不亮
 
 ## 主題（深色／淺色）
@@ -113,7 +117,7 @@ views → models → db，每層只呼叫下一層。views 不可直接碰 Index
 
 ## 咖啡社群（後端：Supabase）
 規格見 `docs/social-spec.md`（分 5 階段，每階段通過測試、使用者確認後才進下一階段）；待決事項與決定見 `docs/social-open-questions.md`。
-目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）。前端還沒有任何社群介面與 supabase-js，也還沒有正式的 Supabase 專案。
+目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）、階段 3（帳號與好友）。還沒有正式的 Supabase 專案（`js/config.js` 的 `PRODUCTION` 是 null，正式網站不顯示社群功能）；建立步驟見 `docs/supabase-setup.md`。
 
 ### 資安規則（每個階段都必須遵守）
 - 每張表和 Storage bucket 都必須開 RLS，預設拒絕
@@ -145,6 +149,15 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - 顯示用 signed URL（`expiresIn: 3600`），不用公開網址；sw.js 不攔截其他網域的請求，所以不會快取 signed URL
 - 已知限制（伺服器做不到）：Storage 不檢查檔案內容；signed URL 效期由前端決定，發出後不再檢查 RLS（解除好友後舊網址到期前仍可用）
 
+### 帳號與好友（階段 3）
+- Google 登入用 PKCE（`flowType: 'pkce'`）：回到 `<App>/?code=...`，不會和 hash 路由衝突；`app.js` 的 `start()` 處理完把網址清掉、改到 `#/account`
+- 登入狀態存在 IndexedDB meta（`auth:supabase-auth`），不放 localStorage、不進備份檔；登出用 `scope: 'local'`，網路失敗也會清掉本機 session
+- supabase-js 從 `js/vendor/` 以 `<script integrity>` 載入（不用 CDN）；只在社群頁面用到時才載入；升級步驟見 `js/vendor/README.md`
+- 頭像：私有 bucket `avatars`（≤ 100KB、只收 JPEG），路徑 `<user_id>/avatar.jpg`；前端 `image.compressAvatar` 裁成 256×256 並移除中繼資料；讀取權限跟著 profiles 走（`avatar_path` 指向它才讀得到）；不用 Google 大頭貼
+- 封鎖後雙方互相看不到 profile，所以 `blocks.blocked_nickname` 在封鎖當下由 trigger 記下對方暱稱（前端不能指定）
+- QR code 內容是 `#/friends/add?code=...` 的網址，用手機相機掃；iPhone 主畫面 App 和 Safari 登入狀態分開，沒登入時頁面顯示代碼讓使用者複製
+- 暱稱上限 20 字，XSS 測試用 20 字以內的攻擊字串（`"><svg onload=pwn()>`）
+
 ### 本機開發（不連正式專案）
 - 需要 Docker Desktop 執行中；CLI 用 `npx supabase@2.120.0`（固定版本，不全域安裝）
 - `npx supabase@2.120.0 start`／`stop`；`db reset` 重建資料庫並套用所有 migration
@@ -152,5 +165,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - `node scripts/supabase-api-test.mjs`：用真的 JWT 從 API 層測權限；金鑰執行時從 `supabase status` 讀，只允許連本機
 - `node scripts/supabase-storage-test.mjs`：從 Storage API 測照片權限、1MB 與 MIME 限制
 - `node scripts/photo-exif-test.mjs`：headless Chrome（找不到時設 `CHROME_PATH`）跑 `tests/photo.html`，把處理後的照片上傳再下載，確認沒有 EXIF
+- `node scripts/social-ui-test.mjs`：兩個隔離的 headless Chrome 環境（A、B）操作真的畫面：加好友、封鎖、XSS、頭像 EXIF、登出；登入用 admin API 拿真的 session（Google 登入無法自動化）
+- 本機頁面用 `python -m http.server 8000` 開 `http://localhost:8000/`（`config.toml` 的 site_url／redirect URL 是這個；本機沒有設定 Google，無法真的登入）
 - 本機 Studio：http://127.0.0.1:54323
 - migration 已套用到正式專案後就不能改，要改權限請新增一個 migration

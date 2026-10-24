@@ -38,6 +38,10 @@
       <button type="button" class="menu-btn" id="menu-btn" aria-label="選單"
         aria-haspopup="menu" aria-expanded="false" aria-controls="app-menu">☰</button>
       <div class="menu-list" id="app-menu" role="menu" hidden>
+        <!-- 咖啡社群：js/config.js 有設定才顯示（app.js 的 setupMenu） -->
+        <a role="menuitem" href="#/account" data-social hidden><span aria-hidden="true">👤</span>帳號</a>
+        <a role="menuitem" href="#/friends" data-social hidden><span aria-hidden="true">🤝</span>好友</a>
+        <div class="menu-sep" role="separator" data-social hidden></div>
         <a role="menuitem" href="#/grinders"><span aria-hidden="true">⚙️</span>磨豆機</a>
         <a role="menuitem" href="#/backup"><span aria-hidden="true">💾</span>備份</a>
         <div class="menu-sep" role="separator"></div>

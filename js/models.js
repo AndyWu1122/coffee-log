@@ -1,8 +1,9 @@
 // 驗證、計算，以及提供給 views 的資料操作（views 只透過這裡存取資料）
 import * as db from './db.js';
 import { isFlavorNote, sortFlavorNotes, flavorNote } from './flavorWheel.js';
-import { compressPhoto, makeThumb, blobToBase64, base64ToBytes, base64Length, jpegSize, PHOTO_TYPES } from './image.js';
+import { compressPhoto, compressAvatar, makeThumb, blobToBase64, base64ToBytes, base64Length, jpegSize, PHOTO_TYPES } from './image.js';
 import { shareFileName } from './cardLayout.js';
+import * as cloud from './cloud.js';
 
 // views 只依賴 models，風味輪資料、圖片解碼、分享卡片的計算由這裡轉出
 export { FLAVOR_WHEEL, flavorNote, sortFlavorNotes } from './flavorWheel.js';
@@ -718,3 +719,195 @@ export async function listRecentDrippers(limit = 10) {
     .filter(Boolean);
   return [...new Set(names)].slice(0, limit);
 }
+
+/* ===== 咖啡社群（雲端；只透過 cloud.js 存取） ===== */
+
+/** 這個環境有沒有社群功能（js/config.js 沒設定就沒有，☰ 選單不顯示） */
+export const socialAvailable = cloud.available;
+
+// 登入狀態（supabase-js 的 session）存在 meta，key 前綴 auth:
+// meta 不會被匯出到備份檔（token 不會外流），「取代全部」匯入也不會清掉（不會被登出）
+const AUTH_PREFIX = 'auth:';
+cloud.configure({
+  storage: {
+    getItem: (key) => db.getMeta(AUTH_PREFIX + key),
+    setItem: (key, value) => db.setMeta(AUTH_PREFIX + key, value),
+    removeItem: (key) => db.remove('meta', AUTH_PREFIX + key),
+  },
+});
+
+/** 雲端錯誤 → 可直接顯示的訊息 */
+export function socialErrorMessage(err) {
+  if (err instanceof cloud.CloudError && ['network', 'load', 'unavailable'].includes(err.code)) return err.message;
+  if (err?.code === '23514') return '內容不符合規定，請修改後再試';
+  if (err?.code === 'P0001') return '操作太頻繁，請稍後再試';
+  console.error(err);
+  return '發生錯誤，請稍後再試';
+}
+
+const toProfile = (p, urls = {}) => ({
+  id: p.id, nickname: p.nickname, friendCode: p.friend_code, hasAvatar: Boolean(p.avatar_path), avatarUrl: urls[p.avatar_path] ?? null,
+});
+
+/**
+ * 目前的社群狀態：
+ *   { status: 'unavailable' }                      這個環境沒有社群功能
+ *   { status: 'signed-out' }                       沒登入
+ *   { status: 'no-profile', user }                 登入了，還沒設定暱稱
+ *   { status: 'ready', user, profile }             可以使用
+ * 連不上伺服器會丟出錯誤（用 socialErrorMessage 顯示）
+ */
+export async function getSocialState() {
+  if (!socialAvailable) return { status: 'unavailable' };
+  const user = await cloud.currentUser();
+  if (!user) return { status: 'signed-out' };
+  const row = await cloud.getMyProfile(user.id);
+  if (!row) return { status: 'no-profile', user };
+  const urls = row.avatar_path ? await cloud.avatarUrls([row.avatar_path]) : {};
+  return { status: 'ready', user, profile: toProfile(row, urls) };
+}
+
+/** Google 登入完成回到 App 時（網址有 ?code= 或 ?error=）呼叫；回傳 { ok, message } */
+export async function completeSignIn(search) {
+  const params = new URLSearchParams(search);
+  if (params.has('error')) {
+    return { ok: false, message: params.get('error') === 'access_denied' ? '已取消登入' : '登入沒有完成，請再試一次' };
+  }
+  try {
+    // 建立 client 時會用網址上的 code 換成 session（需要登入前存下的 code verifier）
+    const user = await cloud.currentUser();
+    return user
+      ? { ok: true, message: '登入成功' }
+      : { ok: false, message: '登入沒有完成，請在同一個 App 裡重新按「用 Google 登入」' };
+  } catch (err) {
+    return { ok: false, message: socialErrorMessage(err) };
+  }
+}
+
+/** 換頁到 Google 登入；完成後回到 App 首頁（網址必須在 Supabase 的 Redirect URLs 允許清單裡） */
+export const signInWithGoogle = () => cloud.signInWithGoogle(location.origin + location.pathname);
+
+/** 登出這台裝置；本機的沖煮紀錄不受影響 */
+export const signOut = () => cloud.signOut();
+
+/** LINE、Facebook、Instagram 等 App 內建的瀏覽器：Google 不允許在裡面登入 */
+export const isInAppBrowser = () => /\bLine\/|FBAN|FBAV|Instagram|MicroMessenger/i.test(navigator.userAgent);
+
+/* ----- 暱稱與頭像 ----- */
+
+export const NICKNAME_MAX = 20;
+
+/** 暱稱驗證（資料庫也有同樣的 check）：去掉前後空白後 1–20 字，不能有換行等控制字元；回傳錯誤訊息或 '' */
+export function validateNickname(name) {
+  const s = String(name ?? '').trim();
+  if (!s) return '請輸入暱稱';
+  if ([...s].length > NICKNAME_MAX) return `暱稱最多 ${NICKNAME_MAX} 個字`; // 和資料庫的 char_length 一樣以字元計
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(s)) return '暱稱不能有換行或特殊字元';
+  return '';
+}
+
+/** 第一次設定暱稱（建立 profile）；回傳 { ok, error } */
+export async function createProfile(nickname) {
+  const error = validateNickname(nickname);
+  if (error) return { ok: false, error };
+  await cloud.createProfile(nickname.trim());
+  return { ok: true };
+}
+
+export async function updateNickname(userId, nickname) {
+  const error = validateNickname(nickname);
+  if (error) return { ok: false, error };
+  await cloud.updateNickname(userId, nickname.trim());
+  return { ok: true };
+}
+
+/** 使用者選的頭像 → 256×256 JPEG Blob（重新編碼、移除 EXIF）；格式不對會丟出錯誤，message 可直接顯示 */
+export const prepareAvatar = (file) => compressAvatar(file);
+export const saveAvatar = (userId, blob) => cloud.saveAvatar(userId, blob);
+export const removeAvatar = (userId) => cloud.removeAvatar(userId);
+
+/* ----- 好友代碼 ----- */
+
+// 10 碼，不含易混淆的 0 O 1 I L（和資料庫的 friend_code_format 一致）
+const FRIEND_CODE = /^[A-HJKMNP-Z2-9]{10}$/;
+
+/** 使用者輸入的代碼：轉大寫、去掉空白和 -（資料庫也會做一次） */
+export const normalizeFriendCode = (input) => String(input ?? '').toUpperCase().replace(/[\s-]/g, '');
+export const formatFriendCode = (code) => `${code.slice(0, 5)} ${code.slice(5)}`;
+
+/** QR code 的內容：打開 App 的「加好友」頁並帶入代碼 */
+export const friendInviteUrl = (code) => `${location.origin}${location.pathname}#/friends/add?code=${encodeURIComponent(code)}`;
+
+/** 文字 → QR code 的 SVG（只有 path，顏色由 CSS 決定）；程式庫只在用到時才載入 */
+export async function qrSvg(text) {
+  const { default: qrcode } = await import('./vendor/qrcode-generator-2.0.4.js');
+  const qr = qrcode(0, 'M');
+  qr.addData(text);
+  qr.make();
+  const n = qr.getModuleCount();
+  const quiet = 4; // QR code 規定的四格留白
+  let d = '';
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += `M${c + quiet},${r + quiet}h1v1h-1z`;
+  }
+  const size = n + quiet * 2;
+  return `<svg class="qr" viewBox="0 0 ${size} ${size}" role="img" aria-label="好友邀請 QR code" shape-rendering="crispEdges">`
+    + `<rect width="${size}" height="${size}" class="qr-bg"/><path d="${d}" class="qr-fg"/></svg>`;
+}
+
+export const regenerateFriendCode = () => cloud.regenerateFriendCode();
+
+const REQUEST_MESSAGES = {
+  sent: { ok: true, message: '已送出邀請，等對方接受' },
+  accepted: { ok: true, message: '對方之前也邀請過你，你們已經是好友了' },
+  already_sent: { ok: true, message: '已經邀請過了，等對方接受' },
+  already_friends: { ok: true, message: '你們已經是好友了' },
+  not_found: { ok: false, message: '找不到這個好友代碼，請確認是否輸入正確' },
+  you_blocked: { ok: false, message: '你封鎖了這個人，要先在下方的封鎖名單解除封鎖' },
+  rate_limited: { ok: false, message: '嘗試太多次，請稍後再試' },
+  no_profile: { ok: false, message: '請先到「帳號」設定暱稱' },
+};
+
+/** 用代碼送出好友邀請；回傳 { ok, message } */
+export async function sendFriendRequest(input) {
+  const code = normalizeFriendCode(input);
+  if (!FRIEND_CODE.test(code)) return { ok: false, message: '好友代碼是 10 個英文字母和數字（不含 0、O、1、I、L）' };
+  const result = await cloud.sendFriendRequest(code);
+  return REQUEST_MESSAGES[result] ?? { ok: false, message: '發生錯誤，請稍後再試' };
+}
+
+/* ----- 好友名單 ----- */
+
+/**
+ * { incoming: 收到的邀請, outgoing: 送出的邀請, friends: 好友, blocked: 封鎖名單 }
+ * 每個人是 { id, nickname, avatarUrl, since }；他人的暱稱顯示時一律要跳脫
+ */
+export async function listFriends(myId) {
+  const [{ rows, profiles }, blocks] = await Promise.all([cloud.listFriendships(), cloud.listBlocks()]);
+  const byId = new Map(profiles.map((p) => [p.id, p]));
+  const urls = await cloud.avatarUrls(profiles.map((p) => p.avatar_path));
+  const person = (id, since) => {
+    const p = byId.get(id);
+    return { id, nickname: p?.nickname ?? '（不明）', avatarUrl: urls[p?.avatar_path] ?? null, since };
+  };
+  const newestFirst = (a, b) => String(b.since).localeCompare(String(a.since));
+  return {
+    incoming: rows.filter((r) => r.status === 'pending' && r.addressee === myId)
+      .map((r) => person(r.requester, r.created_at)).sort(newestFirst),
+    outgoing: rows.filter((r) => r.status === 'pending' && r.requester === myId)
+      .map((r) => person(r.addressee, r.created_at)).sort(newestFirst),
+    friends: rows.filter((r) => r.status === 'accepted')
+      .map((r) => person(r.requester === myId ? r.addressee : r.requester, r.accepted_at)).sort(newestFirst),
+    blocked: blocks.map((b) => ({ id: b.blocked, nickname: b.blocked_nickname || '（不明）', avatarUrl: null, since: b.created_at })),
+  };
+}
+
+/** 接受邀請；邀請已經不在（對方取消了）會丟出錯誤 */
+export async function acceptFriend(myId, requesterId) {
+  if (!(await cloud.acceptFriendRequest(myId, requesterId))) throw new Error('這個邀請已經不存在');
+}
+/** 拒絕邀請、取消邀請、解除好友 */
+export const removeFriendship = (myId, otherId) => cloud.deleteFriendship(myId, otherId);
+/** 封鎖：同時解除好友、刪掉邀請；對方不會知道被封鎖 */
+export const blockUser = (otherId) => cloud.block(otherId);
+export const unblockUser = (otherId) => cloud.unblock(otherId);

@@ -1,11 +1,11 @@
-// 從 Storage API 測照片權限（docs/social-spec.md 階段 2）：用真的 JWT 上傳、下載、建立 signed URL
-// pgTAP（supabase/tests/04_storage.test.sql）測 RLS 本身；這裡確認 bucket 的大小／格式限制與 HTTP 端點同樣擋得住
+// 從 Storage API 測照片與頭像權限（docs/social-spec.md 階段 2、3）：用真的 JWT 上傳、下載、建立 signed URL
+// pgTAP（supabase/tests/04、05）測 RLS 本身；這裡確認 bucket 的大小／格式限制與 HTTP 端點同樣擋得住
 //
 // 用法：先 npx supabase@2.120.0 start，再 node scripts/supabase-storage-test.mjs
 
 import {
   api, call, rest, check, failures, summary, setupUsers, cleanup,
-  BUCKET, photoPath, insertBrew, uploadPhoto, downloadPhoto, signPhoto, photoExists,
+  BUCKET, AVATARS, photoPath, avatarPath, insertBrew, uploadPhoto, downloadPhoto, signPhoto, photoExists,
 } from './supabase-local.mjs';
 
 // 最小的合法 JPEG（1×1）；Storage 不檢查內容，這裡只需要一個像樣的檔案
@@ -17,7 +17,7 @@ const ok = (r) => r.status >= 200 && r.status < 300;
 const status = (r) => `HTTP ${r.status} ${r.json?.error ?? r.json?.message ?? ''}`.trim();
 
 try {
-  const { A, B, C } = await setupUsers(['A', 'B', 'C'], [['A', 'B']]);
+  const { A, B, C, D } = await setupUsers(['A', 'B', 'C', 'D'], [['A', 'B']]);
 
   /* ----- A 上傳：只能傳到自己紀錄指定的路徑 ----- */
   const a1 = await insertBrew(A);
@@ -104,6 +104,40 @@ try {
   // 已知限制：signed URL 發出後 Storage 不再檢查 RLS，封鎖前拿到的網址到期前仍可用（見 docs/social-open-questions.md）
   const old = signed.url ? await fetch(signed.url) : null;
   console.log(`INFO  封鎖前發出的 signed URL：HTTP ${old?.status}（到期前仍有效，屬已知限制）`);
+
+  /* ===== 頭像（階段 3） ===== */
+  // D 對 C 送邀請（待處理）：C、D 互相讀得到頭像
+  const cCode = (await rest('profiles?select=friend_code', { token: C.token })).json[0].friend_code;
+  await call('/rest/v1/rpc/send_friend_request', { method: 'POST', token: D.token, body: { code: cCode } });
+  const cAvatar = avatarPath(C.id);
+  const av = { bucket: AVATARS };
+  const cUp = await uploadPhoto(C.token, cAvatar, TINY_JPEG, av);
+  check('C 上傳自己的頭像', ok(cUp), status(cUp));
+  await rest(`profiles?id=eq.${C.id}`, { method: 'PATCH', token: C.token, body: { avatar_path: cAvatar } });
+  check('C 不能上傳到 D 的頭像路徑', !ok(await uploadPhoto(C.token, avatarPath(D.id), TINY_JPEG, av)));
+  check('頭像檔名只能是 avatar.jpg', !ok(await uploadPhoto(C.token, `${C.id}/other.jpg`, TINY_JPEG, av)));
+  const bigAvatar = new Uint8Array(100 * 1024 + 1);
+  bigAvatar.set(TINY_JPEG);
+  const bigAvRes = await uploadPhoto(C.token, cAvatar, bigAvatar, { ...av, upsert: true });
+  check('頭像超過 100KB 被拒絕', !ok(bigAvRes), status(bigAvRes));
+  const pngAv = await uploadPhoto(C.token, cAvatar, TINY_JPEG, { ...av, upsert: true, contentType: 'image/png' });
+  check('頭像 Content-Type 不是 image/jpeg 被拒絕', !ok(pngAv), status(pngAv));
+  check('未登入：讀不到頭像', !ok(await call(`/storage/v1/object/authenticated/${AVATARS}/${cAvatar}`)));
+  check('未登入：頭像沒有公開網址', !ok(await call(`/storage/v1/object/public/${AVATARS}/${cAvatar}`)));
+  check('D（待處理邀請的對方）讀得到 C 的頭像', ok(await downloadPhoto(D.token, cAvatar, AVATARS)));
+  check('D 能建立 C 頭像的 signed URL', !!(await signPhoto(D.token, cAvatar, av)).url);
+  check('A（沒有關係）讀不到 C 的頭像', !ok(await downloadPhoto(A.token, cAvatar, AVATARS)));
+  check('A 不能建立 C 頭像的 signed URL', !(await signPhoto(A.token, cAvatar, av)).url);
+  check('D 不能覆蓋 C 的頭像', !ok(await uploadPhoto(D.token, cAvatar, new TextEncoder().encode('x'), { ...av, upsert: true })));
+  await call(`/storage/v1/object/${AVATARS}`, { method: 'DELETE', token: D.token, body: { prefixes: [cAvatar] } });
+  check('D 不能刪除 C 的頭像', await photoExists(cAvatar, AVATARS));
+  const dBlock = await rest('blocks', { method: 'POST', token: C.token, body: { blocked: D.id } });
+  check('C 封鎖 D', dBlock.status === 201, `HTTP ${dBlock.status}`);
+  check('封鎖後 D 讀不到 C 的頭像', !ok(await downloadPhoto(D.token, cAvatar, AVATARS)));
+  const cBlocks = (await rest('blocks?select=blocked,blocked_nickname', { token: C.token })).json;
+  check('C 的封鎖名單記下 D 的暱稱', cBlocks?.[0]?.blocked_nickname === 'D', JSON.stringify(cBlocks));
+  const cDelAv = await call(`/storage/v1/object/${AVATARS}`, { method: 'DELETE', token: C.token, body: { prefixes: [cAvatar] } });
+  check('C 刪除自己的頭像', ok(cDelAv) && !(await photoExists(cAvatar, AVATARS)), status(cDelAv));
 
   /* ----- A 刪除紀錄後，留下的照片本人還能刪 ----- */
   await rest(`shared_brews?id=eq.${a1}`, { method: 'DELETE', token: A.token });

@@ -1,5 +1,6 @@
 // 進入點 + hash 路由
-import { esc } from './views/ui.js';
+import { esc, toast } from './views/ui.js';
+import { socialAvailable, completeSignIn } from './models.js';
 
 // 各 view 用動態 import 延遲載入；每個 view 匯出 render(container, params)
 const routes = [
@@ -15,6 +16,9 @@ const routes = [
   { pattern: /^\/grinders$/, tab: null, load: () => import('./views/grinderList.js') },
   { pattern: /^\/grinders\/new$/, tab: null, load: () => import('./views/grinderForm.js') },
   { pattern: /^\/grinders\/([\w-]+)$/, tab: null, load: () => import('./views/grinderForm.js') },
+  // 咖啡社群（js/config.js 沒設定時選單不顯示；直接輸入網址會顯示「沒有開放」）
+  { pattern: /^\/account$/, tab: null, load: () => import('./views/account.js') },
+  { pattern: /^\/friends(?:\/add)?$/, tab: null, load: () => import('./views/friends.js') },
 ];
 
 /** 解析 "#/brew/new?from=abc" → { path: '/brew/new', query: { from: 'abc' } } */
@@ -72,9 +76,12 @@ function setupMenu() {
   };
   const isOpen = () => !list.hidden;
 
+  // 社群項目只在有設定 Supabase 的環境顯示
+  for (const el of list.querySelectorAll('[data-social]')) el.hidden = !socialAvailable;
+
   btn.addEventListener('click', () => {
     setOpen(!isOpen());
-    if (isOpen()) list.querySelector('[role="menuitem"]')?.focus();
+    if (isOpen()) list.querySelector('[role="menuitem"]:not([hidden])')?.focus();
   });
   // 點選單項目、點選單外面、按 Esc、換頁都關閉
   list.addEventListener('click', (e) => { if (e.target.closest('[role="menuitem"]')) setOpen(false); });
@@ -160,8 +167,21 @@ function setupServiceWorker() {
   }).catch((err) => console.warn('Service Worker 註冊失敗', err));
 }
 
-window.addEventListener('hashchange', navigate);
-navigate();
+/* ===== Google 登入完成回到 App ===== */
+// 回來的網址是 <App>/?code=...（PKCE）或 ?error=...；換成 session 後清掉網址，改到帳號頁
+
+async function start() {
+  const params = new URLSearchParams(location.search);
+  if (socialAvailable && (params.has('code') || params.has('error'))) {
+    const result = await completeSignIn(location.search);
+    history.replaceState(null, '', `${location.pathname}#/account`);
+    toast(result.message);
+  }
+  window.addEventListener('hashchange', navigate);
+  navigate();
+}
+
+start();
 setupMenu();
 setupTheme();
 setupServiceWorker();

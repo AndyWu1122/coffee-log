@@ -263,3 +263,39 @@ export async function photoForUpload(blob) {
   }
   return new Blob([bytes], { type: 'image/jpeg' });
 }
+
+/* ===== 頭像（咖啡社群） ===== */
+
+const AVATAR_SIDE = 256;
+// 頭像上限，要和 Supabase bucket avatars 的 file_size_limit 一致（supabase/migrations/*_social_profiles_avatars.sql）
+export const AVATAR_MAX_BYTES = 100 * 1024;
+
+/**
+ * 使用者選的頭像（JPEG／PNG／WebP）→ 256×256 的 JPEG Blob
+ * 從中間裁成正方形，經 Canvas 重新編碼，再移除 JFIF 以外的所有中繼資料段（EXIF、GPS、ICC…）
+ */
+export async function compressAvatar(file) {
+  if (!PHOTO_TYPES.includes(file.type)) throw new Error(TYPE_ERROR);
+  const src = await decodeImage(file);
+  const { width, height } = sizeOf(src);
+  const side = Math.min(width, height);
+  // 裁切時就縮到 ≤ 1024px（iOS Safari 的 canvas 面積有上限，4800 萬畫素照片的原尺寸正方形會超過），
+  // 再用 drawScaled 分段縮到 256×256，避免鋸齒
+  const mid = Math.min(side, AVATAR_SIDE * 4);
+  const crop = Object.assign(document.createElement('canvas'), { width: mid, height: mid });
+  const ctx = crop.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, (width - side) / 2, (height - side) / 2, side, side, 0, 0, mid, mid);
+  src.close?.();
+  const canvas = drawScaled(crop, AVATAR_SIDE);
+  releaseCanvas(crop);
+  try {
+    for (const q of [0.85, 0.7, 0.5]) {
+      const bytes = stripJpegMetadata(new Uint8Array(await (await toBlob(canvas, 'image/jpeg', q)).arrayBuffer()));
+      if (bytes && bytes.length <= AVATAR_MAX_BYTES) return new Blob([bytes], { type: 'image/jpeg' });
+    }
+    throw new Error('頭像處理失敗');
+  } finally {
+    releaseCanvas(canvas);
+  }
+}

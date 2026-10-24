@@ -83,3 +83,34 @@ export function showErrors(form, errors) {
   const first = form.querySelector('.field.invalid');
   first?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
+
+/**
+ * 頭像：有 signed URL 就顯示圖片，沒有就顯示暱稱的第一個字
+ * 暱稱、網址都可能來自他人，一律跳脫
+ */
+export function avatarHtml({ nickname, avatarUrl }, { large = false } = {}) {
+  const cls = `avatar${large ? ' avatar-lg' : ''}`;
+  if (avatarUrl) return `<img class="${cls}" src="${esc(avatarUrl)}" alt="" referrerpolicy="no-referrer">`;
+  const initial = [...String(nickname ?? '').trim()][0] ?? '?';
+  return `<span class="${cls} avatar-initial" aria-hidden="true">${esc(initial)}</span>`;
+}
+
+/** 頁面層級的訊息（連不上伺服器、需要網路等），可附「重試」按鈕 */
+export function showMessage(container, message, onRetry) {
+  container.innerHTML = `
+    <div class="empty">
+      <p>${esc(message)}</p>
+      ${onRetry ? '<button type="button" class="btn" data-action="retry">重試</button>' : ''}
+    </div>`;
+  container.querySelector('[data-action="retry"]')?.addEventListener('click', onRetry);
+}
+
+/** 複製文字；瀏覽器不允許時改用 prompt 讓使用者自己複製 */
+export async function copyText(text, message = '已複製') {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(message);
+  } catch {
+    prompt('請長按複製：', text);
+  }
+}

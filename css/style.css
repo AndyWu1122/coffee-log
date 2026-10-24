@@ -15,6 +15,9 @@
   --danger: #e0685a;
   --ok: #7fb685;
   --shadow: rgba(0, 0, 0, 0.45);
+  /* QR code 不分主題都是淺底深色，相機才掃得到 */
+  --qr-bg: #ffffff;
+  --qr-fg: #1c140f;
 
   --radius: 14px;
   --tap: 48px;            /* 最小點擊高度 */
@@ -38,6 +41,8 @@
   --danger: #b3261e;
   --ok: #2e7d32;
   --shadow: rgba(60, 35, 15, 0.18);
+  --qr-bg: #ffffff;
+  --qr-fg: #21160e;
 
   color-scheme: light;
 }
@@ -504,3 +509,57 @@ input:focus, select:focus, textarea:focus {
 /* 提示出現時，把 FAB 與 toast 往上移，避免被蓋住 */
 body:has(.update-banner:not([hidden])) .fab { bottom: calc(var(--tabbar-h) + 100px + var(--safe-bottom)); }
 body:has(.update-banner:not([hidden])) .toast { bottom: calc(var(--tabbar-h) + 180px + var(--safe-bottom)); }
+
+/* ===== 咖啡社群：帳號、好友 ===== */
+.plain-list { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.avatar {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface-2);
+}
+.avatar-lg { width: 72px; height: 72px; font-size: 1.8rem; }
+.avatar-initial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-weight: 700;
+  border: 1px solid var(--border);
+}
+.profile-head { display: flex; align-items: center; gap: 14px; }
+.profile-text { min-width: 0; }
+.profile-name { font-size: 1.2rem; font-weight: 700; overflow-wrap: anywhere; }
+.friend-code {
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  user-select: all;
+}
+.qr-box { display: flex; justify-content: center; }
+.qr { width: min(240px, 70vw); height: auto; border-radius: 10px; }
+.qr-bg { fill: var(--qr-bg); }
+.qr-fg { fill: var(--qr-fg); }
+.account-signout { margin-top: 32px; }
+.people { gap: 10px; }
+.person {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: grid;
+  gap: 10px;
+}
+.person-head { display: flex; align-items: center; gap: 12px; }
+.person-text { min-width: 0; }
+.person-name { font-weight: 600; overflow-wrap: anywhere; }
+.person-actions { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
+.person-actions .btn { min-height: 44px; padding: 0 10px; }
