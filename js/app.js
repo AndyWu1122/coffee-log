@@ -9,6 +9,7 @@ const routes = [
   { pattern: /^\/beans$/, tab: 'beans', load: () => import('./views/beanList.js') },
   { pattern: /^\/beans\/new$/, tab: 'beans', load: () => import('./views/beanForm.js') },
   { pattern: /^\/beans\/([\w-]+)$/, tab: 'beans', load: () => import('./views/beanForm.js') },
+  { pattern: /^\/backup$/, tab: 'backup', load: () => import('./views/backup.js') },
 ];
 
 /** 解析 "#/brew/new?from=abc" → { path: '/brew/new', query: { from: 'abc' } } */

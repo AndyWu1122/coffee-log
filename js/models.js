@@ -96,8 +96,8 @@ const inRange = (v, min, max) => Number.isFinite(v) && v >= min && v <= max;
 export function validateBean(b) {
   const errors = {};
   if (!b.name?.trim()) errors.name = '請輸入豆子名稱';
-  if (!(b.process in PROCESS)) errors.process = '請選擇處理法';
-  if (!(b.roastLevel in ROAST_LEVEL)) errors.roastLevel = '請選擇烘焙度';
+  if (!Object.hasOwn(PROCESS, b.process ?? '')) errors.process = '請選擇處理法';
+  if (!Object.hasOwn(ROAST_LEVEL, b.roastLevel ?? '')) errors.roastLevel = '請選擇烘焙度';
   if (b.roastDate) {
     if (!isValidDateStr(b.roastDate)) errors.roastDate = '日期格式錯誤';
     else if (b.roastDate > todayLocal()) errors.roastDate = '烘焙日不能晚於今天';
@@ -123,6 +123,43 @@ export function validateBrew(b) {
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
+/* ===== 正規化：表單值或匯入的 JSON → 要存進 DB 的物件（只留規格內的欄位） ===== */
+
+const toIso = (v) => {
+  const d = v ? new Date(v) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toISOString() : null;
+};
+
+function normalizeBean(input) {
+  return {
+    id: input.id || newId(),
+    name: String(input.name ?? '').trim(),
+    origin: String(input.origin ?? '').trim(),
+    process: input.process,
+    roastLevel: input.roastLevel,
+    roastDate: input.roastDate || '',
+    archived: Boolean(input.archived),
+    createdAt: toIso(input.createdAt) ?? new Date().toISOString(),
+  };
+}
+
+function normalizeBrew(input) {
+  return {
+    id: input.id || newId(),
+    beanId: input.beanId || '',
+    brewedAt: toIso(input.brewedAt),
+    dripper: String(input.dripper ?? '').trim(),
+    grindSetting: String(input.grindSetting ?? '').trim(),
+    coffeeG: toNum(input.coffeeG),
+    waterG: toNum(input.waterG),
+    tempC: toNum(input.tempC),
+    totalTimeS: toNum(input.totalTimeS),
+    rating: toNum(input.rating),
+    flavor: Object.fromEntries(Object.keys(FLAVOR).map((k) => [k, toNum(input.flavor?.[k])])),
+    notes: String(input.notes ?? '').trim(),
+  };
+}
+
 /* ===== 豆子 ===== */
 
 /** 豆子列表：未封存在前，再依建立時間新→舊；附上「烘焙至今天數」 */
@@ -139,16 +176,10 @@ export const getBean = (id) => db.get('beans', id);
 /** 新增或更新豆子；回傳 { ok, bean } 或 { ok: false, errors } */
 export async function saveBean(input) {
   const existing = input.id ? await db.get('beans', input.id) : null;
-  const bean = {
-    id: existing?.id ?? newId(),
-    name: String(input.name ?? '').trim(),
-    origin: String(input.origin ?? '').trim(),
-    process: input.process,
-    roastLevel: input.roastLevel,
-    roastDate: input.roastDate || '',
-    archived: existing?.archived ?? false,
-    createdAt: existing?.createdAt ?? new Date().toISOString(),
-  };
+  // id、封存狀態、建立時間沿用既有資料，不由表單決定
+  const bean = normalizeBean({
+    ...input, id: existing?.id, archived: existing?.archived, createdAt: existing?.createdAt,
+  });
   const { ok, errors } = validateBean(bean);
   if (!ok) return { ok, errors };
   await db.put('beans', bean);
@@ -201,20 +232,7 @@ export const getBrew = (id) => db.get('brews', id);
 
 /** 新增或更新紀錄；input 可直接是表單字串值。回傳 { ok, brew } 或 { ok: false, errors } */
 export async function saveBrew(input) {
-  const brew = {
-    id: input.id || newId(),
-    beanId: input.beanId || '',
-    brewedAt: input.brewedAt,
-    dripper: String(input.dripper ?? '').trim(),
-    grindSetting: String(input.grindSetting ?? '').trim(),
-    coffeeG: toNum(input.coffeeG),
-    waterG: toNum(input.waterG),
-    tempC: toNum(input.tempC),
-    totalTimeS: input.totalTimeS ?? null,
-    rating: toNum(input.rating),
-    flavor: Object.fromEntries(Object.keys(FLAVOR).map((k) => [k, toNum(input.flavor?.[k])])),
-    notes: String(input.notes ?? '').trim(),
-  };
+  const brew = normalizeBrew(input);
   const { ok, errors } = validateBrew(brew);
   if (ok && !(await db.get('beans', brew.beanId))) errors.beanId = '找不到這支豆子';
   if (Object.keys(errors).length) return { ok: false, errors };
@@ -232,6 +250,71 @@ export async function latestBrewByBean() {
     if (!cur || brew.brewedAt > cur.brewedAt) latest.set(brew.beanId, brew);
   }
   return latest;
+}
+
+/* ===== 備份：JSON 匯出匯入 ===== */
+
+export async function exportData() {
+  const [beans, brews] = await Promise.all([db.getAll('beans'), db.getAll('brews')]);
+  return { schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), beans, brews };
+}
+
+export const exportFileName = () => `coffee-log-${todayLocal()}.json`;
+
+/**
+ * 匯入備份 JSON 文字。整份檔案都通過驗證才寫入（單一交易），否則完全不動。
+ * replace：true 先清空現有資料；false 依 id 合併（同 id 以檔案為準）
+ * 回傳 { ok: true, beans, brews }（筆數）或 { ok: false, errors: [訊息...] }
+ */
+export async function importData(text, { replace = false } = {}) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return { ok: false, errors: ['不是有效的 JSON 檔案'] };
+  }
+  if (data?.schemaVersion !== SCHEMA_VERSION) {
+    return { ok: false, errors: [`不支援的資料版本：${data?.schemaVersion ?? '無'}（目前為 ${SCHEMA_VERSION}）`] };
+  }
+  if (!Array.isArray(data.beans) || !Array.isArray(data.brews)) {
+    return { ok: false, errors: ['檔案缺少 beans 或 brews 資料'] };
+  }
+
+  const errors = [];
+  const describe = (errs) => Object.values(errs).join('、');
+
+  const beans = data.beans.map((input, i) => {
+    const bean = normalizeBean(input ?? {});
+    const label = `第 ${i + 1} 支豆子「${bean.name || '未命名'}」`;
+    if (!input?.id) errors.push(`${label}：缺少 id`);
+    const v = validateBean(bean);
+    if (!v.ok) errors.push(`${label}：${describe(v.errors)}`);
+    return bean;
+  });
+
+  // 紀錄引用的豆子必須在檔案裡；合併模式下也可以是資料庫裡已有的
+  const knownBeanIds = new Set(beans.map((b) => b.id));
+  if (!replace) for (const b of await db.getAll('beans')) knownBeanIds.add(b.id);
+
+  const brews = data.brews.map((input, i) => {
+    const brew = normalizeBrew(input ?? {});
+    const label = `第 ${i + 1} 筆紀錄`;
+    if (!input?.id) errors.push(`${label}：缺少 id`);
+    const v = validateBrew(brew);
+    if (!v.ok) errors.push(`${label}：${describe(v.errors)}`);
+    else if (!knownBeanIds.has(brew.beanId)) errors.push(`${label}：找不到對應的豆子`);
+    return brew;
+  });
+
+  if (errors.length) {
+    const MAX = 5;
+    const shown = errors.slice(0, MAX);
+    if (errors.length > MAX) shown.push(`…另有 ${errors.length - MAX} 個錯誤`);
+    return { ok: false, errors: shown };
+  }
+
+  await db.bulkPut({ beans, brews }, { clear: replace });
+  return { ok: true, beans: beans.length, brews: brews.length };
 }
 
 /** 「再沖一杯」要複製的參數；評分、風味、筆記、總時間是每杯的結果，不複製 */

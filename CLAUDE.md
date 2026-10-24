@@ -18,7 +18,7 @@ css/style.css
 js/app.js          # 進入點 + hash 路由
 js/db.js           # 唯一存取 IndexedDB 的地方
 js/models.js       # 驗證、計算（粉水比、養豆天數）
-js/views/          # brewList, brewForm, beanList, beanForm, ui（共用 DOM 工具）
+js/views/          # brewList, brewForm, beanList, beanForm, backup, ui（共用 DOM 工具）
 icons/
 ```
 
@@ -33,13 +33,14 @@ views → models → db，每層只呼叫下一層。views 不可直接碰 Index
 - id 用 crypto.randomUUID()
 
 ## 路由（hash）
-`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`
+`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入
 
 ## 不做計時器
 使用者的秤本身有計時功能，App 不做計時器；總時間在表單手動輸入（分、秒兩欄）。
 
 ## 備份
 - 匯出全部資料為 JSON（含 schemaVersion），可匯入還原
+- 匯入分「合併」（依 id 覆蓋）與「取代全部」；整份檔案驗證通過才在單一交易內寫入
 
 ## 開發順序
 - v0.1：db.js + 豆子 CRUD + 紀錄 CRUD + 列表

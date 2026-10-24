@@ -20,7 +20,12 @@ export function openDB() {
         brews.createIndex('brewedAt', 'brewedAt');
       }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      // 其他分頁要升級或刪除資料庫時，主動關閉連線避免卡住對方；下次存取會重新開啟
+      db.onversionchange = () => { db.close(); dbPromise = null; };
+      resolve(db);
+    };
     req.onerror = () => reject(req.error);
     req.onblocked = () => reject(new Error('資料庫被其他分頁占用，請關閉其他分頁後重試'));
   });
@@ -56,3 +61,23 @@ export const getAllByIndex = (store, index, value) =>
   tx(store, 'readonly', (s) => s.index(index).getAll(value));
 export const countByIndex = (store, index, value) =>
   tx(store, 'readonly', (s) => s.index(index).count(value));
+
+/**
+ * 在同一個交易裡寫入多個 store：data = { storeName: [obj, ...] }
+ * clear 為 true 時先清空這些 store。任何一筆失敗整個交易會回滾。
+ */
+export async function bulkPut(data, { clear = false } = {}) {
+  const db = await openDB();
+  const names = Object.keys(data);
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(names, 'readwrite');
+    for (const name of names) {
+      const store = t.objectStore(name);
+      if (clear) store.clear();
+      for (const obj of data[name]) store.put(obj);
+    }
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error ?? new Error('交易中止'));
+  });
+}

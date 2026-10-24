@@ -168,7 +168,14 @@ input:focus, select:focus, textarea:focus {
   padding: 10px 14px;
   font-size: 0.95rem;
 }
+.notice-error { border-left-color: var(--danger); }
+.notice ul { margin: 6px 0 0; padding-left: 20px; }
 [hidden] { display: none !important; }
+
+/* ===== 區塊（備份頁） ===== */
+.section { display: grid; gap: 12px; margin-bottom: 32px; }
+.section h2 { margin: 0; font-size: 1.1rem; }
+.section .hint { margin: 0; }
 .ratio-display {
   font-size: 1.4rem;
   font-weight: 600;
