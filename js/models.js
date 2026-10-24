@@ -1,13 +1,13 @@
 // 驗證、計算，以及提供給 views 的資料操作（views 只透過這裡存取資料）
 import * as db from './db.js';
-import { isFlavorNote, sortFlavorNotes } from './flavorWheel.js';
+import { isFlavorNote, sortFlavorNotes, flavorNote } from './flavorWheel.js';
 import { compressPhoto, makeThumb, blobToBase64, base64ToBytes, base64Length, jpegSize } from './image.js';
 import { shareFileName } from './cardLayout.js';
 
 // views 只依賴 models，風味輪資料、圖片解碼、分享卡片的計算由這裡轉出
 export { FLAVOR_WHEEL, flavorNote, sortFlavorNotes } from './flavorWheel.js';
 export { decodeImage } from './image.js';
-export { coverCrop, radarPoints, wrapText } from './cardLayout.js';
+export { coverCrop, radarPoints, wrapText, layoutChips } from './cardLayout.js';
 
 // 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos。匯入時接受所有舊版
 export const SCHEMA_VERSION = 3;
@@ -457,6 +457,8 @@ export async function getShareCardData(id) {
     grindSetting: brew.grindSetting ?? '',
     rating: brew.rating ?? null,
     flavor: Object.fromEntries(Object.keys(FLAVOR).map((k) => [k, brew.flavor?.[k] ?? null])),
+    // 風味輪選的風味（依輪盤順序）：選到哪一層就顯示那一層的名稱，顏色是所屬大類的顏色
+    flavorNotes: sortFlavorNotes(brew.flavorNotes ?? []).map(flavorNote).map(({ zh, color }) => ({ zh, color })),
     notes: brew.notes ?? '',
     photo: photo ?? null, // { blob, width, height, … }
     fileName: shareFileName(bean?.name, date),

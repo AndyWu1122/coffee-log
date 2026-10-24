@@ -101,6 +101,38 @@ export function wrapText(text, maxWidth, measure, maxLines = Infinity) {
 }
 
 /**
+ * 標籤排版（風味標籤）：widths 為各標籤寬度，依序由左到右排、放不下就換行，最多 maxRows 行
+ * 放不下的標籤收成最後一個「+N」標籤，寬度由 moreWidth(n) 提供；比整行還寬的標籤寬度縮成 maxWidth
+ * 回傳 { items: [{ index, x, row, w }], more: { n, x, row, w } | null, rows }
+ */
+export function layoutChips(widths, maxWidth, gap, maxRows, moreWidth) {
+  if (!widths.length || maxRows < 1) return { items: [], more: null, rows: 0 };
+  // 試排前 count 個標籤，再加上一個寬度 extraW 的「+N」（選填）
+  const place = (count, extraW) => {
+    let x = 0;
+    let row = 0;
+    const put = (width) => {
+      const w = Math.min(width, maxWidth);
+      if (x > 0 && x + w > maxWidth) { row += 1; x = 0; }
+      const p = { x, row, w };
+      x += w + gap;
+      return p;
+    };
+    const items = widths.slice(0, count).map((w, index) => ({ index, ...put(w) }));
+    const more = extraW == null ? null : put(extraW);
+    return { items, more, rows: row + 1 };
+  };
+  const all = place(widths.length);
+  if (all.rows <= maxRows) return all;
+  for (let count = widths.length - 1; count >= 0; count--) {
+    const n = widths.length - count;
+    const r = place(count, moreWidth(n));
+    if (r.rows <= maxRows) return { ...r, more: { n, ...r.more } };
+  }
+  return { items: [], more: null, rows: 0 }; // 連「+N」都放不下（寬度極窄）
+}
+
+/**
  * 分享圖檔名：coffee-<豆子名稱>-<YYYY-MM-DD>.png
  * 名稱只留文字、數字、底線、連字號（其他字元、空白、emoji 都換成 -），最多 40 字
  */

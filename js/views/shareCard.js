@@ -1,7 +1,7 @@
 // #/brew/<id>/share 分享卡片：預覽、選項、分享或下載 PNG
 // 全部在手機上用 Canvas 繪製，不上傳任何資料，離線可用
 import {
-  getShareCardData, decodeImage, coverCrop, radarPoints, wrapText, formatRatio, formatSeconds, formatGrams, FLAVOR,
+  getShareCardData, decodeImage, coverCrop, radarPoints, wrapText, layoutChips, formatRatio, formatSeconds, formatGrams, FLAVOR,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, downloadBlob } from './ui.js';
 
@@ -9,6 +9,7 @@ import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, dow
 const C = {
   bg: '#1c140f',
   bgClear: 'rgba(28, 20, 15, 0)', // 照片底部漸層用（bg 的透明版）
+  chip: '#3a2a1f',                // 風味標籤底色（surface-2）
   grid: '#4d3a2c',
   text: '#f3e9df',
   dim: '#b8a594',
@@ -36,6 +37,17 @@ function starPath(ctx, cx, cy, r) {
     const rr = i % 2 ? r * 0.45 : r;
     ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
   }
+  ctx.closePath();
+}
+
+/** 圓角矩形路徑（不用 ctx.roundRect：iOS 15 以前的 Safari 沒有） */
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 }
 
@@ -138,7 +150,21 @@ export function drawCard(canvas, data, { size = 'post', photo = null, includeNot
     + (equipLines.length ? 24 + equipLines.length * EQUIP_LH : 0)
     + (data.rating ? 28 + STAR : 0);
   const middleH = Math.max(leftH, radarH);
-  const fixedH = headerH + GAP + 2 + GAP + middleH;
+
+  // 風味標籤（風味輪選的風味）：自動換行，行數有上限，放不下的收成「+N」
+  const CHIP_H = 52;
+  const CHIP_GAP = 12;
+  const CHIP_PAD = 22;
+  const DOT = 14;
+  const DOT_GAP = 12;
+  const CHIP_F = font(28);
+  const measureChip = measureWith(CHIP_F);
+  const chipW = (text, dot = true) => CHIP_PAD * 2 + (dot ? DOT + DOT_GAP : 0) + measureChip(text);
+  const chipRows = story ? (photo ? 2 : 3) : (photo ? 1 : 2);
+  const chips = layoutChips(data.flavorNotes.map((n) => chipW(n.zh)), CW, CHIP_GAP, chipRows, (n) => chipW(`+${n}`, false));
+  const chipsH = chips.rows ? chips.rows * CHIP_H + (chips.rows - 1) * CHIP_GAP : 0;
+
+  const fixedH = headerH + GAP + 2 + GAP + middleH + (chipsH ? GAP + chipsH : 0);
 
   // 筆記
   const NOTE_F = font(32);
@@ -159,9 +185,14 @@ export function drawCard(canvas, data, { size = 'post', photo = null, includeNot
     const room = contentBottom - BELOW_PHOTO - fixedH; // 照片＋筆記可用的高度
     // 照片最少佔這麼高（開筆記時讓一點給筆記）、最多不超過正方形或畫面 55%
     const minPhoto = Math.round(H * (noteAll.length ? 0.2 : 0.28));
+    const hardMinPhoto = Math.round(H * 0.15); // 開了筆記至少給 2 行，照片最多讓到這麼矮
     const maxPhoto = Math.round(Math.min(W, H * 0.55));
     const maxLines = story ? 8 : 4;
-    noteCount = Math.max(0, Math.min(noteAll.length, maxLines, Math.floor((room - minPhoto - NOTE_GAP) / NOTE_LH)));
+    const linesFor = (photoMin) => Math.floor((room - photoMin - NOTE_GAP) / NOTE_LH);
+    noteCount = Math.max(0, Math.min(
+      noteAll.length, maxLines,
+      Math.max(linesFor(minPhoto), Math.min(2, linesFor(hardMinPhoto))),
+    ));
     photoH = Math.max(0, Math.min(maxPhoto, room - notesH(noteCount)));
     top = photoH + BELOW_PHOTO;
   } else {
@@ -285,6 +316,35 @@ export function drawCard(canvas, data, { size = 'post', photo = null, includeNot
   }
   y += middleH;
 
+  // 風味標籤：大類顏色的圓點＋名稱；「+N」用次要文字色、沒有圓點
+  if (chips.rows) {
+    y += GAP;
+    const drawChip = (x, top, w, text, color) => {
+      roundRectPath(ctx, x, top, w, CHIP_H, CHIP_H / 2);
+      ctx.fillStyle = C.chip;
+      ctx.fill();
+      let tx = x + CHIP_PAD;
+      if (color) {
+        ctx.beginPath();
+        ctx.arc(tx + DOT / 2, top + CHIP_H / 2, DOT / 2, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        tx += DOT + DOT_GAP;
+      }
+      // 名稱比整行還長時（極少見）截斷
+      const label = wrapText(text, x + w - CHIP_PAD - tx, measureChip, 1)[0] ?? '';
+      drawLines([label], CHIP_F, color ? C.text : C.dim, tx, top, CHIP_H);
+    };
+    const rowTop = (row) => y + row * (CHIP_H + CHIP_GAP);
+    for (const it of chips.items) {
+      const note = data.flavorNotes[it.index];
+      drawChip(P + it.x, rowTop(it.row), it.w, note.zh, note.color);
+    }
+    if (chips.more) drawChip(P + chips.more.x, rowTop(chips.more.row), chips.more.w, `+${chips.more.n}`, null);
+    box('flavors', P, y, CW, chipsH);
+    y += chipsH;
+  }
+
   // 筆記：左側強調色直線
   if (noteLines.length) {
     y += NOTE_GAP;
@@ -301,7 +361,7 @@ export function drawCard(canvas, data, { size = 'post', photo = null, includeNot
   drawLines(['手沖紀錄'], font(28, 600), C.dim, W - P, footerTop, FOOT_H, 'right');
   box('footer', P, footerTop, CW, FOOT_H);
 
-  return { width: W, height: H, boxes, noteLines, nameLines };
+  return { width: W, height: H, boxes, noteLines, nameLines, chips };
 }
 
 /* ===== 頁面 ===== */
@@ -361,7 +421,8 @@ export async function render(container, { id, isCurrent }) {
       shareBtn.disabled = downloadBtn.disabled = false;
     }, 'image/png');
   };
-  bindSegmented(container, redraw);
+  // 綁在這頁自己的元素上：#app 換頁不會被替換，綁在 container 上的監聽器會殘留到其他頁
+  bindSegmented(container.querySelector('.share'), redraw);
   optPhoto?.addEventListener('change', redraw);
   optNotes?.addEventListener('change', redraw);
   redraw();

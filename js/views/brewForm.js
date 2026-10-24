@@ -185,8 +185,8 @@ export async function render(container, { id, query, isCurrent }) {
 
       <div class="actions">
         <button class="btn btn-primary btn-block" type="submit">儲存</button>
+        <button class="btn btn-block" type="button" data-action="share">${isNew ? '儲存並分享' : '分享'}</button>
         ${isNew ? '' : `
-          <a class="btn btn-block" href="#/brew/${esc(id)}/share">分享</a>
           <a class="btn btn-block" href="#/brew/new?from=${esc(id)}">用這次參數再沖一杯</a>
           <button class="btn btn-danger btn-block" type="button" data-action="delete">刪除這筆紀錄</button>`}
       </div>
@@ -282,10 +282,38 @@ export async function render(container, { id, query, isCurrent }) {
     renderPhoto();
   });
 
+  /** 存檔（含照片）；成功回傳存好的紀錄，驗證失敗顯示錯誤並回傳 null */
+  let saving = false;
+  const save = async () => {
+    if (photoBusy) { toast('照片處理中，請稍候'); return null; }
+    if (saving) return null; // 避免連按存成兩筆
+    saving = true;
+    try {
+      const result = await saveBrewFromForm();
+      if (!result.ok) { showErrors(form, result.errors); return null; }
+      return result.brew;
+    } finally {
+      saving = false;
+    }
+  };
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (photoBusy) return toast('照片處理中，請稍候');
-    const result = await saveBrew({
+    if (!(await save())) return;
+    toast('已儲存');
+    location.hash = '#/';
+  });
+
+  // 分享前先存檔：剛選的照片、改過的欄位才會出現在卡片上
+  form.querySelector('[data-action="share"]').addEventListener('click', async () => {
+    const saved = await save();
+    if (!saved) return;
+    toast('已儲存');
+    location.hash = `#/brew/${encodeURIComponent(saved.id)}/share`;
+  });
+
+  function saveBrewFromForm() {
+    return saveBrew({
       id: brew?.id,
       beanId: f.beanId.value,
       grinderId: f.grinderId.value,
@@ -301,10 +329,7 @@ export async function render(container, { id, query, isCurrent }) {
       flavorNotes: flavorPicker.value(),
       notes: f.notes.value,
     }, { photo: photoChange });
-    if (!result.ok) return showErrors(form, result.errors);
-    toast('已儲存');
-    location.hash = '#/';
-  });
+  }
 
   form.querySelector('[data-action="delete"]')?.addEventListener('click', async () => {
     if (!confirm(photo ? '確定刪除這筆紀錄？照片也會一起刪除。' : '確定刪除這筆紀錄？')) return;

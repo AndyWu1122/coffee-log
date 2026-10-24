@@ -38,7 +38,7 @@ export async function render(container, { isCurrent }) {
       <button class="btn btn-primary btn-block" type="button" id="export">匯出 JSON</button>
     </section>
 
-    <section class="section">
+    <section class="section" id="import-section">
       <h2>匯入</h2>
       ${segmentedHtml('mode', IMPORT_MODES, 'merge')}
       <p class="hint" id="mode-hint"></p>
@@ -63,7 +63,9 @@ export async function render(container, { isCurrent }) {
       ? '先清空現有的所有資料（含照片），再匯入檔案內容。'
       : '保留現有資料；檔案中相同 id 的資料會覆蓋現有的。';
   };
-  bindSegmented(container, updateHint);
+  // 綁在這頁自己的元素上：#app 換頁不會被替換，綁在 container 上的監聽器會殘留到其他頁，
+  // 讓紀錄表單的分段按鈕被切換兩次（選了又取消）
+  bindSegmented(container.querySelector('#import-section'), updateHint);
   updateHint('mode', 'merge');
 
   const exportBtn = container.querySelector('#export');
