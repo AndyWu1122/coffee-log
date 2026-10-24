@@ -1,0 +1,236 @@
+/* ===== 色彩與尺寸變數（深色咖啡色系） ===== */
+:root {
+  --bg: #1c140f;
+  --surface: #2b1d14;
+  --surface-2: #3a2a1f;
+  --border: #4d3a2c;
+  --text: #f3e9df;
+  --text-dim: #b8a594;
+  --accent: #d9984f;
+  --accent-text: #1c140f;
+  --danger: #e0685a;
+  --ok: #7fb685;
+
+  --radius: 14px;
+  --tap: 48px;            /* 最小點擊高度 */
+  --tabbar-h: 64px;
+  --gap: 16px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  font-size: 17px;
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
+}
+
+a { color: var(--accent); }
+
+/* ===== 頁首 ===== */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px var(--gap);
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+}
+.app-header h1 { margin: 0; font-size: 1.25rem; }
+
+/* ===== 主內容：預留底部分頁列與 FAB 空間 ===== */
+#app {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--gap);
+  padding-bottom: calc(var(--tabbar-h) + 96px + var(--safe-bottom));
+}
+
+/* ===== 底部分頁列 ===== */
+.tabbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 10;
+  display: flex;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding-bottom: var(--safe-bottom);
+}
+.tabbar a {
+  flex: 1;
+  height: var(--tabbar-h);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 0.8rem;
+}
+.tabbar a.active { color: var(--accent); }
+.tab-icon { font-size: 1.4rem; line-height: 1.2; }
+
+/* ===== 浮動新增按鈕 ===== */
+.fab {
+  position: fixed;
+  right: 20px;
+  bottom: calc(var(--tabbar-h) + 20px + var(--safe-bottom));
+  z-index: 11;
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 2rem;
+  line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  text-decoration: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* ===== 卡片列表 ===== */
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.card {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  color: inherit;
+  text-decoration: none;
+}
+.card:active { background: var(--surface-2); }
+.card-title { font-weight: 600; font-size: 1.05rem; }
+.card-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.stars { color: var(--accent); letter-spacing: 1px; white-space: nowrap; }
+.badge {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 48px 16px;
+}
+.empty p { margin: 0 0 16px; }
+
+/* ===== 表單 ===== */
+.form { display: grid; gap: 18px; }
+.field { display: grid; gap: 6px; }
+.field > label, .field > .label { font-size: 0.9rem; color: var(--text-dim); }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+input, select, textarea {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+textarea { min-height: 96px; resize: vertical; }
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  border-color: transparent;
+}
+.field.invalid input, .field.invalid select { border-color: var(--danger); }
+.error { color: var(--danger); font-size: 0.85rem; min-height: 0; }
+.error:empty { display: none; }
+
+.hint { color: var(--text-dim); font-size: 0.85rem; }
+.ratio-display {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: center;
+  padding: 4px 0;
+}
+
+/* 分段按鈕（評分、風味、處理法等） */
+.segmented { display: flex; gap: 6px; }
+.segmented button {
+  flex: 1;
+  min-height: var(--tap);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  padding: 0 4px;
+}
+.segmented button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.segmented.wrap { flex-wrap: wrap; }
+.segmented.wrap button { flex: 1 1 calc(50% - 6px); }
+
+/* ===== 按鈕 ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+}
+.btn-primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+.btn-block { width: 100%; }
+.actions { display: grid; gap: 12px; margin-top: 8px; }
+
+.toolbar { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 0.9rem; min-height: var(--tap); }
+.toggle input { width: 22px; min-height: 22px; height: 22px; }
+
+/* ===== 注水紀錄（唯讀） ===== */
+.pours { margin: 0; padding-left: 20px; color: var(--text-dim); }
+
+/* ===== Toast ===== */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + 100px + var(--safe-bottom));
+  transform: translateX(-50%) translateY(20px);
+  z-index: 20;
+  background: var(--text);
+  color: var(--bg);
+  padding: 10px 20px;
+  border-radius: 999px;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
