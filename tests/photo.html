@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>照片處理測試</title>
+</head>
+<body>
+<!--
+  照片處理測試（docs/social-spec.md 階段 2）：不屬於 App、不放進 sw.js 的 ASSETS
+  由 scripts/photo-exif-test.mjs 用 headless Chrome 開啟、讀取 window.photoTestResult，
+  再把處理後的 JPEG 上傳到本機 Supabase、下載回來確認沒有 EXIF
+  也可以用 python -m http.server 開 /tests/photo.html 手動看結果
+-->
+<pre id="out">執行中…</pre>
+<script type="module">
+import { preparePhoto, photoForUpload, PHOTO_ACCEPT, cloudPhotoPath } from '../js/models.js';
+import { jpegMetadata, jpegSize, stripJpegMetadata, CLOUD_PHOTO_MAX_BYTES } from '../js/image.js';
+
+// 測試檔裡的標記字串：處理後的檔案裡一個都不能出現
+const MARKERS = ['Exif\0\0', 'TestCam-EXIF-MARKER', 'GPS-XMP-MARKER', 'COMMENT-MARKER', 'http://ns.adobe.com/xap'];
+
+const checks = [];
+const check = (name, ok, detail = '') => checks.push({ name, ok: !!ok, detail: String(detail) });
+const bytesOf = async (blob) => new Uint8Array(await blob.arrayBuffer());
+
+/* ===== 產生測試圖片 ===== */
+
+function drawCanvas(w, h, { noise = false } = {}) {
+  const canvas = Object.assign(document.createElement('canvas'), { width: w, height: h });
+  const ctx = canvas.getContext('2d');
+  if (noise) {
+    // 隨機雜訊幾乎無法壓縮，用來測「壓不到 1MB 時要降品質」
+    const img = ctx.createImageData(w, h);
+    for (let i = 0; i < img.data.length; i += 65536) crypto.getRandomValues(img.data.subarray(i, i + 65536)); // 每次最多 64KB
+    for (let i = 3; i < img.data.length; i += 4) img.data[i] = 255;
+    ctx.putImageData(img, 0, 0);
+  } else {
+    const g = ctx.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, '#6b3e26');
+    g.addColorStop(1, '#f2d7b6');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(30, 20, 10, 0.6)';
+    ctx.fillRect(w * 0.1, h * 0.1, w * 0.3, h * 0.5);
+  }
+  return canvas;
+}
+const encode = (canvas, type, quality) => new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+
+/** 寫一個 TIFF（EXIF 內容）：IFD0 有 Make、Orientation、GPSInfo；GPS IFD 有經緯度 */
+function exifTiff(orientation) {
+  const buf = new ArrayBuffer(172);
+  const v = new DataView(buf);
+  const u8 = new Uint8Array(buf);
+  const entry = (at, tag, type, count, value) => {
+    v.setUint16(at, tag, true); v.setUint16(at + 2, type, true); v.setUint32(at + 4, count, true);
+    if (type === 3) v.setUint16(at + 8, value, true); else v.setUint32(at + 8, value, true);
+  };
+  const ascii = (at, s) => { for (let i = 0; i < s.length; i++) u8[at + i] = s.charCodeAt(i); };
+  ascii(0, 'II'); v.setUint16(2, 42, true); v.setUint32(4, 8, true);
+  // IFD0（offset 8）：3 筆，結束於 50
+  v.setUint16(8, 3, true);
+  entry(10, 0x010f, 2, 20, 50);           // Make → offset 50
+  entry(22, 0x0112, 3, 1, orientation);   // Orientation
+  entry(34, 0x8825, 4, 1, 70);            // GPSInfo → offset 70
+  v.setUint32(46, 0, true);
+  ascii(50, 'TestCam-EXIF-MARKER\0');     // 20 bytes
+  // GPS IFD（offset 70）：4 筆，結束於 124
+  v.setUint16(70, 4, true);
+  entry(72, 0x0001, 2, 2, 0); ascii(80, 'N');   // GPSLatitudeRef
+  entry(84, 0x0002, 5, 3, 124);                  // GPSLatitude → 124
+  entry(96, 0x0003, 2, 2, 0); ascii(104, 'E');  // GPSLongitudeRef
+  entry(108, 0x0004, 5, 3, 148);                 // GPSLongitude → 148
+  v.setUint32(120, 0, true);
+  const rationals = (at, [d, m, s]) => {
+    [[d, 1], [m, 1], [s, 100]].forEach(([num, den], k) => {
+      v.setUint32(at + k * 8, num, true); v.setUint32(at + k * 8 + 4, den, true);
+    });
+  };
+  rationals(124, [22, 59, 3012]);   // 台南附近
+  rationals(148, [120, 13, 1456]);
+  return u8;
+}
+
+function segment(marker, payload) {
+  const seg = new Uint8Array(4 + payload.length);
+  seg[0] = 0xff; seg[1] = marker;
+  seg[2] = (payload.length + 2) >> 8; seg[3] = (payload.length + 2) & 0xff;
+  seg.set(payload, 4);
+  return seg;
+}
+const text = (s) => new TextEncoder().encode(s);
+const concat = (...parts) => {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const p of parts) { out.set(p, at); at += p.length; }
+  return out;
+};
+
+/** 在 JPEG 的 SOI 之後插入 EXIF（含 GPS）、XMP、註解 */
+function withMetadata(jpeg, orientation = 1) {
+  return concat(
+    jpeg.subarray(0, 2),
+    segment(0xe1, concat(text('Exif\0\0'), exifTiff(orientation))),
+    segment(0xe1, text('http://ns.adobe.com/xap/1.0/\0<x:xmpmeta><exif:GPSLatitude>GPS-XMP-MARKER</exif:GPSLatitude></x:xmpmeta>')),
+    segment(0xfe, text('COMMENT-MARKER')),
+    jpeg.subarray(2),
+  );
+}
+
+async function jpegWithMetadata(w, h, orientation) {
+  return withMetadata(await bytesOf(await encode(drawCanvas(w, h), 'image/jpeg', 0.92)), orientation);
+}
+
+/* ===== 檢查工具 ===== */
+
+function findText(bytes, s) {
+  const needle = text(s);
+  outer: for (let i = 0; i + needle.length <= bytes.length; i++) {
+    for (let k = 0; k < needle.length; k++) if (bytes[i + k] !== needle[k]) continue outer;
+    return true;
+  }
+  return false;
+}
+/**
+ * 沒有任何標記字串、尺寸與大小在上限內
+ * strict（上傳前）：只剩 JFIF 標頭；否則（本機存的壓縮結果）只要求沒有 EXIF／XMP（APP1）和註解：
+ * Chrome 的 canvas 會自動附上通用的 sRGB 色彩設定檔（APP2 ICC_PROFILE），不含個人資訊，上傳前才移除
+ */
+function checkClean(label, bytes, expect, { strict = true } = {}) {
+  const segs = jpegMetadata(bytes);
+  const size = jpegSize(bytes);
+  check(`${label}：是合法的 JPEG`, segs && size, segs ? '' : '解析失敗');
+  if (!segs || !size) return;
+  const list = segs.map((s) => `${s.name}:${s.id}`).join(' ');
+  if (strict) {
+    check(`${label}：只剩 JFIF 標頭（沒有 EXIF、XMP、ICC、註解）`, segs.every((s) => s.name === 'APP0' && s.id === 'JFIF'), list);
+  } else {
+    check(`${label}：沒有 EXIF、XMP、註解`, !segs.some((s) => s.name === 'APP1' || s.name === 'COM'), list);
+  }
+  const left = MARKERS.filter((m) => findText(bytes, m));
+  check(`${label}：找不到測試檔裡的 EXIF／GPS／XMP／註解內容`, left.length === 0, left.join(', '));
+  check(`${label}：最長邊 ≤ 1600px`, Math.max(size.width, size.height) <= 1600, `${size.width}×${size.height}`);
+  check(`${label}：≤ 1MB`, bytes.length <= CLOUD_PHOTO_MAX_BYTES, `${(bytes.length / 1024).toFixed(0)}KB`);
+  if (expect) {
+    check(`${label}：尺寸 ${expect.width}×${expect.height}`,
+      size.width === expect.width && size.height === expect.height, `${size.width}×${size.height}`);
+  }
+}
+
+async function rejects(fn, pattern) {
+  try { await fn(); return 'no error'; } catch (err) { return pattern.test(err.message) ? true : err.message; }
+}
+
+function toBase64(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+/* ===== 測試 ===== */
+
+async function photoTest() {
+  const uploads = [];
+  const pipeline = async (label, file, expect) => {
+    const prepared = await preparePhoto(file);
+    checkClean(`${label}（壓縮後）`, await bytesOf(prepared.blob), expect, { strict: false });
+    const upload = await bytesOf(await photoForUpload(prepared.blob));
+    checkClean(`${label}（上傳前）`, upload, expect);
+    uploads.push({ label, base64: toBase64(upload), expect });
+  };
+
+  // 1. 帶 EXIF（GPS、相機、方向 6 = 要順時針轉 90°）的 JPEG：轉正、移除中繼資料
+  const exifJpeg = await jpegWithMetadata(1200, 800, 6);
+  check('測試檔本身帶有 EXIF 與 GPS', jpegMetadata(exifJpeg).some((s) => s.id === 'Exif') && findText(exifJpeg, 'TestCam-EXIF-MARKER'));
+  await pipeline('帶 EXIF 的 JPEG', new File([exifJpeg], 'exif.jpg', { type: 'image/jpeg' }), { width: 800, height: 1200 });
+
+  // 2. 4000×3000 的大照片：縮到最長邊 1600
+  await pipeline('4000×3000 JPEG', new File([await jpegWithMetadata(4000, 3000, 1)], 'big.jpg', { type: 'image/jpeg' }),
+    { width: 1600, height: 1200 });
+
+  // 3. PNG（含透明）、WebP
+  const pngCanvas = drawCanvas(800, 600);
+  pngCanvas.getContext('2d').clearRect(0, 0, 200, 200);
+  await pipeline('PNG', new File([await encode(pngCanvas, 'image/png')], 'a.png', { type: 'image/png' }), { width: 800, height: 600 });
+  const webp = await encode(drawCanvas(800, 600), 'image/webp', 0.9);
+  check('瀏覽器能產生 WebP 測試檔', webp?.type === 'image/webp', webp?.type);
+  await pipeline('WebP', new File([webp], 'a.webp', { type: 'image/webp' }), { width: 800, height: 600 });
+
+  // 4. 幾乎無法壓縮的雜訊圖：上傳前一定 ≤ 1MB
+  const noise = await encode(drawCanvas(4000, 3000, { noise: true }), 'image/jpeg', 1);
+  await pipeline('雜訊圖', new File([noise], 'noise.jpg', { type: 'image/jpeg' }));
+
+  // 5. 不接受的格式：不解碼就拒絕
+  const gif = new File([new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61])], 'a.gif', { type: 'image/gif' });
+  check('GIF 被拒絕', await rejects(() => preparePhoto(gif), /JPEG、PNG 或 WebP/));
+  const heic = new File([exifJpeg], 'a.heic', { type: 'image/heic' });
+  check('HEIC 被拒絕（即使內容其實解得開）', await rejects(() => preparePhoto(heic), /JPEG、PNG 或 WebP/));
+  check('沒有類型的檔案被拒絕', await rejects(() => preparePhoto(new File([exifJpeg], 'x')), /JPEG、PNG 或 WebP/));
+  check('照片欄位的 accept 只有三種格式', PHOTO_ACCEPT === 'image/jpeg,image/png,image/webp', PHOTO_ACCEPT);
+
+  // 6. 繞過 compressPhoto 直接交給 photoForUpload（例如舊資料）：一樣會移除中繼資料
+  const raw = await jpegWithMetadata(1200, 800, 1);
+  const stripped = await bytesOf(await photoForUpload(new Blob([raw], { type: 'image/jpeg' })));
+  checkClean('直接上傳帶 EXIF 的 JPEG', stripped, { width: 1200, height: 800 });
+  const sos = (b) => { for (let i = 2; i < b.length - 1; i++) if (b[i] === 0xff && b[i + 1] === 0xda) return i; return -1; };
+  const sameImage = raw.length - sos(raw) === stripped.length - sos(stripped)
+    && raw.subarray(sos(raw)).every((x, i) => x === stripped[sos(stripped) + i]);
+  check('移除中繼資料不會重新壓縮（影像資料完全相同）', sameImage);
+  uploads.push({ label: '直接上傳帶 EXIF 的 JPEG', base64: toBase64(stripped), expect: { width: 1200, height: 800 } });
+  check('不是 JPEG 的 stripJpegMetadata 回傳 null', stripJpegMetadata(text('not a jpeg')) === null);
+  const fromPng = await bytesOf(await photoForUpload(await encode(drawCanvas(2000, 1000), 'image/png')));
+  checkClean('PNG 直接交給 photoForUpload', fromPng, { width: 1600, height: 800 });
+  check('壞掉的檔案不會被上傳', await rejects(() => photoForUpload(new Blob([text('garbage')])), /./));
+  // 超過 1MB 的 JPEG：降低品質重新編碼到 ≤ 1MB
+  const huge = await encode(drawCanvas(1600, 1200, { noise: true }), 'image/jpeg', 1);
+  check('測試檔超過 1MB', huge.size > CLOUD_PHOTO_MAX_BYTES, `${(huge.size / 1024).toFixed(0)}KB`);
+  const shrunk = await bytesOf(await photoForUpload(huge));
+  checkClean('超過 1MB 的 JPEG 交給 photoForUpload', shrunk, { width: 1600, height: 1200 });
+  uploads.push({ label: '超過 1MB 的 JPEG', base64: toBase64(shrunk), expect: { width: 1600, height: 1200 } });
+
+  // 7. 雲端路徑
+  check('雲端路徑一律小寫，格式 <user_id>/<brew_id>.jpg',
+    cloudPhotoPath('AAAAAAAA-0000-0000-0000-000000000000', 'B0000000-0000-0000-0000-00000000000F')
+      === 'aaaaaaaa-0000-0000-0000-000000000000/b0000000-0000-0000-0000-00000000000f.jpg');
+
+  return { checks, uploads, userAgent: navigator.userAgent };
+}
+
+try {
+  window.photoTestResult = await photoTest();
+} catch (err) {
+  window.photoTestResult = { error: `${err.message}\n${err.stack}`, checks, uploads: [] };
+}
+document.getElementById('out').textContent = (window.photoTestResult.error ? `ERROR  ${window.photoTestResult.error}\n` : '')
+  + checks.map((c) => `${c.ok ? 'PASS' : 'FAIL'}  ${c.name}${c.detail ? `  (${c.detail})` : ''}`).join('\n');
+</script>
+</body>
+</html>

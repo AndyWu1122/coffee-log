@@ -1,5 +1,5 @@
-// 照片處理：解碼、縮小、重新編碼成 JPEG（移除 EXIF）、base64、JPEG 驗證
-// 只用瀏覽器內建 API，不上傳任何資料；由 models.js 使用
+// 照片處理：解碼、縮小、重新編碼成 JPEG（移除 EXIF）、base64、JPEG 驗證、上傳前的中繼資料清除
+// 只用瀏覽器內建 API，本身不上傳任何資料；由 models.js 使用
 
 const PHOTO_MAX_SIDE = 1600;
 const PHOTO_QUALITY = 0.8;
@@ -8,7 +8,14 @@ const PHOTO_RETRY_QUALITY = 0.7;
 const THUMB_MAX_SIDE = 300;
 const THUMB_QUALITY = 0.75;
 
-const DECODE_ERROR = '無法讀取這張照片（可能是 HEIC 等這個瀏覽器不支援的格式），請改選 JPEG／PNG，或在 iPhone「設定 → 相機 → 格式」改為「最相容」';
+// 只接受這三種格式（docs/social-spec.md 階段 2）；iPhone 的 HEIC 在 <input accept> 只列這三種時，系統通常會先轉成 JPEG
+export const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const TYPE_ERROR = '只能選 JPEG、PNG 或 WebP 照片。iPhone 若出現這個訊息，請到「設定 → 相機 → 格式」改為「最相容」';
+const DECODE_ERROR = '無法讀取這張照片，檔案可能已損壞，請換一張試試';
+
+// 雲端照片上限，要和 Supabase bucket brew-photos 的 file_size_limit 一致（supabase/migrations/*_social_storage.sql）
+export const CLOUD_PHOTO_MAX_BYTES = 1024 * 1024;
+const UPLOAD_QUALITIES = [PHOTO_QUALITY, PHOTO_RETRY_QUALITY, 0.6, 0.5, 0.4];
 
 const sizeOf = (src) => ({ width: src.naturalWidth || src.width, height: src.naturalHeight || src.height });
 
@@ -73,11 +80,12 @@ const toBlob = (canvas, type, quality) => new Promise((resolve, reject) => {
 });
 
 /**
- * 使用者選的照片 → { blob, thumb, width, height }
+ * 使用者選的照片（JPEG／PNG／WebP）→ { blob, thumb, width, height }
  * blob：最長邊 1600px 的 JPEG；thumb：最長邊 300px 的 JPEG
  * 一律經過 Canvas 重新編碼，原檔的 EXIF（含 GPS 位置）不會被保留
  */
 export async function compressPhoto(file) {
+  if (!PHOTO_TYPES.includes(file.type)) throw new Error(TYPE_ERROR);
   const src = await decodeImage(file);
   const canvas = drawScaled(src, PHOTO_MAX_SIDE);
   src.close?.();
@@ -160,4 +168,98 @@ export function jpegSize(bytes) {
     i += 2 + len;
   }
   return null;
+}
+
+/* ===== 上傳前的中繼資料清除（咖啡社群） ===== */
+
+const segName = (marker) => (marker === 0xfe ? 'COM' : `APP${marker - 0xe0}`);
+
+/**
+ * 列出 JPEG 影像資料（SOS）之前的中繼資料段：APP0–APP15、COM（註解）
+ * 回傳 [{ name: 'APP1', id: 'Exif', offset, length }]；id 是段落開頭的識別字串（例如 JFIF、Exif、ICC_PROFILE）
+ * 不是合法的 JPEG 結構回傳 null
+ */
+export function jpegMetadata(bytes) {
+  const n = bytes?.length ?? 0;
+  if (n < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+  const found = [];
+  let i = 2;
+  while (i + 4 <= n) {
+    if (bytes[i] !== 0xff) return null;
+    const marker = bytes[i + 1];
+    if (marker === 0xff) { i += 1; continue; }
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { i += 2; continue; }
+    if (marker === 0xda) return found; // 影像資料開始，後面沒有中繼資料段
+    if (marker === 0xd9) return null;
+    const len = (bytes[i + 2] << 8) | bytes[i + 3];
+    if (len < 2 || i + 2 + len > n) return null;
+    if ((marker >= 0xe0 && marker <= 0xef) || marker === 0xfe) {
+      let id = '';
+      for (let k = i + 4; k < Math.min(i + 2 + len, i + 20) && bytes[k] !== 0; k++) id += String.fromCharCode(bytes[k]);
+      found.push({ name: segName(marker), id, offset: i, length: 2 + len });
+    }
+    i += 2 + len;
+  }
+  return null;
+}
+
+/** 只有 JFIF 標頭（APP0 'JFIF'）不含任何個人資訊，其他中繼資料段一律移除 */
+const isAllowedSegment = (seg) => seg.name === 'APP0' && seg.id === 'JFIF';
+
+/**
+ * 移除 EXIF（含 GPS）、XMP、ICC、Photoshop、註解等中繼資料段，影像資料原封不動（不會再壓縮一次）
+ * 不是合法的 JPEG 回傳 null
+ */
+export function stripJpegMetadata(bytes) {
+  const segs = jpegMetadata(bytes);
+  if (!segs) return null;
+  const drop = segs.filter((seg) => !isAllowedSegment(seg));
+  if (!drop.length) return bytes;
+  const out = new Uint8Array(bytes.length - drop.reduce((sum, seg) => sum + seg.length, 0));
+  let from = 0;
+  let to = 0;
+  for (const seg of drop) {
+    out.set(bytes.subarray(from, seg.offset), to);
+    to += seg.offset - from;
+    from = seg.offset + seg.length;
+  }
+  out.set(bytes.subarray(from), to);
+  return out;
+}
+
+/** 重新編碼成最長邊 ≤ 1600px 的 JPEG，品質由高往低試到 ≤ 1MB */
+async function reencodeForUpload(blob) {
+  const src = await decodeImage(blob);
+  const canvas = drawScaled(src, PHOTO_MAX_SIDE);
+  src.close?.();
+  try {
+    for (const q of UPLOAD_QUALITIES) {
+      const out = await toBlob(canvas, 'image/jpeg', q);
+      if (out.size <= CLOUD_PHOTO_MAX_BYTES) return new Uint8Array(await out.arrayBuffer());
+    }
+    throw new Error('照片太大，無法上傳');
+  } finally {
+    releaseCanvas(canvas);
+  }
+}
+
+/**
+ * 上傳到雲端前的最後一道檢查（照片來源是本機已經重新編碼過的 JPEG，這裡再保險一次）：
+ * 不是 JPEG、最長邊 > 1600px 或 > 1MB 就重新編碼；最後移除 JFIF 以外的所有中繼資料段
+ * 回傳 image/jpeg 的 Blob；仍不符合就丟出錯誤，絕不上傳
+ */
+export async function photoForUpload(blob) {
+  let bytes = new Uint8Array(await blob.arrayBuffer());
+  const size = jpegSize(bytes);
+  if (!size || Math.max(size.width, size.height) > PHOTO_MAX_SIDE || bytes.length > CLOUD_PHOTO_MAX_BYTES) {
+    bytes = await reencodeForUpload(blob);
+  }
+  bytes = stripJpegMetadata(bytes);
+  const segs = bytes && jpegMetadata(bytes);
+  const finalSize = bytes && jpegSize(bytes);
+  if (!segs || !finalSize || !segs.every(isAllowedSegment)
+      || Math.max(finalSize.width, finalSize.height) > PHOTO_MAX_SIDE || bytes.length > CLOUD_PHOTO_MAX_BYTES) {
+    throw new Error('照片處理失敗，無法上傳');
+  }
+  return new Blob([bytes], { type: 'image/jpeg' });
 }

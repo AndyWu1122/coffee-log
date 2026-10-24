@@ -2,7 +2,7 @@
 import {
   getBrew, saveBrew, deleteBrew, listBeans, listRecentDrippers, latestBrewByBean, brewTemplateFrom,
   listGrinders, defaultGrinderId, formatStock, ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
-  getPhoto, preparePhoto,
+  getPhoto, preparePhoto, PHOTO_ACCEPT,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors } from './ui.js';
 import { createFlavorPicker } from './flavorPicker.js';
@@ -179,7 +179,7 @@ export async function render(container, { id, query, isCurrent }) {
       <div class="field" data-field="photo">
         <span class="label">照片</span>
         <div class="photo-field" id="photo-field"></div>
-        <input type="file" id="photo-input" accept="image/*" hidden>
+        <input type="file" id="photo-input" accept="${PHOTO_ACCEPT}" hidden>
         <div class="error"></div>
       </div>
 

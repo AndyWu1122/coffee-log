@@ -1,12 +1,12 @@
 // 驗證、計算，以及提供給 views 的資料操作（views 只透過這裡存取資料）
 import * as db from './db.js';
 import { isFlavorNote, sortFlavorNotes, flavorNote } from './flavorWheel.js';
-import { compressPhoto, makeThumb, blobToBase64, base64ToBytes, base64Length, jpegSize } from './image.js';
+import { compressPhoto, makeThumb, blobToBase64, base64ToBytes, base64Length, jpegSize, PHOTO_TYPES } from './image.js';
 import { shareFileName } from './cardLayout.js';
 
 // views 只依賴 models，風味輪資料、圖片解碼、分享卡片的計算由這裡轉出
 export { FLAVOR_WHEEL, flavorNote, sortFlavorNotes } from './flavorWheel.js';
-export { decodeImage } from './image.js';
+export { decodeImage, photoForUpload } from './image.js';
 export { coverCrop, radarPoints, wrapText, layoutChips } from './cardLayout.js';
 
 // 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos。匯入時接受所有舊版
@@ -392,9 +392,19 @@ const PHOTO_STORES = ['brews', 'photos', 'thumbs'];
 
 /**
  * 使用者選的照片檔 → { blob, thumb, width, height }，可直接預覽，存檔時交給 saveBrew
- * 一律重新編碼成 JPEG（移除 EXIF）；無法解碼（例如不支援的 HEIC）會丟出錯誤，message 可直接顯示
+ * 只接受 JPEG／PNG／WebP，一律重新編碼成 JPEG（移除 EXIF）；格式不對或無法解碼會丟出錯誤，message 可直接顯示
  */
 export const preparePhoto = (file) => compressPhoto(file);
+
+/** 照片 <input type="file"> 的 accept */
+export const PHOTO_ACCEPT = PHOTO_TYPES.join(',');
+
+/**
+ * 雲端照片路徑 <user_id>/<brew_id>.jpg
+ * 要和 shared_brews.photo_path 的 check 約束、Storage 政策一致（uuid 轉成文字一律小寫）
+ * 上傳前先用 photoForUpload 做最後檢查並移除中繼資料
+ */
+export const cloudPhotoPath = (userId, brewId) => `${String(userId).toLowerCase()}/${String(brewId).toLowerCase()}.jpg`;
 
 /** { brewId, blob, width, height, createdAt } 或 undefined */
 export const getPhoto = (brewId) => db.get('photos', brewId);

@@ -4,86 +4,9 @@
 // 用法：先 npx supabase@2.120.0 start，再 node scripts/supabase-api-test.mjs
 // 金鑰在執行時從 `supabase status` 讀取，不寫進檔案；只允許連本機，絕不連正式專案
 
-import { execSync } from 'node:child_process';
-import { createHmac } from 'node:crypto';
-
-/* ===== 讀本機 Supabase 的網址與金鑰 ===== */
-function localEnv() {
-  const out = execSync('npx --yes supabase@2.120.0 status -o env', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-  const env = Object.fromEntries(
-    [...out.matchAll(/^([A-Z_]+)="?([^"\n]*)"?$/gm)].map(([, k, v]) => [k, v]),
-  );
-  const url = new URL(env.API_URL);
-  if (!['127.0.0.1', 'localhost'].includes(url.hostname)) {
-    throw new Error(`只允許連本機 Supabase，拒絕連線到 ${url.hostname}`);
-  }
-  return { api: env.API_URL, anonKey: env.ANON_KEY, serviceKey: env.SERVICE_ROLE_KEY, jwtSecret: env.JWT_SECRET };
-}
-const { api, anonKey, serviceKey, jwtSecret } = localEnv();
-
-/**
- * 簽發使用者的存取 token（和 Supabase Auth 登入後拿到的格式相同：HS256，用本機 JWT secret 簽）
- * 本機關閉了 email 登入（正式只用 Google），所以測試帳號用 admin API 建立、token 在這裡簽
- */
-function userToken(sub) {
-  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
-  const now = Math.floor(Date.now() / 1000);
-  const body = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub, role: 'authenticated', aud: 'authenticated', iat: now, exp: now + 600 })}`;
-  return `${body}.${createHmac('sha256', jwtSecret).update(body).digest('base64url')}`;
-}
-
-/* ===== 斷言 ===== */
-let passed = 0;
-const failures = [];
-function check(name, cond, detail = '') {
-  if (cond) passed++;
-  else failures.push(name);
-  console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
-}
-
-/* ===== HTTP 小工具 ===== */
-async function call(path, { token, method = 'GET', body, headers = {} } = {}) {
-  const res = await fetch(api + path, {
-    method,
-    headers: {
-      apikey: anonKey,
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      ...headers,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const text = await res.text();
-  let json = null;
-  try { json = JSON.parse(text); } catch { /* 不是 JSON */ }
-  return { status: res.status, json, text };
-}
-const rest = (path, opts) => call(`/rest/v1/${path}`, opts);
-const rpc = (fn, args, token) => rest(`rpc/${fn}`, { method: 'POST', body: args, token });
-const representation = { Prefer: 'return=representation' };
-const rows = (r) => (Array.isArray(r.json) ? r.json : null);
-
-/* ===== 建立測試帳號（admin API，service_role 只在這支本機測試裡用） ===== */
-const run = Date.now().toString(36);
-const users = {};
-async function createUser(name) {
-  const email = `${name.toLowerCase()}-${run}@test.local`;
-  const password = `pw-${crypto.randomUUID()}`;
-  const created = await call('/auth/v1/admin/users', {
-    method: 'POST',
-    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
-    body: { email, password, email_confirm: true },
-  });
-  if (created.status >= 300) throw new Error(`建立 ${name} 失敗：${created.text}`);
-  users[name] = { id: created.json.id, token: userToken(created.json.id) };
-}
-async function cleanup() {
-  for (const u of Object.values(users)) {
-    await call(`/auth/v1/admin/users/${u.id}`, {
-      method: 'DELETE', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
-    });
-  }
-}
+import {
+  call, rest, rpc, representation, rows, check, failures, summary, run, users, createUser, cleanup,
+} from './supabase-local.mjs';
 
 try {
   for (const name of ['A', 'B', 'C']) await createUser(name);
@@ -199,5 +122,4 @@ try {
   await cleanup();
 }
 
-console.log(`\n${passed}/${passed + failures.length} 通過`);
-process.exitCode = failures.length ? 1 : 0;
+summary();

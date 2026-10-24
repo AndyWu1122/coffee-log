@@ -22,13 +22,14 @@ js/app.js          # 進入點 + hash 路由
 js/db.js           # 唯一存取 IndexedDB 的地方
 js/models.js       # 驗證、計算（粉水比、養豆天數）
 js/flavorWheel.js  # SCA 風味輪靜態資料（三層、中英、大類顏色），由 models.js 轉出給 views
-js/image.js        # 照片處理：解碼、縮小、重新編碼 JPEG、base64、JPEG 檔頭驗證（只由 models.js 使用）
+js/image.js        # 照片處理：解碼、縮小、重新編碼 JPEG、base64、JPEG 檔頭驗證、上傳前移除中繼資料（只由 models.js 使用）
 js/cardLayout.js   # 分享卡片的純計算：cover 裁切、雷達圖座標、文字換行（含避頭）、檔名；由 models.js 轉出給 views
 js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, ui（共用 DOM 工具）
 icons/
 docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）
 supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）
-scripts/           # supabase-api-test.mjs（從 API 層測權限，只連本機）
+scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、photo-exif-test.mjs
+tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mjs 用 headless Chrome 開；不屬於 App、不放進 ASSETS）
 ```
 
 ## 分層規則
@@ -44,6 +45,7 @@ views → models → db，每層只呼叫下一層。views 不可直接碰 Index
 - brews 建索引：beanId、brewedAt、grinderId（v2 加入）
 - 有紀錄引用的豆子、磨豆機不能刪除，只能封存
 - **照片一律在前端重新編碼成 JPEG（移除 EXIF）後才儲存**（`models.preparePhoto` → `image.compressPhoto`，經 Canvas 重畫，GPS 等資訊不會留下）
+- 只接受 JPEG／PNG／WebP（`image.PHOTO_TYPES`，表單 `accept` 用 `models.PHOTO_ACCEPT`）；iPhone 的 HEIC 由系統在選取時轉成 JPEG
 - 紀錄與照片一起寫入、一起刪除（`db.transact` 單一交易涵蓋 brews、photos、thumbs）
 - 照片顯示用 `URL.createObjectURL`，view 的 `render` 回傳 cleanup 在離開頁面時 `revokeObjectURL`
 - DB 升級：`onupgradeneeded` 每一步都先檢查是否已存在，既有 store 用升級交易取得後再加索引，絕不改動舊資料
@@ -111,7 +113,7 @@ views → models → db，每層只呼叫下一層。views 不可直接碰 Index
 
 ## 咖啡社群（後端：Supabase）
 規格見 `docs/social-spec.md`（分 5 階段，每階段通過測試、使用者確認後才進下一階段）；待決事項與決定見 `docs/social-open-questions.md`。
-目前完成：階段 1（資料庫與權限）。前端還沒有任何社群功能，也還沒有正式的 Supabase 專案。
+目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）。前端還沒有任何社群介面與 supabase-js，也還沒有正式的 Supabase 專案。
 
 ### 資安規則（每個階段都必須遵守）
 - 每張表和 Storage bucket 都必須開 RLS，預設拒絕
@@ -132,10 +134,23 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - shared_brews 主鍵 `(owner, id)`，id 沿用本機紀錄 id；雲端只放 friends 紀錄，所以不存可見度
 - 上限：每天 20 個好友邀請、30 筆上傳、10 次檢舉（台灣時間日曆日，只算新增，刪掉不還）；每小時打錯代碼 10 次
 
+### 照片 Storage（階段 2）
+- 私有 bucket `brew-photos`：單檔 ≤ 1MB（`image.CLOUD_PHOTO_MAX_BYTES` 要一致）、只收 `image/jpeg`；路徑 `<user_id>/<brew_id>.jpg`（`models.cloudPhotoPath`，一律小寫）
+- **照片權限跟著 shared_brews 走**：
+  - 上傳／覆蓋：自己的紀錄 `photo_path` 已指向這個路徑 → 同步順序是「先寫紀錄、再傳照片」
+  - 讀取：本人資料夾，或讀得到那筆紀錄且 `photo_path` 指向它 → 紀錄刪除、改回 private、`photo_path = null` 時好友立刻讀不到
+  - 刪除：自己資料夾裡的都能刪（清掉殘留檔案用）
+- SQL 不能直接刪 `storage.objects`（Supabase 的 protect_delete trigger），照片一律用 Storage API 刪除；pgTAP 測刪除時要 `set_config('storage.allow_delete_query', 'true', true)`
+- 上傳前一律經過 `models.photoForUpload`：確認 ≤ 1600px、≤ 1MB 的 JPEG，移除 JFIF 以外所有中繼資料段（EXIF、XMP、ICC、註解），不符合就重新編碼
+- 顯示用 signed URL（`expiresIn: 3600`），不用公開網址；sw.js 不攔截其他網域的請求，所以不會快取 signed URL
+- 已知限制（伺服器做不到）：Storage 不檢查檔案內容；signed URL 效期由前端決定，發出後不再檢查 RLS（解除好友後舊網址到期前仍可用）
+
 ### 本機開發（不連正式專案）
 - 需要 Docker Desktop 執行中；CLI 用 `npx supabase@2.120.0`（固定版本，不全域安裝）
 - `npx supabase@2.120.0 start`／`stop`；`db reset` 重建資料庫並套用所有 migration
 - `npx supabase@2.120.0 test db`：跑 `supabase/tests/` 的 pgTAP 測試（每個檔案在交易中執行，結束 rollback）
 - `node scripts/supabase-api-test.mjs`：用真的 JWT 從 API 層測權限；金鑰執行時從 `supabase status` 讀，只允許連本機
+- `node scripts/supabase-storage-test.mjs`：從 Storage API 測照片權限、1MB 與 MIME 限制
+- `node scripts/photo-exif-test.mjs`：headless Chrome（找不到時設 `CHROME_PATH`）跑 `tests/photo.html`，把處理後的照片上傳再下載，確認沒有 EXIF
 - 本機 Studio：http://127.0.0.1:54323
 - migration 已套用到正式專案後就不能改，要改權限請新增一個 migration
