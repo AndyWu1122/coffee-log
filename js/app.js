@@ -1,5 +1,5 @@
 // 進入點 + hash 路由
-import { esc, setTitle } from './views/ui.js';
+import { esc } from './views/ui.js';
 
 // 各 view 用動態 import 延遲載入；每個 view 匯出 render(container, params)
 const routes = [
@@ -9,13 +9,7 @@ const routes = [
   { pattern: /^\/beans$/, tab: 'beans', load: () => import('./views/beanList.js') },
   { pattern: /^\/beans\/new$/, tab: 'beans', load: () => import('./views/beanForm.js') },
   { pattern: /^\/beans\/([\w-]+)$/, tab: 'beans', load: () => import('./views/beanForm.js') },
-  { pattern: /^\/timer$/, tab: 'timer', load: async () => ({ render: renderTimerPlaceholder }) },
 ];
-
-function renderTimerPlaceholder(container) {
-  setTitle('計時器');
-  container.innerHTML = `<div class="empty"><p>計時器將在 v0.2 推出</p></div>`;
-}
 
 /** 解析 "#/brew/new?from=abc" → { path: '/brew/new', query: { from: 'abc' } } */
 function parseHash() {

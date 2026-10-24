@@ -4,7 +4,10 @@ import * as db from './db.js';
 export const SCHEMA_VERSION = 1;
 
 export const PROCESS = { washed: '水洗', natural: '日曬', honey: '蜜處理', other: '其他' };
-export const ROAST_LEVEL = { light: '淺焙', medium: '中焙', dark: '深焙' };
+// 由淺到深排列
+export const ROAST_LEVEL = {
+  light: '淺焙', 'light-medium': '淺中焙', 'medium-light': '中淺焙', medium: '中焙', dark: '深焙',
+};
 export const FLAVOR = { acidity: '酸度', sweetness: '甜度', bitterness: '苦度', body: '醇厚度' };
 
 /* ===== ID 與日期工具 ===== */
@@ -200,7 +203,6 @@ export async function saveBrew(input) {
     coffeeG: toNum(input.coffeeG),
     waterG: toNum(input.waterG),
     tempC: toNum(input.tempC),
-    pours: Array.isArray(input.pours) ? input.pours : [],
     totalTimeS: input.totalTimeS ?? null,
     rating: toNum(input.rating),
     flavor: Object.fromEntries(Object.keys(FLAVOR).map((k) => [k, toNum(input.flavor?.[k])])),

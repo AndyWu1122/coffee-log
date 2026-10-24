@@ -214,9 +214,6 @@ input:focus, select:focus, textarea:focus {
 .toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 0.9rem; min-height: var(--tap); }
 .toggle input { width: 22px; min-height: 22px; height: 22px; }
 
-/* ===== 注水紀錄（唯讀） ===== */
-.pours { margin: 0; padding-left: 20px; color: var(--text-dim); }
-
 /* ===== Toast ===== */
 .toast {
   position: fixed;

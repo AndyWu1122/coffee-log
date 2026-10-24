@@ -1,7 +1,7 @@
 // #/brew/new、#/brew/<id> 新增 / 編輯沖煮紀錄
 import {
   getBrew, saveBrew, deleteBrew, listBeans, listRecentDrippers,
-  ratio, formatRatio, formatSeconds, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
+  ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors } from './ui.js';
 
@@ -35,14 +35,14 @@ export async function render(container, { id, query, isCurrent }) {
   }
   setTitle(isNew ? '新增紀錄' : '編輯紀錄');
 
-  // TODO v0.3：query.from 有值時，複製該筆紀錄的參數當預設值
+  // TODO v0.2：query.from 有值時，複製該筆紀錄的參數當預設值
   void query;
   const b = brew ?? {
     beanId: beanOptions[0].id,
     brewedAt: new Date().toISOString(),
     dripper: drippers[0] ?? '',
     grindSetting: '', coffeeG: '', waterG: '', tempC: '',
-    pours: [], totalTimeS: null, rating: null, flavor: {}, notes: '',
+    totalTimeS: null, rating: null, flavor: {}, notes: '',
   };
   const totalMin = b.totalTimeS == null ? '' : Math.floor(b.totalTimeS / 60);
   const totalSec = b.totalTimeS == null ? '' : b.totalTimeS % 60;
@@ -109,14 +109,6 @@ export async function render(container, { id, query, isCurrent }) {
         <div class="error"></div>
       </div>
 
-      ${b.pours?.length ? `
-        <div class="field">
-          <span class="label">注水紀錄</span>
-          <ol class="pours">
-            ${b.pours.map((p) => `<li>${formatSeconds(p.t)}　累計 ${esc(p.waterG)} g</li>`).join('')}
-          </ol>
-        </div>` : ''}
-
       <div class="field" data-field="rating">
         <span class="label">整體評分</span>
         ${segmentedHtml('rating', SCORE_OPTIONS, b.rating, { allowEmpty: true })}
@@ -165,7 +157,6 @@ export async function render(container, { id, query, isCurrent }) {
       coffeeG: f.coffeeG.value,
       waterG: f.waterG.value,
       tempC: f.tempC.value,
-      pours: b.pours,
       totalTimeS: toSeconds(f.totalMin.value, f.totalSec.value),
       rating: segmentedValue(form, 'rating'),
       flavor: Object.fromEntries(Object.keys(FLAVOR).map((k) => [k, segmentedValue(form, `flavor.${k}`)])),
