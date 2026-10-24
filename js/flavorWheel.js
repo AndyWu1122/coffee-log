@@ -97,14 +97,23 @@ const COLORS = {
   spices: '#bc598c', nutty: '#855e02', sweet: '#d87725', floral: '#9256a0',
 };
 
-/** 補上 key、depth、color、parent、葉節點數，並建立索引 */
+// 實色格子上的字色：依 WCAG 對比選白或深色（較淺的黃、橘、藍、粉用深色字）
+const DARK_INK = '#1c140f';
+const INK = {
+  fruity: '#fff', sour: DARK_INK, green: '#fff', other: DARK_INK, roasted: '#fff',
+  spices: DARK_INK, nutty: '#fff', sweet: DARK_INK, floral: '#fff',
+};
+
+/** 補上 key、depth、color、ink、parent、葉節點數，並建立索引 */
 const BY_KEY = new Map();
 const ORDER = new Map(); // key → 在輪盤上的順序，用來排序已選風味
 function build(node, parent, depth) {
   node.key = parent ? `${parent.key}.${node.id}` : node.id;
   node.depth = depth;
   node.parent = parent;
-  node.color = COLORS[(parent ? node.key.split('.')[0] : node.id)];
+  const category = node.key.split('.')[0];
+  node.color = COLORS[category];
+  node.ink = INK[category];
   ORDER.set(node.key, ORDER.size);
   BY_KEY.set(node.key, node);
   node.children.forEach((c) => build(c, node, depth + 1));

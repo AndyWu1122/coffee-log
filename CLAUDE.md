@@ -5,6 +5,7 @@
 ## 技術規則
 - 純 HTML / CSS / JavaScript（ES Modules），**不使用框架、不使用打包工具**
 - 儲存：IndexedDB（可用 `idb` 小型 wrapper，或自己包一層）
+  - **唯一例外**：外觀偏好（`localStorage['theme']` = auto/light/dark）。它只是這支手機的顯示偏好、不需備份，且必須在 `<head>` 同步讀取才能避免主題閃爍
 - PWA：manifest.json + Service Worker，需可離線使用
 - 部署：GitHub Pages（main 分支根目錄），push 到 main 即自動部署
   - repo：https://github.com/AndyWu1122/coffee-log
@@ -47,6 +48,13 @@ views → models → db，每層只呼叫下一層。views 不可直接碰 Index
 - 底部分頁列：紀錄｜豆子（只放每天會用的頁面；之後的統計頁也放這裡）
 - **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：磨豆機、備份）
 - ☰ 選單裡的頁面不屬於任何分頁，路由設 `tab: null`，底部分頁都不亮
+
+## 主題（深色／淺色）
+- ☰ 選單「外觀」：自動（跟系統）｜淺色｜深色；結果寫在 `<html data-theme="dark|light">`
+- `index.html` `<head>` 的 inline script 在畫面畫出前套用；`js/app.js` 的 `setupTheme()` 負責切換，兩邊判斷要一致
+- 顏色一律用 `css/style.css` 的變數（`--bg`、`--text`…），**不要寫死顏色**；新增顏色時兩個主題都要定義
+- 淺色主題對比已驗證：文字 ≥ 14:1、次要文字 ≥ 6.9:1、強調色 ≥ 5.2:1、邊框 ≥ 3:1；改色時要重新驗證
+- 風味輪實色格子的字色依底色選白或深（`js/flavorWheel.js` 的 `INK`），淡化格子用 `--text`
 
 ## 不做計時器
 使用者的秤本身有計時功能，App 不做計時器；總時間在表單手動輸入（分、秒兩欄）。

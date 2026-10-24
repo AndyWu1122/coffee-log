@@ -89,6 +89,36 @@ function setupMenu() {
   window.addEventListener('hashchange', () => setOpen(false));
 }
 
+/* ===== 外觀：自動（跟系統）／淺色／深色 ===== */
+// 第一次套用在 index.html <head>（避免閃爍）；這裡負責切換，判斷方式要和 <head> 那段一致
+
+function setupTheme() {
+  const systemLight = matchMedia('(prefers-color-scheme: light)');
+  const readPref = () => { try { return localStorage.getItem('theme') || 'auto'; } catch { return 'auto'; } };
+  const savePref = (pref) => { try { localStorage.setItem('theme', pref); } catch { /* 無痕模式等：只在這次有效 */ } };
+  let pref = readPref();
+
+  const apply = () => {
+    const light = pref === 'light' || (pref === 'auto' && systemLight.matches);
+    document.documentElement.dataset.theme = light ? 'light' : 'dark';
+    document.querySelector('meta[name="theme-color"]').content = light ? '#ffffff' : '#2b1d14';
+    for (const btn of document.querySelectorAll('[data-theme-pref]')) {
+      btn.setAttribute('aria-checked', String(btn.dataset.themePref === pref));
+    }
+  };
+
+  document.querySelector('.theme-options').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-theme-pref]');
+    if (!btn) return;
+    pref = btn.dataset.themePref;
+    savePref(pref);
+    apply();
+  });
+  // 「自動」時，系統切換深淺色要即時跟上
+  systemLight.addEventListener('change', () => { if (pref === 'auto') apply(); });
+  apply();
+}
+
 /* ===== PWA：Service Worker 與新版本提示 ===== */
 
 function setupServiceWorker() {
@@ -132,6 +162,7 @@ function setupServiceWorker() {
 window.addEventListener('hashchange', navigate);
 navigate();
 setupMenu();
+setupTheme();
 setupServiceWorker();
 // 申請持久儲存，降低瀏覽器（特別是 iOS）自動清除資料的機會
 navigator.storage?.persist?.().catch(() => {});

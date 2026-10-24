@@ -44,8 +44,8 @@ function layout(nodes, a0, a1, radii, out = []) {
   return out;
 }
 
-/** 沿半徑方向的標籤；放不下時縮小字級，仍放不下就不顯示 */
-function radialLabel(s, text, size, minSize) {
+/** 沿半徑方向的標籤；放不下時縮小字級，仍放不下就不顯示。ink 有值時用該字色（實色格子） */
+function radialLabel(s, text, size, minSize, ink) {
   const am = (s.a0 + s.a1) / 2;
   const rm = (s.r0 + s.r1) / 2;
   const arc = (s.a1 - s.a0) * rm;
@@ -56,7 +56,8 @@ function radialLabel(s, text, size, minSize) {
   const deg = (am * 180) / Math.PI;
   const rot = deg > 180 ? deg + 90 : deg - 90; // 左半邊翻轉，避免文字倒過來
   const [x, y] = pt(rm, am);
-  return `<text x="${f(x)}" y="${f(y)}" font-size="${fs}" transform="rotate(${f(rot)} ${f(x)} ${f(y)})">${esc(text)}</text>`;
+  const style = ink ? ` style="fill:${ink}"` : '';
+  return `<text x="${f(x)}" y="${f(y)}" font-size="${fs}"${style} transform="rotate(${f(rot)} ${f(x)} ${f(y)})">${esc(text)}</text>`;
 }
 
 /**
@@ -70,12 +71,13 @@ export function createFlavorPicker(el, initialKeys = []) {
   function sectorSvg(s, { labelSize, labelMin, dim }) {
     const { node } = s;
     const isSel = selected.has(node.key);
+    const isDim = dim && !isSel;
     const text = isSel ? `${node.zh}✓` : node.zh;
     return `
-      <path class="sector${dim && !isSel ? ' dim' : ''}${isSel ? ' is-selected' : ''}" d="${sectorPath(s.r0, s.r1, s.a0, s.a1)}"
+      <path class="sector${isDim ? ' dim' : ''}${isSel ? ' is-selected' : ''}" d="${sectorPath(s.r0, s.r1, s.a0, s.a1)}"
         fill="${node.color}" data-key="${esc(node.key)}" tabindex="0" role="button"
         aria-label="${esc(flavorNote(node.key).path.join(' › '))}" aria-pressed="${isSel}"></path>
-      ${radialLabel(s, text, labelSize, labelMin)}`;
+      ${radialLabel(s, text, labelSize, labelMin, isDim ? null : node.ink)}`;
   }
 
   function wheelSvg() {
@@ -95,8 +97,8 @@ export function createFlavorPicker(el, initialKeys = []) {
       ${sectors.map((s) => sectorSvg(s, { labelSize: 12, labelMin: 8, dim: true })).join('')}
       <circle class="center-back" r="${ZOOM_CENTER - 1}" fill="${zoomed.color}" data-action="back"
         tabindex="0" role="button" aria-label="返回完整風味輪"></circle>
-      <text class="center-title" y="-2" font-size="13">${esc(zoomed.zh)}${catSel ? '✓' : ''}</text>
-      <text class="center-sub" y="16" font-size="9">‹ 返回</text>`;
+      <text class="center-title" y="-2" font-size="13" style="fill:${zoomed.ink}">${esc(zoomed.zh)}${catSel ? '✓' : ''}</text>
+      <text class="center-sub" y="16" font-size="9" style="fill:${zoomed.ink}">‹ 返回</text>`;
   }
 
   function render() {

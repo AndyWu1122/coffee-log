@@ -13,6 +13,20 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <script>
+    // 在畫面畫出前套用主題，避免先閃一下另一個主題
+    // 偏好（auto/light/dark）存 localStorage：只是這支手機的顯示偏好，需要同步讀取（見 CLAUDE.md）
+    // 切換邏輯在 js/app.js 的 setupTheme()，兩邊的判斷要一致
+    (function () {
+      var pref = 'auto';
+      try { pref = localStorage.getItem('theme') || 'auto'; } catch (e) {}
+      var light = pref === 'light' || (pref !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches);
+      document.documentElement.dataset.theme = light ? 'light' : 'dark';
+      document.querySelector('meta[name="theme-color"]').content = light ? '#ffffff' : '#2b1d14';
+      // iPhone 主畫面 App 的狀態列：淺色主題要深色字
+      document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content = light ? 'default' : 'black-translucent';
+    })();
+  </script>
   <link rel="stylesheet" href="css/style.css">
   <script type="module" src="js/app.js"></script>
 </head>
@@ -26,6 +40,15 @@
       <div class="menu-list" id="app-menu" role="menu" hidden>
         <a role="menuitem" href="#/grinders"><span aria-hidden="true">⚙️</span>磨豆機</a>
         <a role="menuitem" href="#/backup"><span aria-hidden="true">💾</span>備份</a>
+        <div class="menu-sep" role="separator"></div>
+        <div class="menu-theme" role="group" aria-labelledby="theme-label">
+          <span class="menu-label" id="theme-label"><span aria-hidden="true">🌓</span>外觀</span>
+          <div class="theme-options">
+            <button type="button" role="menuitemradio" data-theme-pref="auto" aria-checked="false">自動</button>
+            <button type="button" role="menuitemradio" data-theme-pref="light" aria-checked="false">淺色</button>
+            <button type="button" role="menuitemradio" data-theme-pref="dark" aria-checked="false">深色</button>
+          </div>
+        </div>
       </div>
     </div>
   </header>

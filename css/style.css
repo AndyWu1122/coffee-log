@@ -1,5 +1,9 @@
-/* ===== 色彩與尺寸變數（深色咖啡色系） ===== */
+/* ===== 色彩與尺寸變數 =====
+ * 主題由 <html data-theme="dark|light"> 決定（index.html <head> 在畫面畫出前設定，app.js 負責切換）
+ * 淺色主題對比已用 WCAG 公式驗證：文字 ≥ 14:1、次要文字 ≥ 6.9:1、強調色 ≥ 5.2:1、邊框 ≥ 3:1
+ */
 :root {
+  /* 深色（預設）：深咖啡色系 */
   --bg: #1c140f;
   --surface: #2b1d14;
   --surface-2: #3a2a1f;
@@ -10,6 +14,7 @@
   --accent-text: #1c140f;
   --danger: #e0685a;
   --ok: #7fb685;
+  --shadow: rgba(0, 0, 0, 0.45);
 
   --radius: 14px;
   --tap: 48px;            /* 最小點擊高度 */
@@ -18,6 +23,23 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
   color-scheme: dark;
+}
+
+/* 淺色：暖白底、深咖啡字，戶外陽光下也看得清楚 */
+:root[data-theme="light"] {
+  --bg: #f6f0e8;
+  --surface: #ffffff;
+  --surface-2: #efe5d9;
+  --border: #9c8571;
+  --text: #21160e;
+  --text-dim: #5c4838;
+  --accent: #9a4f17;
+  --accent-text: #ffffff;
+  --danger: #b3261e;
+  --ok: #2e7d32;
+  --shadow: rgba(60, 35, 15, 0.18);
+
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -78,7 +100,7 @@ a { color: var(--accent); }
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 24px var(--shadow);
 }
 .menu-list a {
   display: flex;
@@ -91,6 +113,26 @@ a { color: var(--accent); }
   text-decoration: none;
 }
 .menu-list a:hover, .menu-list a:focus-visible { background: var(--surface); outline: none; }
+.menu-list { min-width: 248px; }
+.menu-sep { height: 1px; background: var(--border); margin: 6px 4px; opacity: 0.6; }
+.menu-theme { padding: 4px 6px 6px; }
+.menu-label { display: flex; align-items: center; gap: 10px; padding: 6px 6px 8px; color: var(--text-dim); font-size: 0.9rem; }
+.theme-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.theme-options button {
+  min-height: 48px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+}
+.theme-options button[aria-checked="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
 
 /* ===== 主內容：預留底部分頁列與 FAB 空間 ===== */
 #app {
@@ -139,7 +181,7 @@ a { color: var(--accent); }
   line-height: 1;
   display: flex; align-items: center; justify-content: center;
   text-decoration: none;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px var(--shadow);
 }
 
 /* ===== 卡片列表 ===== */
@@ -293,8 +335,9 @@ input:focus, select:focus, textarea:focus {
 .wheel .sector.dim { fill-opacity: 0.35; }
 .wheel .sector:focus-visible,
 .wheel .center-back:focus-visible { stroke: var(--text); stroke-width: 2.5; }
+/* 淡化格子上的字用主題文字色；實色格子的字色由 flavorPicker 依底色指定（inline style） */
 .wheel text {
-  fill: #fff;
+  fill: var(--text);
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
@@ -303,7 +346,7 @@ input:focus, select:focus, textarea:focus {
 .wheel .center-count, .wheel .center-title { font-weight: 700; }
 .wheel .center-count { fill: var(--accent); }
 .wheel .center-sub { fill: var(--text-dim); }
-.wheel.is-zoomed .center-sub { fill: #fff; opacity: 0.85; }
+.wheel.is-zoomed .center-sub { opacity: 0.85; }
 .wheel-hint { text-align: center; margin: 0; }
 
 .note-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
@@ -413,7 +456,7 @@ input:focus, select:focus, textarea:focus {
   background: var(--surface-2);
   border: 1px solid var(--accent);
   border-radius: var(--radius);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px var(--shadow);
 }
 .update-banner .btn { min-height: 44px; }
 /* 提示出現時，把 FAB 與 toast 往上移，避免被蓋住 */
