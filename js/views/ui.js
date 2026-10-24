@@ -102,6 +102,24 @@ export function avatarHtml({ nickname, avatarUrl }, { large = false } = {}) {
 export const BADGES_EVENT = 'social-badges-changed';
 export const notifyBadgesChanged = () => window.dispatchEvent(new Event(BADGES_EVENT));
 
+/**
+ * App 的版本號：問目前接管這個頁面的 Service Worker（它的 CACHE_VERSION 就是正在跑的版本）
+ * 沒有 Service Worker、或舊版 Service Worker 不認得這個訊息時回傳 null
+ */
+export function appVersion({ timeout = 1000 } = {}) {
+  const worker = navigator.serviceWorker?.controller;
+  if (!worker) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const { port1, port2 } = new MessageChannel();
+    const timer = setTimeout(() => resolve(null), timeout);
+    port1.onmessage = (e) => {
+      clearTimeout(timer);
+      resolve(Number.isInteger(e.data) ? e.data : null);
+    };
+    worker.postMessage('version', [port2]);
+  });
+}
+
 /** 頁面層級的訊息（連不上伺服器、需要網路等），可附「重試」按鈕 */
 export function showMessage(container, message, onRetry) {
   container.innerHTML = `

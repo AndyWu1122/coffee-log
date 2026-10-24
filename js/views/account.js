@@ -145,7 +145,7 @@ function renderReady(container, { user, profile }, { isCurrent, rerender }) {
       <form class="form danger-zone" id="delete-form" novalidate hidden>
         <h2>刪除我的帳號</h2>
         <ul class="plain-list">
-          <li>雲端的暱稱、頭像、分享給好友的紀錄和照片、讚、好友關係會<strong>立即全部刪除，無法復原</strong></li>
+          <li>雲端的暱稱、頭像、分享給好友的紀錄和照片、讚、好友關係、意見回饋會<strong>立即全部刪除，無法復原</strong></li>
           <li>這支手機上的沖煮紀錄會保留；分享給好友的紀錄會改回「只有我」</li>
           <li>之後可以用同一個 Google 帳號重新註冊，但好友要重新加</li>
         </ul>

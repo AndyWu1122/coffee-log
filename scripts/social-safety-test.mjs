@@ -182,7 +182,7 @@ try {
 
   /* ===== CSP ===== */
   // App 的每一頁（含分享卡片的 canvas、照片的 blob 網址）都不能因為 CSP 壞掉
-  for (const hash of ['#/', `#/brew/${brewId}`, `#/brew/${brewId}/share`, '#/brew/new', '#/beans', `#/beans/${beanId}`, '#/grinders', '#/backup']) {
+  for (const hash of ['#/', `#/brew/${brewId}`, `#/brew/${brewId}/share`, '#/brew/new', '#/beans', `#/beans/${beanId}`, '#/grinders', '#/backup', '#/feedback']) {
     await visit(pa, base, hash);
     await pa.waitFor(`document.querySelector('#app').children.length > 0 && !document.querySelector('#app > .hint')`, { label: `${hash} 載入` });
   }

@@ -96,6 +96,28 @@ npx supabase@2.120.0 functions deploy delete-account   # 需要先完成第 2 �
 - 函式用到的 service_role key 由 Supabase 自動提供，**不用、也不要**自己設定任何金鑰
 - Supabase 後台 → Edge Functions → delete-account：確認 **Verify JWT** 是開著的
 
+## 5-2. 意見回饋：資料表、Edge Function、Email 通知
+
+回饋存在 `feedback` 表（只能新增，誰都讀不到；你在後台 Table Editor → feedback 看全部），
+送出後由 Edge Function `feedback` 透過 [Resend](https://resend.com) 寄 Email 到你的信箱。
+
+1. **Resend（你）**：用你要收通知的 Gmail 註冊 resend.com → API Keys → Create API Key（權限選 Sending access）→ 複製
+   - 不用設定網域：免費方案從 `onboarding@resend.dev` 只能寄給「註冊 Resend 的那個 email」，剛好就是你自己
+   - 免費方案每天 100 封，回饋每人每天最多 5 則，一般不會超過
+2. **設定金鑰（你，或把 key 給 Claude 執行）**：
+   ```sh
+   npx supabase@2.120.0 secrets set RESEND_API_KEY=re_xxx FEEDBACK_TO=你的Gmail
+   ```
+   - 金鑰只存在 Supabase 的 secrets，**不要**寫進 repo 或 `config.toml`（`config.toml` 的 `[edge_runtime.secrets]` 是本機測試用的假值，不會上傳）
+   - 沒設定時回饋照樣存下來，只是不寄信
+3. **部署（Claude，你確認後）**：
+   ```sh
+   npx supabase@2.120.0 db push                       # 套用 *_feedback.sql migration
+   npx supabase@2.120.0 functions deploy feedback
+   ```
+   - Supabase 後台 → Edge Functions → feedback：確認 **Verify JWT** 是開著的
+4. **實際送一則（你）**：App 登入後 ☰ →「意見回饋」送出 → Gmail 收得到信（第一次可能在垃圾郵件匣，標成「不是垃圾郵件」）、Table Editor 看得到這一則
+
 ## 6. 實際登入一次（你）
 
 1. 手機用 Safari／Chrome 開 <https://andywu1122.github.io/coffee-log/> → ☰ →「帳號」→「用 Google 登入」→ 設定暱稱
@@ -108,5 +130,6 @@ npx supabase@2.120.0 functions deploy delete-account   # 需要先完成第 2 �
 - [ ] Storage：`brew-photos`、`avatars` 都是 Private
 - [ ] Authentication → Providers：只有 Google 開著，Email 關閉
 - [ ] Project Settings → Data API → Exposed schemas：只有 `public`、`graphql_public`（**不能有 `private`**）
-- [ ] Edge Functions：`delete-account` 已部署，Verify JWT 開著
+- [ ] Edge Functions：`delete-account`、`feedback` 已部署，Verify JWT 開著
+- [ ] Edge Functions → Secrets：有 `RESEND_API_KEY`、`FEEDBACK_TO`
 - [ ] repo 裡沒有 secret／service_role key、資料庫密碼、Google Client Secret

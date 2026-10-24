@@ -375,7 +375,7 @@ authorization_url_path = "/oauth/consent"
 allow_dynamic_registration = false
 
 [edge_runtime]
-# 刪除帳號（supabase/functions/delete-account）用
+# 刪除帳號（supabase/functions/delete-account）、意見回饋（supabase/functions/feedback）用
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
 # `per_worker` (default) — enables hot reload during local development.
@@ -386,11 +386,19 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# [edge_runtime.secrets]
-# secret_key = "env(SECRET_VALUE)"
+# 只給本機的 Edge Function 用（不是真的金鑰）：意見回饋的 Email 改寄到測試腳本開的假 Resend 伺服器
+# （scripts/social-feedback-test.mjs，port 54399）。正式專案用 `supabase secrets set` 設定真的 RESEND_API_KEY、FEEDBACK_TO
+[edge_runtime.secrets]
+RESEND_API_KEY = "local-test-key"
+FEEDBACK_TO = "developer@test.local"
+RESEND_API_URL = "http://host.docker.internal:54399/emails"
 
 # 刪除我的帳號：閘道先驗證 JWT，函式裡再向 Auth 確認呼叫者是誰，只刪呼叫者自己
 [functions.delete-account]
+verify_jwt = true
+
+# 意見回饋：閘道先驗證 JWT，函式裡用呼叫者的 JWT 寫入資料表（RLS、每日上限照常生效）
+[functions.feedback]
 verify_jwt = true
 
 [analytics]

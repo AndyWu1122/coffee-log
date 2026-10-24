@@ -300,6 +300,20 @@ export const insertReport = ({ owner, id, reason, detail }) => run(async (sb) =>
 });
 
 /**
+ * 送出意見回饋（Edge Function feedback：用呼叫者的身分存進 feedback 表，再寄 Email 給站長）
+ * 失敗時 CloudError 的 code：network、rate_limited（每天 5 則）、no_profile、invalid，或 HTTP 狀態
+ */
+export const sendFeedback = ({ category, message, appVersion }) => run(async (sb) => {
+  const { data, error } = await sb.functions.invoke('feedback', { body: { category, message, appVersion } });
+  if (error) {
+    if (error.name === 'FunctionsFetchError' || isNetworkError(error)) throw new CloudError('連不上伺服器，請確認網路連線', 'network');
+    const body = await error.context?.json?.().catch(() => null);
+    throw new CloudError('送出失敗，請稍後再試', body?.error ?? String(error.context?.status ?? 'function'));
+  }
+  return data;
+});
+
+/**
  * 刪除自己的帳號（Edge Function delete-account：刪照片、頭像與 auth 使用者，資料表跟著刪除）
  * 成功後清掉這台裝置的登入狀態
  */

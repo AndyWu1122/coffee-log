@@ -1,5 +1,5 @@
 // 進入點 + hash 路由
-import { esc, toast, BADGES_EVENT } from './views/ui.js';
+import { esc, toast, appVersion, BADGES_EVENT } from './views/ui.js';
 import { socialAvailable, completeSignIn, requestSync, getSocialBadges } from './models.js';
 
 // 各 view 用動態 import 延遲載入；每個 view 匯出 render(container, params)
@@ -23,6 +23,7 @@ const routes = [
   // 咖啡社群（js/config.js 沒設定時選單不顯示；直接輸入網址會顯示「沒有開放」）
   { pattern: /^\/account$/, tab: null, load: () => import('./views/account.js') },
   { pattern: /^\/friends(?:\/add)?$/, tab: null, load: () => import('./views/friends.js') },
+  { pattern: /^\/feedback$/, tab: null, load: () => import('./views/feedback.js') },
 ];
 
 /** 解析 "#/brew/new?from=abc" → { path: '/brew/new', query: { from: 'abc' } } */
@@ -143,18 +144,13 @@ function setupServiceWorker() {
   let waitingWorker = null;
   let updateRequested = false;
 
-  // ☰ 選單的版本號：問目前接管這個頁面的 Service Worker（它的 CACHE_VERSION 就是正在跑的版本）
-  // 舊版 Service Worker 不認得這個訊息，不會回覆，版本號就維持隱藏
-  const showVersion = () => {
-    const worker = navigator.serviceWorker.controller;
-    if (!worker) return;
-    const { port1, port2 } = new MessageChannel();
-    port1.onmessage = (e) => {
-      const el = document.getElementById('app-version');
-      el.textContent = `版本 ${e.data}`;
-      el.hidden = false;
-    };
-    worker.postMessage('version', [port2]);
+  // ☰ 選單的版本號（sw.js 的 CACHE_VERSION）；問不到（舊版 Service Worker 不會回覆）就維持隱藏
+  const showVersion = async () => {
+    const version = await appVersion();
+    if (version == null) return;
+    const el = document.getElementById('app-version');
+    el.textContent = `版本 ${version}`;
+    el.hidden = false;
   };
   showVersion();
 

@@ -4,7 +4,7 @@
 import { socialAvailable } from '../models.js';
 import { setTitle } from './ui.js';
 
-const UPDATED = '2026-10-24';
+const UPDATED = '2026-10-25';
 
 export function render(container) {
   setTitle('隱私說明');
@@ -33,6 +33,7 @@ export function render(container) {
           <li><strong>你選擇「👥 好友」的沖煮紀錄</strong>：豆子名稱、產地、處理法、烘焙度與烘焙日、沖煮參數、評分、風味、筆記和照片。
             選「🔒 只有我」（預設）的紀錄不會上傳</li>
           <li><strong>按讚、檢舉</strong></li>
+          <li><strong>意見回饋</strong>：你寫的內容、類型、送出時的 App 版本號（和你的帳號相連，所以開發者知道你的暱稱；不附 email）</li>
           <li>不收集真實姓名、學號、電話或位置</li>
         </ul>
       </section>
@@ -45,7 +46,8 @@ export function render(container) {
           <li>封鎖之後雙方互相看不到，對方不會收到通知</li>
           <li>按讚：看得到那筆紀錄的人都看得到讚數；其中是你好友的人，看得到是你按的</li>
           <li>檢舉只有站長看得到，被檢舉的人不會知道是誰檢舉的</li>
-          <li>站長（這個服務的管理者）技術上能看到資料庫裡的內容，只在處理檢舉和維護系統時查看</li>
+          <li>意見回饋只有站長看得到，連你自己送出後也看不到</li>
+          <li>站長（這個服務的管理者）技術上能看到資料庫裡的內容，只在處理檢舉、意見回饋和維護系統時查看</li>
         </ul>
       </section>
 
@@ -62,6 +64,7 @@ export function render(container) {
         <h2>資料存在哪裡</h2>
         <ul class="plain-list">
           <li>使用 Supabase（美國公司）提供的資料庫和檔案空間，伺服器在日本東京</li>
+          <li>送出意見回饋時，會透過 Resend（美國公司）寄一封 Email 通知站長，內容包含你的暱稱和回饋內容</li>
           <li>傳輸一律加密（HTTPS）</li>
         </ul>
       </section>
@@ -70,7 +73,7 @@ export function render(container) {
         <h2>怎麼刪除</h2>
         <ul class="plain-list">
           <li><strong>一筆紀錄</strong>：改回「🔒 只有我」或刪除，雲端的紀錄和照片會在下次連上網路時刪除</li>
-          <li><strong>整個帳號</strong>：☰ →「帳號」→「刪除我的帳號」，雲端的所有資料和照片立即刪除、無法復原；這支手機上的紀錄會保留</li>
+          <li><strong>整個帳號</strong>：☰ →「帳號」→「刪除我的帳號」，雲端的所有資料和照片（含意見回饋）立即刪除、無法復原；這支手機上的紀錄會保留。已經寄給站長的意見回饋通知 Email 不會跟著刪除</li>
           <li>登出不會刪除雲端的資料</li>
           <li>匯出的備份檔包含你所有的紀錄和筆記，請自己保管好，不要傳給別人</li>
         </ul>
@@ -78,7 +81,7 @@ export function render(container) {
 
       <section class="section">
         <h2>有問題</h2>
-        <p>請到 <a href="https://github.com/AndyWu1122/coffee-log/issues" rel="noopener noreferrer" target="_blank">GitHub</a> 回報。</p>
+        <p>登入後可以從 ☰ →「意見回饋」告訴開發者，或到 <a href="https://github.com/AndyWu1122/coffee-log/issues" rel="noopener noreferrer" target="_blank">GitHub</a> 回報（GitHub 上的內容是公開的）。</p>
       </section>
     </article>`;
 }

@@ -1107,8 +1107,29 @@ export async function reportBrew(owner, id, { reason, detail = '' }) {
   return { ok: true };
 }
 
+/* ----- 意見回饋 ----- */
+
+export const FEEDBACK_CATEGORIES = { bug: '問題回報', idea: '功能建議', other: '其他' };
+export const FEEDBACK_MAX = 1000;      // 和資料庫的 check 一致
+export const FEEDBACK_DAILY_MAX = 5;   // 每天上限（資料庫強制）
+
 /**
- * 刪除我的帳號：雲端的 profile、分享的紀錄、照片、頭像、讚、好友關係全部刪除，立即生效
+ * 送出意見回饋（只有開發者在 Supabase 後台看得到，送出後寄 Email 通知開發者）；回傳 { ok, errors }
+ * appVersion：送出時的 App 版本號（沒有就 null）；作者由資料庫用 auth.uid() 決定
+ */
+export async function sendFeedback({ category, message, appVersion = null }) {
+  const errors = {};
+  if (!Object.hasOwn(FEEDBACK_CATEGORIES, category ?? '')) errors.category = '請選擇類型';
+  const text = String(message ?? '').trim();
+  if (!text) errors.message = '請輸入內容';
+  else if (charLength(text) > FEEDBACK_MAX) errors.message = `最多 ${FEEDBACK_MAX} 字（目前 ${charLength(text)} 字）`;
+  if (Object.keys(errors).length) return { ok: false, errors };
+  await cloud.sendFeedback({ category, message: text, appVersion: Number.isInteger(appVersion) ? appVersion : null });
+  return { ok: true };
+}
+
+/**
+ * 刪除我的帳號：雲端的 profile、分享的紀錄、照片、頭像、讚、好友關係、意見回饋全部刪除，立即生效
  * 本機資料保留；分享給好友的紀錄全部改回「只有我」（之後用新帳號登入也不會自動上傳），清掉同步狀態
  */
 export async function deleteAccount() {

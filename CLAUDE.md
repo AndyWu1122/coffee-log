@@ -30,11 +30,11 @@ js/config.js       # Supabase 連線設定（依網址：localhost → 本機、
 js/cloud.js        # 唯一存取 Supabase 的地方（角色和 db.js 一樣）；supabase-js 用到才載入
 js/sync.js         # 好友紀錄的同步（本機 friends 紀錄 → shared_brews），只由 models.js 使用
 js/vendor/         # 第三方檔案原封不動（supabase-js UMD、qrcode-generator），來源與 SRI 見 js/vendor/README.md
-js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, account（帳號）, friends（好友管理）, feed（好友動態）, feedDetail（好友紀錄詳細、檢舉、封鎖）, privacy（隱私說明）, ui（共用 DOM 工具）
+js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, account（帳號）, friends（好友管理）, feed（好友動態）, feedDetail（好友紀錄詳細、檢舉、封鎖）, privacy（隱私說明）, feedback（意見回饋）, ui（共用 DOM 工具）
 icons/
 docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟）
-supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）
-scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs
+supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）、functions/feedback（意見回饋：存檔＋寄 Email 給站長）
+scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs
 tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mjs 用 headless Chrome 開；不屬於 App、不放進 ASSETS）
 ```
 
@@ -62,11 +62,11 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - id 用 crypto.randomUUID()
 
 ## 路由（hash）
-`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/account` 帳號｜`#/friends` 好友管理｜`#/feed` 好友動態｜`#/feed/<owner>/<id>` 好友紀錄詳細｜`#/privacy` 隱私說明｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）
+`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/account` 帳號｜`#/friends` 好友管理｜`#/feed` 好友動態｜`#/feed/<owner>/<id>` 好友紀錄詳細｜`#/privacy` 隱私說明｜`#/feedback` 意見回饋｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）
 
 ## 介面配置
 - 底部分頁列：紀錄｜豆子｜好友（只放每天會用的頁面；之後的統計頁也放這裡）；「好友」是動態牆，有 `data-social`，`js/config.js` 沒設定時隱藏
-- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：帳號、好友管理、磨豆機、備份、隱私說明；帳號、好友管理有 `data-social`，`js/config.js` 沒設定時隱藏）
+- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：帳號、好友管理、磨豆機、備份、隱私說明、意見回饋；帳號、好友管理、意見回饋有 `data-social`，`js/config.js` 沒設定時隱藏）
 - ☰ 選單裡的頁面不屬於任何分頁，路由設 `tab: null`，底部分頁都不亮
 - 社群提示「!」（`app.js` 的 `setupBadges`，`models.getSocialBadges`）：☰ 按鈕＝收到好友邀請（`--accent`）；底部「好友」分頁＝好友有新貼文（`--badge-new`，兩種顏色要能區分）
   - 新貼文＝好友最新貼文的 `created_at` 比 meta 的 `feedSeenAt`（讀動態牆第一頁時記下，雲端時間、記 userId）新；好友修改舊紀錄不算
@@ -144,7 +144,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 profiles、friendships、blocks、shared_brews、likes、reports（public，API 公開、RLS 保護）；rate_events（private，每日／每小時上限的計數）
 - 加好友只能透過 `send_friend_request(code)`，不能直接新增 friendships；沒有「搜尋所有使用者」
 - shared_brews 主鍵 `(owner, id)`，id 沿用本機紀錄 id；雲端只放 friends 紀錄，所以不存可見度
-- 上限：每天 20 個好友邀請、30 筆上傳、10 次檢舉（台灣時間日曆日，只算新增，刪掉不還）；每小時打錯代碼 10 次
+- 上限：每天 20 個好友邀請、30 筆上傳、10 次檢舉、5 則意見回饋（台灣時間日曆日，只算新增，刪掉不還）；每小時打錯代碼 10 次
 
 ### 照片 Storage（階段 2）
 - 私有 bucket `brew-photos`：單檔 ≤ 1MB（`image.CLOUD_PHOTO_MAX_BYTES` 要一致）、只收 `image/jpeg`；路徑 `<user_id>/<brew_id>.jpg`（`models.cloudPhotoPath`，一律小寫）
@@ -189,6 +189,13 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
   - **`js/config.js` 新增或改網址時，CSP 要一起改**（social-safety-test 會檢查）；新增外部資源一律先改 CSP
 - Service Worker 只攔截同網域的 GET，不會快取 API 或 signed URL（social-safety-test 會檢查快取內容）
 
+### 意見回饋
+- ☰ →「意見回饋」（`#/feedback`），要登入才能送（防灌送）；類型（bug/idea/other）、內容 ≤ 1000 字，附暱稱（author）與 App 版本號，不附 email
+- `feedback` 表和檢舉一樣：只能以自己的名義新增，誰都讀不到（連作者自己），站長在 Supabase 後台看；刪除帳號時 cascade 刪除
+- App 呼叫 Edge Function `feedback`：用**呼叫者的 JWT** 寫入（RLS、每日上限照常生效）→ 透過 Resend 寄**純文字** Email 給站長；先存檔再寄信，寄信失敗不影響回饋
+- 金鑰 `RESEND_API_KEY`、`FEEDBACK_TO` 只用 `supabase secrets set` 設定；`config.toml` 的 `[edge_runtime.secrets]` 是本機測試的假值（寄到 social-feedback-test 開的假 Resend，port 54399），改了要 `stop` 再 `start`
+- 正式專案要另外部署：`npx supabase@2.120.0 functions deploy feedback`（步驟見 `docs/supabase-setup.md` 5-2）
+
 ### 本機開發（不連正式專案）
 - 需要 Docker Desktop 執行中；CLI 用 `npx supabase@2.120.0`（固定版本，不全域安裝）
 - `npx supabase@2.120.0 start`／`stop`；`db reset` 重建資料庫並套用所有 migration
@@ -198,6 +205,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - `node scripts/photo-exif-test.mjs`：headless Chrome（找不到時設 `CHROME_PATH`）跑 `tests/photo.html`，把處理後的照片上傳再下載，確認沒有 EXIF
 - `node scripts/social-feed-test.mjs`：兩個 headless Chrome（A、B）測分享、同步（含模擬離線）、動態牆、按讚、改回只有我、封鎖、每日上限，豆名／筆記／暱稱的 XSS
 - `node scripts/social-safety-test.mjs`：檢舉、從詳細頁封鎖、刪除帳號（用 admin 確認雲端全部刪除、本機保留）、Edge Function 的權限、CSP（每一頁沒有違規、注入的 inline script 被擋）、SW 快取
+- `node scripts/social-feedback-test.mjs`：意見回饋的畫面、Edge Function 權限、寄給站長的 Email（假 Resend）、寄信失敗仍存檔、每天 5 則、誰都讀不到
 - `node scripts/social-ui-test.mjs`：兩個隔離的 headless Chrome 環境（A、B）操作真的畫面：加好友、封鎖、XSS、頭像 EXIF、登出；登入用 admin API 拿真的 session（Google 登入無法自動化）
 - 本機頁面用 `python -m http.server 8000` 開 `http://localhost:8000/`（`config.toml` 的 site_url／redirect URL 是這個；本機沒有設定 Google，無法真的登入）
 - 本機 Studio：http://127.0.0.1:54323
