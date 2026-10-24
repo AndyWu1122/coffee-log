@@ -1,6 +1,6 @@
 // Service Worker：安裝時預先快取所有檔案，之後一律從快取讀取（離線可用）
 // ⚠ 修改任何前端檔案後，CACHE_VERSION 要 +1，使用者才會收到新版本
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 const CACHE_NAME = `coffee-log-v${CACHE_VERSION}`;
 
 const ASSETS = [

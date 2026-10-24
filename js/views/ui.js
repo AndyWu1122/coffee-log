@@ -57,6 +57,17 @@ export function segmentedValue(root, name) {
   return root.querySelector(`.segmented[data-name="${name}"]`)?.dataset.value ?? '';
 }
 
+/** 把資料存成 JSON 檔下載 */
+export function downloadJson(filename, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /** 依 { 欄位: 訊息 } 顯示驗證錯誤；欄位容器需有 data-field 屬性 */
 export function showErrors(form, errors) {
   for (const field of form.querySelectorAll('[data-field]')) {

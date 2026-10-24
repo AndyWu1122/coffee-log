@@ -1,6 +1,10 @@
 // #/ 沖煮紀錄列表
-import { listBrews, listBeans, latestBrewByBean, formatRatio, formatSeconds, flavorNote } from '../models.js';
-import { esc, setTitle } from './ui.js';
+import {
+  listBrews, listBeans, latestBrewByBean, formatRatio, formatSeconds, flavorNote, getBackupStatus, snoozeBackupReminder,
+  formatDaysAgo,
+} from '../models.js';
+import { esc, setTitle, toast } from './ui.js';
+import { exportBackup } from './backup.js';
 
 const dateFmt = new Intl.DateTimeFormat('zh-TW', {
   month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
@@ -18,7 +22,9 @@ const filter = { beanId: '', minRating: '' };
 
 export async function render(container, { isCurrent }) {
   setTitle('手沖紀錄');
-  const [beans, latestByBean] = await Promise.all([listBeans({ includeArchived: true }), latestBrewByBean()]);
+  const [beans, latestByBean, backup] = await Promise.all([
+    listBeans({ includeArchived: true }), latestBrewByBean(), getBackupStatus(),
+  ]);
   // 豆子選項：未封存的，加上有紀錄的已封存豆子
   const beanOptions = beans.filter((b) => !b.archived || latestByBean.has(b.id));
   if (filter.beanId && !beanOptions.some((b) => b.id === filter.beanId)) filter.beanId = '';
@@ -41,6 +47,15 @@ export async function render(container, { isCurrent }) {
 
   const filtered = filter.beanId || filter.minRating;
   container.innerHTML = `
+    ${backup.remind ? `
+      <div class="notice backup-reminder" role="alert">
+        <p><strong>⚠ ${backup.lastBackupAt ? `上次備份是 ${formatDaysAgo(backup.daysSince)}` : '還沒備份過資料'}</strong></p>
+        <p class="hint">資料只存在這支手機上，建議定期匯出備份。</p>
+        <div class="reminder-actions">
+          <button type="button" class="btn btn-primary" id="backup-now">立即備份</button>
+          <button type="button" class="btn" id="backup-later">稍後</button>
+        </div>
+      </div>` : ''}
     <div class="filter-bar">
       <select id="filter-bean" aria-label="依豆子篩選">
         <option value="">全部豆子</option>
@@ -70,6 +85,16 @@ export async function render(container, { isCurrent }) {
   container.querySelector('#clear-filter')?.addEventListener('click', () => {
     filter.beanId = '';
     filter.minRating = '';
+    rerender();
+  });
+  container.querySelector('#backup-now')?.addEventListener('click', async () => {
+    await exportBackup();
+    toast('已匯出備份');
+    rerender();
+  });
+  container.querySelector('#backup-later')?.addEventListener('click', async () => {
+    await snoozeBackupReminder();
+    toast('3 天後再提醒');
     rerender();
   });
 }

@@ -402,6 +402,40 @@ export async function latestBrewByBean() {
   return latest;
 }
 
+/* ===== 備份提醒 ===== */
+
+const BACKUP_REMIND_DAYS = 14; // 超過幾天沒備份就在首頁提醒
+const BACKUP_SNOOZE_DAYS = 3;  // 按「稍後」後幾天內不再提醒
+
+/**
+ * 備份狀態：{ lastBackupAt, daysSince, remind }
+ * remind：有紀錄，且距上次備份（沒備份過則從最早一筆紀錄起算）≥ 14 天，且不在「稍後」期間
+ */
+export async function getBackupStatus() {
+  const [lastBackupAt, snoozeUntil, brews] = await Promise.all([
+    db.getMeta('lastBackupAt'), db.getMeta('backupSnoozeUntil'), db.getAll('brews'),
+  ]);
+  const today = todayLocal();
+  const daysSince = lastBackupAt ? daysBetween(toLocalDateStr(lastBackupAt), today) : null;
+  const since = lastBackupAt ?? brews.reduce((min, b) => (!min || b.brewedAt < min ? b.brewedAt : min), null);
+  const overdue = brews.length > 0 && since != null && daysBetween(toLocalDateStr(since), today) >= BACKUP_REMIND_DAYS;
+  const snoozed = snoozeUntil != null && new Date() < new Date(snoozeUntil);
+  return { lastBackupAt, daysSince, remind: overdue && !snoozed };
+}
+
+/** 匯出後呼叫：記下備份時間 */
+export async function recordBackup() {
+  await db.setMeta('lastBackupAt', new Date().toISOString());
+  await db.setMeta('backupSnoozeUntil', null);
+}
+
+/** 首頁提醒按「稍後」：3 天內不再提醒 */
+export const snoozeBackupReminder = () =>
+  db.setMeta('backupSnoozeUntil', new Date(Date.now() + BACKUP_SNOOZE_DAYS * 86400000).toISOString());
+
+/** 「今天」「昨天」「N 天前」 */
+export const formatDaysAgo = (n) => (n === 0 ? '今天' : n === 1 ? '昨天' : `${n} 天前`);
+
 /* ===== 備份：JSON 匯出匯入 ===== */
 
 export async function exportData() {

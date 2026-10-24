@@ -28,10 +28,11 @@ icons/
 ## 分層規則
 views → models → db，每層只呼叫下一層。views 不可直接碰 IndexedDB。
 
-## 資料模型（備份 schemaVersion: 2／IndexedDB DB_VERSION: 2）
+## 資料模型（備份 schemaVersion: 2／IndexedDB DB_VERSION: 3）
 **beans**：id, name, origin, process(washed/natural/honey/other), roastLevel(light/light-medium/medium-light/medium/dark，即 淺/淺中/中淺/中/深焙), roastDate(YYYY-MM-DD), bagWeightG(整包重量 g，選填), archived(bool), createdAt
 **grinders**：id, name(必填), notes(選填，例如刻度說明), archived(bool), createdAt
 **brews**：id, beanId, grinderId(選填，'' ＝未指定；v1 舊紀錄沒有這個欄位), brewedAt, dripper, grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes
+**meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil）；**不匯出、匯入取代全部時也不清除**
 - brews 建索引：beanId、brewedAt、grinderId（v2 加入）
 - 有紀錄引用的豆子、磨豆機不能刪除，只能封存
 - DB 升級：`onupgradeneeded` 每一步都先檢查是否已存在，既有 store 用升級交易取得後再加索引，絕不改動舊資料
@@ -43,8 +44,8 @@ views → models → db，每層只呼叫下一層。views 不可直接碰 Index
 `#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`
 
 ## 介面配置
-- 底部分頁列：紀錄｜豆子｜備份（常用功能）
-- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：磨豆機）
+- 底部分頁列：紀錄｜豆子（只放每天會用的頁面；之後的統計頁也放這裡）
+- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：磨豆機、備份）
 - ☰ 選單裡的頁面不屬於任何分頁，路由設 `tab: null`，底部分頁都不亮
 
 ## 不做計時器
@@ -54,6 +55,8 @@ views → models → db，每層只呼叫下一層。views 不可直接碰 Index
 - 匯出全部資料為 JSON（含 schemaVersion），可匯入還原
 - 匯入分「合併」（依 id 覆蓋）與「取代全部」；整份檔案驗證通過才在單一交易內寫入
 - 匯入接受 schemaVersion 1 與 2：v1 沒有 grinders（視為空陣列），brews 沒有 grinderId（補成 ''）
+- 按「匯出」就記下 lastBackupAt（瀏覽器無法確認檔案是否存好；匯入不算備份）
+- 備份提醒：有紀錄，且距上次備份（沒備份過則從最早一筆紀錄起算）≥ 14 天時，首頁顯示提醒；「立即備份」直接下載，「稍後」3 天內不提醒
 
 ## 開發順序
 - v0.1：db.js + 豆子 CRUD + 紀錄 CRUD + 列表

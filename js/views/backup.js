@@ -1,21 +1,38 @@
-// #/backup JSON 匯出匯入
-import { exportData, exportFileName, importData } from '../models.js';
-import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue } from './ui.js';
+// #/backup JSON 匯出匯入（從右上角 ☰ 選單進入）
+import {
+  exportData, exportFileName, importData, getBackupStatus, recordBackup, formatDaysAgo,
+} from '../models.js';
+import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, downloadJson } from './ui.js';
 
 const IMPORT_MODES = [
   { value: 'merge', label: '合併' },
   { value: 'replace', label: '取代全部' },
 ];
 
+const shortDate = new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric' });
+
+/** 下載備份檔並記下備份時間（首頁的備份提醒也用這個） */
+export async function exportBackup() {
+  downloadJson(exportFileName(), await exportData());
+  await recordBackup();
+}
+
+export function lastBackupText({ lastBackupAt, daysSince }) {
+  return lastBackupAt
+    ? `上次備份：${shortDate.format(new Date(lastBackupAt))}（${formatDaysAgo(daysSince)}）`
+    : '還沒備份過';
+}
+
 export async function render(container, { isCurrent }) {
   setTitle('備份');
-  const { beans, grinders, brews } = await exportData();
+  const [{ beans, grinders, brews }, status] = await Promise.all([exportData(), getBackupStatus()]);
   if (!isCurrent()) return;
 
   container.innerHTML = `
     <section class="section">
       <h2>匯出</h2>
-      <p class="hint">目前有 ${beans.length} 支豆子、${grinders.length} 台磨豆機、${brews.length} 筆紀錄。建議定期匯出，存到雲端硬碟。</p>
+      <p class="last-backup${status.remind ? ' is-overdue' : ''}" id="last-backup">${esc(lastBackupText(status))}</p>
+      <p class="hint">目前有 ${beans.length} 支豆子、${grinders.length} 台磨豆機、${brews.length} 筆紀錄。資料只存在這支手機上，建議定期匯出，存到雲端硬碟。</p>
       <button class="btn btn-primary btn-block" type="button" id="export">匯出 JSON</button>
     </section>
 
@@ -39,14 +56,10 @@ export async function render(container, { isCurrent }) {
   updateHint('mode', 'merge');
 
   container.querySelector('#export').addEventListener('click', async () => {
-    const data = await exportData();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = Object.assign(document.createElement('a'), { href: url, download: exportFileName() });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    await exportBackup();
+    const el = container.querySelector('#last-backup');
+    el.textContent = lastBackupText(await getBackupStatus());
+    el.classList.remove('is-overdue');
     toast('已匯出');
   });
 

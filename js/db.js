@@ -2,7 +2,8 @@
 const DB_NAME = 'coffee-log';
 // v1：beans、brews（索引 beanId、brewedAt）
 // v2：新增 grinders；brews 加 grinderId 索引（只加索引，不改舊紀錄）
-const DB_VERSION = 2;
+// v3：新增 meta（App 自己的設定／狀態，例如上次備份時間；不匯出）
+const DB_VERSION = 3;
 
 let dbPromise = null;
 
@@ -26,6 +27,9 @@ export function openDB() {
       if (!brews.indexNames.contains('grinderId')) brews.createIndex('grinderId', 'grinderId');
       if (!db.objectStoreNames.contains('grinders')) {
         db.createObjectStore('grinders', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('meta')) {
+        db.createObjectStore('meta', { keyPath: 'key' });
       }
     };
     req.onsuccess = () => {
@@ -70,6 +74,10 @@ export const getAllByIndex = (store, index, value) =>
   tx(store, 'readonly', (s) => s.index(index).getAll(value));
 export const countByIndex = (store, index, value) =>
   tx(store, 'readonly', (s) => s.index(index).count(value));
+
+/** meta store：簡單的鍵值存取 */
+export const getMeta = async (key) => (await get('meta', key))?.value ?? null;
+export const setMeta = (key, value) => put('meta', { key, value });
 
 /**
  * 在同一個交易裡寫入多個 store：data = { storeName: [obj, ...] }
