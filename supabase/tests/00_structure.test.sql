@@ -41,6 +41,7 @@ select is(
    join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'private' and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
   array[
+    'private.blocked_with(uuid)',
     'private.can_view(uuid)',
     'private.profile_visible(uuid)',
     'private.single_line(text)',
