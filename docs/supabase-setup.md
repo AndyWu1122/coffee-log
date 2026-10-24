@@ -9,10 +9,14 @@
 
 ---
 
+> **目前的正式專案**：ref `rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），2026-10-24 建立；migration、`delete-account`、前端設定都已完成，Google 登入已實際測試成功
+
 ## 1. 建立 Supabase 專案（你）
 
 1. 到 <https://supabase.com/dashboard> → **New project**
-2. Name：`coffee-log`；Region：**Northeast Asia (Tokyo)**（離台灣最近）
+2. Name：`coffee-log`；Region：**Northeast Asia (Tokyo)**（離台灣最近；Supabase 沒有台灣的機房）
+   - ⚠ 建好後確認專案首頁的 Primary Database 是 `ap-northeast-1`，地區之後不能改
+   - 「Connect GitHub」跳過：migration 用 CLI 手動套用
 3. Database Password：按 **Generate a password**，**存進密碼管理器**（之後套用 migration 要用）
 4. 建好後記下 **Project ref**（網址 `https://supabase.com/dashboard/project/<ref>` 裡的那串）
 
@@ -50,8 +54,10 @@ Supabase 後台 → **Authentication**：
    - 應用程式名稱：`手沖紀錄`；使用者支援電子郵件：你的 Gmail
    - 目標對象：**外部**
    - 聯絡資訊：你的 Gmail → 建立
-3. **品牌（Branding）**
-   - 已授權網域：加入 `<ref>.supabase.co`
+3. **品牌（Branding）**（沒填完整的話，「目標對象」的「發布應用程式」按鈕會是灰的）
+   - 應用程式首頁：`https://andywu1122.github.io/coffee-log/`
+   - 隱私權政策連結：`https://andywu1122.github.io/coffee-log/#/privacy`
+   - 已授權網域：加入 `andywu1122.github.io` 和 `<ref>.supabase.co`
    - **不要上傳標誌**（上傳標誌就要送 Google 審核）
 4. **資料存取（Data Access）**→ 新增範圍：只勾 `openid`、`.../auth/userinfo.email`、`.../auth/userinfo.profile`
 5. **目標對象（Audience）**→ 發布狀態按 **發布應用程式**
@@ -66,6 +72,8 @@ Supabase 後台 → **Authentication**：
    - Enable：開啟
    - 貼上 Client ID、Client Secret → Save
    - Client Secret 只存在這裡和你的密碼管理器，**不要貼到任何其他地方**
+   - ⚠ 登入後回到 App 顯示「登入沒有完成」、而且 Authentication → Users 沒有新使用者：通常是 Client Secret 貼錯。
+     Google 只在建立時顯示一次密鑰，看不到就在用戶端頁按 **Add secret** 新增一組貼上，成功後停用並刪除舊的
 
 ## 5. 前端連到正式專案（Claude）
 
