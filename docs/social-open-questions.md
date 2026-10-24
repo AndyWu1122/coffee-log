@@ -78,7 +78,7 @@
 - **選項**：
   - A. 本機 Supabase（Supabase CLI + Docker），完全離線、可重設
   - B. 另開一個 Supabase 測試專案
-- **建議**：A。正式專案只用來跑正式資料；service_role key 只放在本機 `.env`（已在 .gitignore）
+- **建議**：A。正式專案只用來跑正式資料；service_role key 只放在本機 `.env`，**建立 `.env` 之前先把它加進 .gitignore**（目前還沒加）
 - **待決**：這台電腦能不能裝 Docker Desktop？
 - **決定**：
 
