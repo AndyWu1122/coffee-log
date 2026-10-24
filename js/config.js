@@ -10,8 +10,12 @@ const LOCAL = {
   anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0',
 };
 
-// 正式專案：建立後填入 { url: 'https://<project>.supabase.co', anonKey: '<anon key>' }（步驟見 docs/supabase-setup.md）
-const PRODUCTION = null;
+// 正式專案（Tokyo）：publishable key 和 anon key 一樣是公開的（步驟見 docs/supabase-setup.md）
+// ⚠ 改網址時，index.html 的 CSP（connect-src、img-src）要一起改
+const PRODUCTION = {
+  url: 'https://rygsjrzddhhhdqpoayoa.supabase.co',
+  anonKey: 'sb_publishable_jJfi96HHgNORDl1-IYFsLg_adfwn9ma',
+};
 
 function pick() {
   const { hostname } = location;

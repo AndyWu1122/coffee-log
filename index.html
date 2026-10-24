@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <!-- CSP：只允許自己的網域和 Supabase（js/config.js 的 LOCAL 與 PRODUCTION）；正式專案建立後要把它的網址加進 img-src、connect-src
        style-src-attr：風味標籤的顏色寫在 style 屬性裡（顏色來自 App 自己的風味輪資料） -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' blob: http://127.0.0.1:54321; connect-src 'self' http://127.0.0.1:54321; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' blob: https://rygsjrzddhhhdqpoayoa.supabase.co http://127.0.0.1:54321; connect-src 'self' https://rygsjrzddhhhdqpoayoa.supabase.co http://127.0.0.1:54321; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#2b1d14">
   <meta name="description" content="記錄手沖咖啡沖煮參數與風味">
