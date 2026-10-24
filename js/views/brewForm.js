@@ -1,18 +1,21 @@
 // #/brew/new、#/brew/<id> 新增 / 編輯沖煮紀錄
 import {
-  getBrew, saveBrew, deleteBrew, listBeans, listRecentDrippers,
+  getBrew, saveBrew, deleteBrew, listBeans, listRecentDrippers, latestBrewByBean, brewTemplateFrom,
   ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors } from './ui.js';
 
 const SCORE_OPTIONS = [1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n) }));
+const shortDate = new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric' });
 
 export async function render(container, { id, query, isCurrent }) {
   const isNew = id === null;
-  const [brew, beans, drippers] = await Promise.all([
+  const [brew, beans, drippers, latestByBean, source] = await Promise.all([
     isNew ? null : getBrew(id),
     listBeans({ includeArchived: true }),
     listRecentDrippers(),
+    isNew ? latestBrewByBean() : new Map(),
+    isNew && query.from ? getBrew(query.from) : null,
   ]);
   if (!isCurrent()) return;
 
@@ -35,8 +38,6 @@ export async function render(container, { id, query, isCurrent }) {
   }
   setTitle(isNew ? '新增紀錄' : '編輯紀錄');
 
-  // TODO v0.2：query.from 有值時，複製該筆紀錄的參數當預設值
-  void query;
   const b = brew ?? {
     beanId: beanOptions[0].id,
     brewedAt: new Date().toISOString(),
@@ -44,11 +45,27 @@ export async function render(container, { id, query, isCurrent }) {
     grindSetting: '', coffeeG: '', waterG: '', tempC: '',
     totalTimeS: null, rating: null, flavor: {}, notes: '',
   };
+
+  // #/brew/new?from=<id>：複製該筆紀錄的參數
+  let notice = '';
+  if (isNew && query.from) {
+    if (source) {
+      Object.assign(b, brewTemplateFrom(source));
+      notice = `已帶入 ${shortDate.format(new Date(source.brewedAt))} 的參數`;
+      if (!beanOptions.some((bean) => bean.id === b.beanId)) {
+        b.beanId = beanOptions[0].id;
+        notice += '（原本的豆子已封存，請重新選擇豆子）';
+      }
+    } else {
+      notice = '找不到要複製的紀錄';
+    }
+  }
   const totalMin = b.totalTimeS == null ? '' : Math.floor(b.totalTimeS / 60);
   const totalSec = b.totalTimeS == null ? '' : b.totalTimeS % 60;
 
   container.innerHTML = `
     <form class="form" novalidate>
+      ${notice ? `<div class="notice">${esc(notice)}</div>` : ''}
       <div class="field" data-field="beanId">
         <label for="beanId">豆子 *</label>
         <select id="beanId" name="beanId">
@@ -58,6 +75,7 @@ export async function render(container, { id, query, isCurrent }) {
             </option>`).join('')}
         </select>
         <div class="error"></div>
+        ${isNew ? '<a class="btn btn-block" id="copy-last" hidden>帶入這支豆子上次的參數</a>' : ''}
       </div>
 
       <div class="field" data-field="brewedAt">
@@ -129,7 +147,9 @@ export async function render(container, { id, query, isCurrent }) {
 
       <div class="actions">
         <button class="btn btn-primary btn-block" type="submit">儲存</button>
-        ${isNew ? '' : '<button class="btn btn-danger btn-block" type="button" data-action="delete">刪除這筆紀錄</button>'}
+        ${isNew ? '' : `
+          <a class="btn btn-block" href="#/brew/new?from=${esc(id)}">用這次參數再沖一杯</a>
+          <button class="btn btn-danger btn-block" type="button" data-action="delete">刪除這筆紀錄</button>`}
       </div>
     </form>
   `;
@@ -145,6 +165,18 @@ export async function render(container, { id, query, isCurrent }) {
   };
   f.coffeeG.addEventListener('input', updateRatio);
   f.waterG.addEventListener('input', updateRatio);
+
+  // 「帶入這支豆子上次的參數」：隨選擇的豆子更新；沒紀錄或剛帶入的就是那筆時隱藏
+  const copyLast = form.querySelector('#copy-last');
+  const updateCopyLast = () => {
+    const last = latestByBean.get(f.beanId.value);
+    copyLast.hidden = !last || last.id === query.from;
+    if (last) copyLast.href = `#/brew/new?from=${encodeURIComponent(last.id)}`;
+  };
+  if (copyLast) {
+    f.beanId.addEventListener('change', updateCopyLast);
+    updateCopyLast();
+  }
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();

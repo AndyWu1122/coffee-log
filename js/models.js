@@ -217,6 +217,22 @@ export async function saveBrew(input) {
 
 export const deleteBrew = (id) => db.remove('brews', id);
 
+/** 每支豆子最新一筆紀錄：Map<beanId, brew> */
+export async function latestBrewByBean() {
+  const latest = new Map();
+  for (const brew of await db.getAll('brews')) {
+    const cur = latest.get(brew.beanId);
+    if (!cur || brew.brewedAt > cur.brewedAt) latest.set(brew.beanId, brew);
+  }
+  return latest;
+}
+
+/** 「再沖一杯」要複製的參數；評分、風味、筆記、總時間是每杯的結果，不複製 */
+export function brewTemplateFrom(brew) {
+  const { beanId, dripper, grindSetting, coffeeG, waterG, tempC } = brew;
+  return { beanId, dripper, grindSetting, coffeeG, waterG, tempC };
+}
+
 /** 最近用過的濾杯名稱（不重複），給表單的建議清單 */
 export async function listRecentDrippers(limit = 10) {
   const brews = await db.getAll('brews');

@@ -161,6 +161,14 @@ input:focus, select:focus, textarea:focus {
 .error:empty { display: none; }
 
 .hint { color: var(--text-dim); font-size: 0.85rem; }
+.notice {
+  background: var(--surface-2);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.95rem;
+}
+[hidden] { display: none !important; }
 .ratio-display {
   font-size: 1.4rem;
   font-weight: 600;
