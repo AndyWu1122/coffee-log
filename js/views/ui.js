@@ -59,7 +59,11 @@ export function segmentedValue(root, name) {
 
 /** 把資料存成 JSON 檔下載 */
 export function downloadJson(filename, data) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  downloadBlob(filename, new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+}
+
+/** 下載 Blob 成檔案 */
+export function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
   const a = Object.assign(document.createElement('a'), { href: url, download: filename });
   document.body.append(a);

@@ -20,6 +20,18 @@ const RATING_FILTERS = [
 // 篩選條件在切頁後保留
 const filter = { beanId: '', minRating: '' };
 
+// 卡片縮圖的 objectURL：每次重繪（含切換篩選）與離開頁面時 revoke
+let thumbUrls = [];
+const revokeThumbs = () => {
+  for (const u of thumbUrls) URL.revokeObjectURL(u);
+  thumbUrls = [];
+};
+const thumbUrl = (blob) => {
+  const u = URL.createObjectURL(blob);
+  thumbUrls.push(u);
+  return u;
+};
+
 export async function render(container, { isCurrent }) {
   setTitle('手沖紀錄');
   const [beans, latestByBean, backup] = await Promise.all([
@@ -31,6 +43,7 @@ export async function render(container, { isCurrent }) {
 
   const brews = await listBrews({ beanId: filter.beanId, minRating: Number(filter.minRating) || null });
   if (!isCurrent()) return;
+  revokeThumbs();
 
   if (latestByBean.size === 0) {
     container.innerHTML = beans.length === 0
@@ -97,6 +110,7 @@ export async function render(container, { isCurrent }) {
     toast('3 天後再提醒');
     rerender();
   });
+  return revokeThumbs;
 }
 
 function brewCard(b) {
@@ -111,17 +125,20 @@ function brewCard(b) {
   ].filter(Boolean);
 
   return `
-    <li><a class="card" href="#/brew/${esc(b.id)}">
-      <div class="card-head">
-        <span class="card-title">${esc(b.beanName)}</span>
-        <span class="stars" aria-label="評分 ${b.rating ?? '未評'}">${stars}</span>
+    <li><a class="card${b.thumb ? ' has-thumb' : ''}" href="#/brew/${esc(b.id)}">
+      <div class="card-body">
+        <div class="card-head">
+          <span class="card-title">${esc(b.beanName)}</span>
+          <span class="stars" aria-label="評分 ${b.rating ?? '未評'}">${stars}</span>
+        </div>
+        <div class="card-row">${details.map((d) => `<span>${esc(d)}</span>`).join('')}</div>
+        <div class="card-row">
+          <span>${esc(dateFmt.format(new Date(b.brewedAt)))}</span>
+          ${b.restDays != null ? `<span>養豆 ${b.restDays} 天</span>` : ''}
+        </div>
+        ${noteTags(b.flavorNotes)}
       </div>
-      <div class="card-row">${details.map((d) => `<span>${esc(d)}</span>`).join('')}</div>
-      <div class="card-row">
-        <span>${esc(dateFmt.format(new Date(b.brewedAt)))}</span>
-        ${b.restDays != null ? `<span>養豆 ${b.restDays} 天</span>` : ''}
-      </div>
-      ${noteTags(b.flavorNotes)}
+      ${b.thumb ? `<img class="card-thumb" src="${thumbUrl(b.thumb)}" alt="" loading="lazy" decoding="async">` : ''}
     </a></li>`;
 }
 

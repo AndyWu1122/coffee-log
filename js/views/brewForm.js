@@ -2,6 +2,7 @@
 import {
   getBrew, saveBrew, deleteBrew, listBeans, listRecentDrippers, latestBrewByBean, brewTemplateFrom,
   listGrinders, defaultGrinderId, formatStock, ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
+  getPhoto, preparePhoto,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors } from './ui.js';
 import { createFlavorPicker } from './flavorPicker.js';
@@ -11,8 +12,9 @@ const shortDate = new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'num
 
 export async function render(container, { id, query, isCurrent }) {
   const isNew = id === null;
-  const [brew, beans, grinders, drippers, latestByBean, source, defaultGrinder] = await Promise.all([
+  const [brew, photo, beans, grinders, drippers, latestByBean, source, defaultGrinder] = await Promise.all([
     isNew ? null : getBrew(id),
+    isNew ? null : getPhoto(id),
     listBeans({ includeArchived: true }),
     listGrinders({ includeArchived: true }),
     listRecentDrippers(),
@@ -174,6 +176,13 @@ export async function render(container, { id, query, isCurrent }) {
         <textarea id="notes" name="notes" placeholder="風味、下次想調整的地方…">${esc(b.notes)}</textarea>
       </div>
 
+      <div class="field" data-field="photo">
+        <span class="label">照片</span>
+        <div class="photo-field" id="photo-field"></div>
+        <input type="file" id="photo-input" accept="image/*" hidden>
+        <div class="error"></div>
+      </div>
+
       <div class="actions">
         <button class="btn btn-primary btn-block" type="submit">儲存</button>
         ${isNew ? '' : `
@@ -208,8 +217,73 @@ export async function render(container, { id, query, isCurrent }) {
     updateCopyLast();
   }
 
+  // 照片：選完就壓縮（重新編碼成 JPEG、移除 EXIF）並預覽，按「儲存」才和紀錄一起寫入
+  const urls = new Set(); // 這頁建立的 objectURL，換照片或離開頁面時 revoke
+  const objectUrl = (blob) => { const u = URL.createObjectURL(blob); urls.add(u); return u; };
+  const revoke = (u) => { if (u) { URL.revokeObjectURL(u); urls.delete(u); } };
+  let photoChange;   // undefined 不動；null 移除；preparePhoto 的結果則是新照片
+  let previewUrl = photo ? objectUrl(photo.blob) : null;
+  let photoBusy = false;
+  let photoToken = 0;
+  const photoField = form.querySelector('[data-field="photo"]');
+  const photoBox = form.querySelector('#photo-field');
+  const photoInput = form.querySelector('#photo-input');
+  const setPhotoError = (msg) => {
+    photoField.classList.toggle('invalid', Boolean(msg));
+    photoField.querySelector('.error').textContent = msg;
+  };
+  const renderPhoto = () => {
+    if (photoBusy) {
+      photoBox.innerHTML = '<p class="hint">處理照片中…</p>';
+    } else if (previewUrl) {
+      photoBox.innerHTML = `
+        <img class="photo-preview" src="${previewUrl}" alt="這杯咖啡的照片">
+        <div class="photo-actions">
+          <label class="btn" for="photo-input">換一張</label>
+          <button type="button" class="btn" data-action="remove-photo">移除</button>
+        </div>`;
+    } else {
+      photoBox.innerHTML = '<label class="btn btn-block" for="photo-input">📷 拍照／選照片</label>';
+    }
+  };
+  renderPhoto();
+
+  photoInput.addEventListener('change', async () => {
+    const file = photoInput.files[0];
+    photoInput.value = ''; // 讓同一張照片可以再選一次
+    if (!file) return;
+    const token = ++photoToken;
+    photoBusy = true;
+    setPhotoError('');
+    renderPhoto();
+    try {
+      const prepared = await preparePhoto(file);
+      if (token !== photoToken) return; // 處理期間又選了另一張
+      revoke(previewUrl);
+      photoChange = prepared;
+      previewUrl = objectUrl(prepared.blob);
+    } catch (err) {
+      if (token !== photoToken) return;
+      setPhotoError(err.message);
+    } finally {
+      if (token === photoToken) {
+        photoBusy = false;
+        renderPhoto();
+      }
+    }
+  });
+  photoBox.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-action="remove-photo"]')) return;
+    revoke(previewUrl);
+    previewUrl = null;
+    photoChange = null;
+    setPhotoError('');
+    renderPhoto();
+  });
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (photoBusy) return toast('照片處理中，請稍候');
     const result = await saveBrew({
       id: brew?.id,
       beanId: f.beanId.value,
@@ -225,16 +299,23 @@ export async function render(container, { id, query, isCurrent }) {
       flavor: Object.fromEntries(Object.keys(FLAVOR).map((k) => [k, segmentedValue(form, `flavor.${k}`)])),
       flavorNotes: flavorPicker.value(),
       notes: f.notes.value,
-    });
+    }, { photo: photoChange });
     if (!result.ok) return showErrors(form, result.errors);
     toast('已儲存');
     location.hash = '#/';
   });
 
   form.querySelector('[data-action="delete"]')?.addEventListener('click', async () => {
-    if (!confirm('確定刪除這筆紀錄？')) return;
+    if (!confirm(photo ? '確定刪除這筆紀錄？照片也會一起刪除。' : '確定刪除這筆紀錄？')) return;
     await deleteBrew(id);
     toast('已刪除');
     location.hash = '#/';
   });
+
+  // 離開頁面時釋放照片的 objectURL
+  return () => {
+    photoToken++;
+    for (const u of urls) URL.revokeObjectURL(u);
+    urls.clear();
+  };
 }

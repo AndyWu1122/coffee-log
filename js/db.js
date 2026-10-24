@@ -3,7 +3,8 @@ const DB_NAME = 'coffee-log';
 // v1：beans、brews（索引 beanId、brewedAt）
 // v2：新增 grinders；brews 加 grinderId 索引（只加索引，不改舊紀錄）
 // v3：新增 meta（App 自己的設定／狀態，例如上次備份時間；不匯出）
-const DB_VERSION = 3;
+// v4：新增 photos（每筆紀錄的照片，keyPath brewId）與 thumbs（列表用 300px 縮圖）
+const DB_VERSION = 4;
 
 let dbPromise = null;
 
@@ -30,6 +31,13 @@ export function openDB() {
       }
       if (!db.objectStoreNames.contains('meta')) {
         db.createObjectStore('meta', { keyPath: 'key' });
+      }
+      // 照片跟 brews 分開存，列表讀紀錄時不會載入圖片；縮圖再分開，列表只讀縮圖
+      if (!db.objectStoreNames.contains('photos')) {
+        db.createObjectStore('photos', { keyPath: 'brewId' });
+      }
+      if (!db.objectStoreNames.contains('thumbs')) {
+        db.createObjectStore('thumbs', { keyPath: 'brewId' });
       }
     };
     req.onsuccess = () => {
@@ -67,6 +75,7 @@ async function tx(storeName, mode, fn) {
 }
 
 export const getAll = (store) => tx(store, 'readonly', (s) => s.getAll());
+export const getAllKeys = (store) => tx(store, 'readonly', (s) => s.getAllKeys());
 export const get = (store, id) => tx(store, 'readonly', (s) => s.get(id));
 export const put = (store, obj) => tx(store, 'readwrite', (s) => s.put(obj));
 export const remove = (store, id) => tx(store, 'readwrite', (s) => s.delete(id));
@@ -78,6 +87,21 @@ export const countByIndex = (store, index, value) =>
 /** meta store：簡單的鍵值存取 */
 export const getMeta = async (key) => (await get('meta', key))?.value ?? null;
 export const setMeta = (key, value) => put('meta', { key, value });
+
+/**
+ * 在多個 store 上開一個 readwrite 交易：fn({ storeName: IDBObjectStore }) 裡只能同步發出請求
+ * 等交易完成才 resolve；任何一個請求失敗整個交易回滾
+ */
+export async function transact(storeNames, fn) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(storeNames, 'readwrite');
+    fn(Object.fromEntries(storeNames.map((name) => [name, t.objectStore(name)])));
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error ?? new Error('交易中止'));
+  });
+}
 
 /**
  * 在同一個交易裡寫入多個 store：data = { storeName: [obj, ...] }

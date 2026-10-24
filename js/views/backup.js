@@ -1,6 +1,6 @@
 // #/backup JSON 匯出匯入（從右上角 ☰ 選單進入）
 import {
-  exportData, exportFileName, importData, getBackupStatus, recordBackup, formatDaysAgo,
+  exportData, exportFileName, importData, getBackupStatus, getBackupSummary, recordBackup, formatDaysAgo, formatBytes,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, downloadJson } from './ui.js';
 
@@ -11,9 +11,9 @@ const IMPORT_MODES = [
 
 const shortDate = new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric' });
 
-/** 下載備份檔並記下備份時間（首頁的備份提醒也用這個） */
-export async function exportBackup() {
-  downloadJson(exportFileName(), await exportData());
+/** 下載備份檔並記下備份時間（首頁的備份提醒也用這個，預設包含照片） */
+export async function exportBackup({ includePhotos = true } = {}) {
+  downloadJson(exportFileName(), await exportData({ includePhotos }));
   await recordBackup();
 }
 
@@ -25,14 +25,16 @@ export function lastBackupText({ lastBackupAt, daysSince }) {
 
 export async function render(container, { isCurrent }) {
   setTitle('備份');
-  const [{ beans, grinders, brews }, status] = await Promise.all([exportData(), getBackupStatus()]);
+  const [summary, status] = await Promise.all([getBackupSummary(), getBackupStatus()]);
   if (!isCurrent()) return;
 
   container.innerHTML = `
     <section class="section">
       <h2>匯出</h2>
       <p class="last-backup${status.remind ? ' is-overdue' : ''}" id="last-backup">${esc(lastBackupText(status))}</p>
-      <p class="hint">目前有 ${beans.length} 支豆子、${grinders.length} 台磨豆機、${brews.length} 筆紀錄。資料只存在這支手機上，建議定期匯出，存到雲端硬碟。</p>
+      <p class="hint">目前有 ${summary.beans} 支豆子、${summary.grinders} 台磨豆機、${summary.brews} 筆紀錄、${summary.photos} 張照片。資料只存在這支手機上，建議定期匯出，存到雲端硬碟。</p>
+      <label class="toggle"><input type="checkbox" id="include-photos" checked>包含照片</label>
+      <p class="hint" id="export-size"></p>
       <button class="btn btn-primary btn-block" type="button" id="export">匯出 JSON</button>
     </section>
 
@@ -46,17 +48,32 @@ export async function render(container, { isCurrent }) {
     </section>
   `;
 
+  const includePhotos = container.querySelector('#include-photos');
+  const sizeEl = container.querySelector('#export-size');
+  const updateSize = () => {
+    const bytes = includePhotos.checked ? summary.sizeWithPhotos : summary.sizeWithoutPhotos;
+    sizeEl.textContent = `預估檔案大小：${formatBytes(bytes)}${includePhotos.checked ? '' : '（不含照片）'}`;
+  };
+  includePhotos.addEventListener('change', updateSize);
+  updateSize();
+
   const modeHint = container.querySelector('#mode-hint');
   const updateHint = (_, mode) => {
     modeHint.textContent = mode === 'replace'
-      ? '先清空現有的所有資料，再匯入檔案內容。'
+      ? '先清空現有的所有資料（含照片），再匯入檔案內容。'
       : '保留現有資料；檔案中相同 id 的資料會覆蓋現有的。';
   };
   bindSegmented(container, updateHint);
   updateHint('mode', 'merge');
 
-  container.querySelector('#export').addEventListener('click', async () => {
-    await exportBackup();
+  const exportBtn = container.querySelector('#export');
+  exportBtn.addEventListener('click', async () => {
+    exportBtn.disabled = true; // 照片多時轉 base64 需要一點時間，避免重複按
+    try {
+      await exportBackup({ includePhotos: includePhotos.checked });
+    } finally {
+      exportBtn.disabled = false;
+    }
     const el = container.querySelector('#last-backup');
     el.textContent = lastBackupText(await getBackupStatus());
     el.classList.remove('is-overdue');
@@ -72,12 +89,16 @@ export async function render(container, { isCurrent }) {
 
     const replace = segmentedValue(container, 'mode') === 'replace';
     if (replace) {
-      const current = await exportData();
-      const ok = confirm(`將刪除現有的 ${current.beans.length} 支豆子、${current.grinders.length} 台磨豆機、${current.brews.length} 筆紀錄，改用備份檔內容。確定？`);
+      const current = await getBackupSummary();
+      const ok = confirm(`將刪除現有的 ${current.beans} 支豆子、${current.grinders} 台磨豆機、${current.brews} 筆紀錄、${current.photos} 張照片，改用備份檔內容。確定？`);
       if (!ok) return;
     }
 
-    const result = await importData(await file.text(), { replace });
+    resultEl.innerHTML = '<p class="hint">讀取備份檔中…</p>';
+    const result = await importData(await file.text(), {
+      replace,
+      onProgress: (n, total) => { resultEl.innerHTML = `<p class="hint">處理照片中… ${n}／${total}</p>`; },
+    });
     if (!result.ok) {
       resultEl.innerHTML = `
         <div class="notice notice-error">
@@ -86,7 +107,7 @@ export async function render(container, { isCurrent }) {
         </div>`;
       return;
     }
-    toast(`已匯入 ${result.beans} 支豆子、${result.grinders} 台磨豆機、${result.brews} 筆紀錄`);
+    toast(`已匯入 ${result.beans} 支豆子、${result.grinders} 台磨豆機、${result.brews} 筆紀錄、${result.photos} 張照片`);
     location.hash = '#/';
   });
 }
