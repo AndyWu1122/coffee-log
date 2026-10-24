@@ -7,14 +7,18 @@
 // 本機（supabase start）不讀任何設定，一律寄到測試腳本開的假 Resend（scripts/social-feedback-test.mjs，port 54399）
 // ⚠ 不要用 config.toml 的 [edge_runtime.secrets]：`supabase secrets set` 會把它一起上傳到正式專案
 // 不用 supabase-js：直接呼叫 REST API，沒有第三方相依
+//
+// 沒寄出信時，function log（Supabase 後台 → Edge Functions → feedback → Logs）一定有一行 [feedback] 說明原因（不含金鑰）
+import { mailConfig, describeResendError, describeNetworkError } from './mail.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 // 正式專案的網址是 https://<ref>.supabase.co；本機是 http://kong:8000 之類
 const LOCAL = !new URL(SUPABASE_URL).hostname.endsWith('.supabase.co');
 const RESEND_API_URL = LOCAL ? 'http://host.docker.internal:54399/emails' : 'https://api.resend.com/emails';
-const RESEND_API_KEY = LOCAL ? 'local-test-key' : Deno.env.get('RESEND_API_KEY') ?? '';
-const FEEDBACK_TO = LOCAL ? 'developer@test.local' : Deno.env.get('FEEDBACK_TO') ?? '';
+const MAIL = LOCAL
+  ? mailConfig({ apiKey: 'local-test-key', to: 'developer@test.local', local: true })
+  : mailConfig({ apiKey: Deno.env.get('RESEND_API_KEY'), to: Deno.env.get('FEEDBACK_TO') });
 // Resend 免費方案不用自己的網域：從 onboarding@resend.dev 只能寄給註冊 Resend 的那個 email（就是站長自己）
 const FROM = '手沖紀錄 <onboarding@resend.dev>';
 
@@ -67,7 +71,10 @@ const subjectLine = (s: string) => {
 
 /** 寄 Email 給站長（純文字，不用 HTML：回饋內容不會被當成 HTML）；回傳有沒有寄出 */
 async function notify(f: { category: string; message: string; appVersion: number | null }, userId: string, nickname: string) {
-  if (!RESEND_API_KEY || !FEEDBACK_TO) return false;
+  if (!MAIL.ok) {
+    console.error(`[feedback] 沒有寄信：${MAIL.reason}`);
+    return false;
+  }
   const text = [
     `類型：${CATEGORIES[f.category]}`,
     `暱稱：${nickname || '（不明）'}`,
@@ -83,18 +90,25 @@ async function notify(f: { category: string; message: string; appVersion: number
   try {
     const res = await fetch(RESEND_API_URL, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${MAIL.apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         from: FROM,
-        to: [FEEDBACK_TO],
+        to: [MAIL.to],
         subject: `[手沖紀錄] ${CATEGORIES[f.category]}：${subjectLine(f.message)}`,
         text,
       }),
     });
-    if (!res.ok) console.error('feedback email failed', res.status, await res.text());
-    return res.ok;
+    const body = await res.text();
+    if (!res.ok) {
+      console.error(`[feedback] 沒有寄信：${describeResendError(res.status, body, MAIL.apiKey)}`);
+      return false;
+    }
+    // Resend 後台 → Emails 可以用這個 id 查寄送狀態（送達、退信、被當垃圾信）
+    const id = (() => { try { return JSON.parse(body)?.id; } catch { return null; } })();
+    console.log(`[feedback] 已交給 Resend 寄出（id ${id ?? '不明'}，收件人 ${MAIL.to}）`);
+    return true;
   } catch (err) {
-    console.error('feedback email failed', err);
+    console.error(`[feedback] 沒有寄信：${describeNetworkError(err, MAIL.apiKey)}`);
     return false;
   }
 }

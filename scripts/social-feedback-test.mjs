@@ -1,11 +1,12 @@
 // 意見回饋的端對端測試：☰ →「意見回饋」→ Edge Function feedback → 存進 feedback 表 → 寄 Email 給站長
 // 寄信：本機的 Edge Function 一律把 Email 寄到這支測試開的假 Resend 伺服器（port 54399，寫在 supabase/functions/feedback/index.ts），
-// 確認收件人、寄件人、主旨、內容；假伺服器回錯誤時回饋照樣存下來
+// 確認收件人、寄件人、主旨、內容；假伺服器回錯誤時回饋照樣存下來，function log（docker logs）寫出看得懂的原因、不含金鑰
 // 也確認：沒登入看不到表單、Edge Function 的權限、每天 5 則、誰都讀不到回饋、XSS 字串原樣保存、隱私說明
 //
 // 用法：先 npx supabase@2.120.0 start，再 node scripts/social-feedback-test.mjs
 
 import { createServer } from 'node:http';
+import { execSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -21,25 +22,33 @@ const feedbackFn = (token, body, method = 'POST') => call('/functions/v1/feedbac
   method, body, headers: token ? { Authorization: `Bearer ${token}` } : {},
 });
 
-/** 假的 Resend：記下收到的請求；failNext 為 true 時回 500 */
-const mail = { received: [], failNext: false };
+/** 假的 Resend：記下收到的請求；failNext 設成 { status, body } 時下一封回那個錯誤 */
+const mail = { received: [], failNext: null };
 const mock = createServer((req, res) => {
   let body = '';
   req.on('data', (c) => { body += c; });
   req.on('end', () => {
     const fail = mail.failNext;
-    mail.failNext = false;
+    mail.failNext = null;
     mail.received.push({ path: req.url, auth: req.headers.authorization, body: JSON.parse(body || 'null') });
-    res.writeHead(fail ? 500 : 200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(fail ? { message: 'mock failure' } : { id: 'mock-email' }));
+    res.writeHead(fail?.status ?? 200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(fail?.body ?? { id: 'mock-email' }));
   });
 });
+
+/** 本機 Edge Function 從 since 之後的 log（console.log／error 都在 docker logs 裡） */
+const EDGE_CONTAINER = 'supabase_edge_runtime_coffee-log';
+const functionLogs = async (since) => {
+  await sleep(1000); // log 寫出有一點延遲
+  return execSync(`docker logs --since ${since} ${EDGE_CONTAINER} 2>&1`, { encoding: 'utf8' });
+};
 
 let server;
 let chrome;
 
 try {
   await new Promise((resolve) => mock.listen(MOCK_PORT, '0.0.0.0', resolve));
+  const logSince = new Date(Date.now() - 2000).toISOString();
   const swVersion = Number((await readFile(path.join(root, 'sw.js'), 'utf8')).match(/const CACHE_VERSION = (\d+);/)[1]);
 
   /* ===== Edge Function：權限 ===== */
@@ -111,13 +120,31 @@ try {
   check('跨帳號：B 讀不到 A 的回饋', bRead.status >= 400 || rows(bRead)?.length === 0, `HTTP ${bRead.status}`);
 
   /* ===== 寄信失敗：回饋照樣存下來 ===== */
-  mail.failNext = true;
+  mail.failNext = { status: 500, body: { message: 'mock failure' } };
   const bSend = await feedbackFn(B.token, { category: 'idea', message: '想要統計頁', appVersion: 3 });
   check('寄信失敗時仍回傳成功（notified: false）', bSend.status === 200 && bSend.json?.notified === false, bSend.text);
   check('寄信失敗時回饋照樣存下來', (await adminRows(`feedback?author=eq.${B.id}`)).length === 1);
 
+  /* ===== function log：寄信的結果看得懂、不含金鑰 ===== */
+  // Resend 免費方案收件人不是註冊的 email 時，回的就是這個（正式環境最常見的原因）
+  mail.failNext = {
+    status: 403,
+    body: {
+      statusCode: 403, name: 'validation_error',
+      message: 'You can only send testing emails to your own email address (owner@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains, and change the `from` address to an email using this domain.',
+    },
+  };
+  const ownOnly = await feedbackFn(B.token, { category: 'other', message: '第 2 則' });
+  check('Resend 回 403 時仍回傳成功（notified: false）', ownOnly.status === 200 && ownOnly.json?.notified === false, ownOnly.text);
+  const logs = await functionLogs(logSince);
+  check('log：寄出成功時記下 Resend 的 email id', logs.includes('[feedback] 已交給 Resend 寄出（id mock-email'));
+  check('log：Resend 500 有狀態碼與原文', /\[feedback\] 沒有寄信：Resend 回傳 500.*mock failure/.test(logs));
+  check('log：Resend 403（只能寄給自己）說明 FEEDBACK_TO 要和 Resend 帳號 email 一樣',
+    logs.includes('[feedback] 沒有寄信：Resend 回傳 403（validation_error）') && logs.includes('一字不差'));
+  check('log 不含 API key', !logs.includes('local-test-key'));
+
   /* ===== 每天 5 則 ===== */
-  for (let i = 2; i <= 5; i++) await feedbackFn(B.token, { category: 'other', message: `第 ${i} 則` });
+  for (let i = 3; i <= 5; i++) await feedbackFn(B.token, { category: 'other', message: `第 ${i} 則` });
   const sixth = await feedbackFn(B.token, { category: 'other', message: '第 6 則' });
   check('第 6 則被擋下：rate_limited', sixth.status === 429 && sixth.json?.error === 'rate_limited', sixth.text);
   check('B 存下 5 則', (await adminRows(`feedback?author=eq.${B.id}`)).length === 5);
