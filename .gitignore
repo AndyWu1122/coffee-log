@@ -2,3 +2,6 @@
 Thumbs.db
 .vscode/
 *.log
+# 金鑰（service_role key 絕對不能進 repo）
+.env
+.env.*

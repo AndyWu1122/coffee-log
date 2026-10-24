@@ -26,6 +26,9 @@ js/image.js        # 照片處理：解碼、縮小、重新編碼 JPEG、base64
 js/cardLayout.js   # 分享卡片的純計算：cover 裁切、雷達圖座標、文字換行（含避頭）、檔名；由 models.js 轉出給 views
 js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, ui（共用 DOM 工具）
 icons/
+docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）
+supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）
+scripts/           # supabase-api-test.mjs（從 API 層測權限，只連本機）
 ```
 
 ## 分層規則
@@ -105,3 +108,34 @@ views → models → db，每層只呼叫下一層。views 不可直接碰 Index
 - 每次選項改變就先 `toBlob` 成 PNG（iOS Safari 的 `navigator.share` 必須在點擊當下呼叫）；`navigator.canShare({ files })` 不支援就改下載
 - 檔名 `coffee-<豆子名稱>-<YYYY-MM-DD>.png`，名稱只留文字、數字、`_`、`-`
 - 不上傳任何資料，離線可用
+
+## 咖啡社群（後端：Supabase）
+規格見 `docs/social-spec.md`（分 5 階段，每階段通過測試、使用者確認後才進下一階段）；待決事項與決定見 `docs/social-open-questions.md`。
+目前完成：階段 1（資料庫與權限）。前端還沒有任何社群功能，也還沒有正式的 Supabase 專案。
+
+### 資安規則（每個階段都必須遵守）
+- 每張表和 Storage bucket 都必須開 RLS，預設拒絕
+- 判斷身分一律用 `auth.uid()`，不信任前端傳來的 user_id
+- service_role key 不可出現在前端或 repo（`.env` 已在 .gitignore）
+- 他人內容一律跳脫後才顯示（`esc()` 或 `textContent`）
+- 照片一律在前端重新編碼並移除 EXIF 才上傳
+- 修改權限時必須同時新增「跨帳號存取必須失敗」的測試
+- anon key 是公開的，任何人都能繞過 App 直接打 API：所有限制（長度、範圍、次數）都要在資料庫強制
+- 不從 API 公開的函式與表放 `private` schema；新函式預設不給執行權限，需要的才在 migration 最後統一 grant
+- security definer 函式一律 `set search_path = ''`，名稱寫完整 schema
+- 判斷函式只回答「目前登入的人」與某人的關係，不接受任意兩個 id
+- 「不是好友」和「被封鎖」對被封鎖者要看起來一樣，不透露封鎖
+
+### 資料表（階段 1）
+profiles、friendships、blocks、shared_brews、likes、reports（public，API 公開、RLS 保護）；rate_events（private，每日／每小時上限的計數）
+- 加好友只能透過 `send_friend_request(code)`，不能直接新增 friendships；沒有「搜尋所有使用者」
+- shared_brews 主鍵 `(owner, id)`，id 沿用本機紀錄 id；雲端只放 friends 紀錄，所以不存可見度
+- 上限：每天 20 個好友邀請、30 筆上傳、10 次檢舉（台灣時間日曆日，只算新增，刪掉不還）；每小時打錯代碼 10 次
+
+### 本機開發（不連正式專案）
+- 需要 Docker Desktop 執行中；CLI 用 `npx supabase@2.120.0`（固定版本，不全域安裝）
+- `npx supabase@2.120.0 start`／`stop`；`db reset` 重建資料庫並套用所有 migration
+- `npx supabase@2.120.0 test db`：跑 `supabase/tests/` 的 pgTAP 測試（每個檔案在交易中執行，結束 rollback）
+- `node scripts/supabase-api-test.mjs`：用真的 JWT 從 API 層測權限；金鑰執行時從 `supabase status` 讀，只允許連本機
+- 本機 Studio：http://127.0.0.1:54323
+- migration 已套用到正式專案後就不能改，要改權限請新增一個 migration
