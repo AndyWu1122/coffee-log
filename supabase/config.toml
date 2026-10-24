@@ -375,8 +375,8 @@ authorization_url_path = "/oauth/consent"
 allow_dynamic_registration = false
 
 [edge_runtime]
-# 階段 5（刪除帳號）才需要 Edge Function
-enabled = false
+# 刪除帳號（supabase/functions/delete-account）用
+enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
 # `per_worker` (default) — enables hot reload during local development.
 # `oneshot` — fallback mode if hot reload causes issues (e.g. in large repos or with symlinks).
@@ -388,6 +388,10 @@ deno_version = 2
 
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
+
+# 刪除我的帳號：閘道先驗證 JWT，函式裡再向 Auth 確認呼叫者是誰，只刪呼叫者自己
+[functions.delete-account]
+verify_jwt = true
 
 [analytics]
 enabled = false

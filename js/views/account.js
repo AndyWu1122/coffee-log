@@ -1,8 +1,8 @@
-// #/account 帳號（從右上角 ☰ 選單進入）：Google 登入、暱稱、頭像、好友代碼與 QR code、登出
+// #/account 帳號（從右上角 ☰ 選單進入）：Google 登入、暱稱、頭像、好友代碼與 QR code、登出、刪除帳號
 import {
   getSocialState, socialErrorMessage, signInWithGoogle, signOut, isInAppBrowser,
   createProfile, updateNickname, prepareAvatar, saveAvatar, removeAvatar, PHOTO_ACCEPT,
-  formatFriendCode, friendInviteUrl, qrSvg, regenerateFriendCode,
+  formatFriendCode, friendInviteUrl, qrSvg, regenerateFriendCode, deleteAccount,
 } from '../models.js';
 import { esc, setTitle, toast, showErrors, avatarHtml, showMessage, copyText } from './ui.js';
 
@@ -40,6 +40,7 @@ function renderSignedOut(container) {
         <li>Google 帳號的 email 只用來登入，其他使用者看不到</li>
         <li>不登入也能照常使用，紀錄都存在這支手機</li>
       </ul>
+      <a href="#/privacy">隱私說明：收集什麼、誰看得到、怎麼刪除</a>
       ${inApp ? `<div class="notice notice-error">LINE、Facebook 等 App 內建的瀏覽器無法用 Google 登入，
         請用 Safari 或 Chrome 開啟這個網址。</div>` : ''}
       <button type="button" class="btn btn-primary btn-block" data-action="google">用 Google 登入</button>
@@ -136,6 +137,26 @@ function renderReady(container, { user, profile }, { isCurrent, rerender }) {
     <section class="section account-signout">
       <p class="hint">登出只影響社群功能，這支手機上的沖煮紀錄不會刪除。</p>
       <button type="button" class="btn btn-block" data-action="signout">登出</button>
+      <a href="#/privacy">隱私說明</a>
+    </section>
+
+    <section class="section">
+      <button type="button" class="btn btn-danger btn-block" data-action="show-delete">刪除我的帳號</button>
+      <form class="form danger-zone" id="delete-form" novalidate hidden>
+        <h2>刪除我的帳號</h2>
+        <ul class="plain-list">
+          <li>雲端的暱稱、頭像、分享給好友的紀錄和照片、讚、好友關係會<strong>立即全部刪除，無法復原</strong></li>
+          <li>這支手機上的沖煮紀錄會保留；分享給好友的紀錄會改回「只有我」</li>
+          <li>之後可以用同一個 Google 帳號重新註冊，但好友要重新加</li>
+        </ul>
+        <p class="hint">刪除前建議先 <a href="#/backup">匯出備份</a>。</p>
+        <div class="field" data-field="confirm">
+          <label for="delete-confirm">請輸入你的暱稱「${esc(profile.nickname)}」確認</label>
+          <input id="delete-confirm" name="confirm" autocomplete="off">
+          <div class="error"></div>
+        </div>
+        <button class="btn btn-danger btn-block" type="submit">永久刪除帳號</button>
+      </form>
     </section>`;
 
   const code = profile.friendCode;
@@ -213,6 +234,33 @@ function renderReady(container, { user, profile }, { isCurrent, rerender }) {
   });
 
   bindSignOut(container, rerender);
+
+  // 刪除帳號：展開說明，輸入暱稱確認後立即刪除
+  const deleteForm = container.querySelector('#delete-form');
+  container.querySelector('[data-action="show-delete"]').addEventListener('click', (e) => {
+    e.currentTarget.hidden = true;
+    deleteForm.hidden = false;
+    deleteForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  deleteForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (deleteForm.confirm.value.trim() !== profile.nickname) {
+      return showErrors(deleteForm, { confirm: '輸入的暱稱不一致' });
+    }
+    showErrors(deleteForm, {});
+    const submit = deleteForm.querySelector('[type="submit"]');
+    submit.disabled = true;
+    submit.textContent = '刪除中…';
+    try {
+      await deleteAccount();
+      toast('帳號已刪除');
+      rerender();
+    } catch (err) {
+      toast(socialErrorMessage(err));
+      submit.disabled = false;
+      submit.textContent = '永久刪除帳號';
+    }
+  });
 }
 
 function bindSignOut(container, rerender) {

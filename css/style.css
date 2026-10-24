@@ -609,3 +609,11 @@ a.feed-body:active { background: var(--surface-2); }
 .detail-text { margin: 0; overflow-wrap: anywhere; }
 .detail-notes { white-space: pre-wrap; }
 .feed + .section { margin-top: 24px; }
+
+/* ===== 安全與隱私：檢舉、封鎖、刪除帳號、隱私說明 ===== */
+.safety { margin-top: 32px; }
+.danger-zone { border: 1px solid var(--danger); border-radius: var(--radius); padding: 16px; }
+.danger-zone h2 { margin: 0; font-size: 1.1rem; color: var(--danger); }
+.danger-zone .plain-list { gap: 8px; }
+.privacy .section ul { gap: 8px; }
+.privacy p { margin: 0; }

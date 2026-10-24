@@ -282,3 +282,24 @@ export const listProfiles = (ids) => run(async (sb) => {
   if (!unique.length) return [];
   return unwrap(await sb.from('profiles').select('id, nickname, avatar_path').in('id', unique));
 });
+
+/* ===== 檢舉、刪除帳號 ===== */
+
+/** 檢舉一筆看得到的紀錄（reporter 由資料庫用 auth.uid() 決定；每天 10 次的上限由 trigger 檢查） */
+export const insertReport = ({ owner, id, reason, detail }) => run(async (sb) => {
+  unwrap(await sb.from('reports').insert({ brew_owner: uuid(owner), brew_id: uuid(id), reason, detail }));
+});
+
+/**
+ * 刪除自己的帳號（Edge Function delete-account：刪照片、頭像與 auth 使用者，資料表跟著刪除）
+ * 成功後清掉這台裝置的登入狀態
+ */
+export const deleteAccount = () => run(async (sb) => {
+  const { data, error } = await sb.functions.invoke('delete-account', { method: 'POST' });
+  if (error) {
+    if (error.name === 'FunctionsFetchError' || isNetworkError(error)) throw new CloudError('連不上伺服器，請確認網路連線', 'network');
+    throw new CloudError('刪除帳號失敗，請稍後再試', String(error.context?.status ?? 'function'));
+  }
+  if (!data?.deleted) throw new CloudError('刪除帳號失敗，請稍後再試', 'function');
+  await sb.auth.signOut({ scope: 'local' });
+});

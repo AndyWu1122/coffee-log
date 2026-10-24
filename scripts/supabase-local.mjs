@@ -108,7 +108,8 @@ export async function setupUsers(names, friends = []) {
     if (r.status !== 201) throw new Error(`${name} 建立 profile 失敗：${r.text}`);
   }
   for (const [x, y] of friends) {
-    const code = rows(await rest('profiles?select=friend_code', { token: users[x].token }))[0].friend_code;
+    // x 已經有好友時看得到好友的 profile，要指定 id 才拿得到自己的代碼
+    const code = rows(await rest(`profiles?select=friend_code&id=eq.${users[x].id}`, { token: users[x].token }))[0].friend_code;
     if ((await rpc('send_friend_request', { code }, users[y].token)).json !== 'sent') throw new Error(`${y} 邀請 ${x} 失敗`);
     const r = await rest(`friendships?requester=eq.${users[y].id}`, {
       method: 'PATCH', token: users[x].token, body: { status: 'accepted' }, headers: representation,

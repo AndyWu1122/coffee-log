@@ -16,6 +16,7 @@ const routes = [
   { pattern: /^\/feed\/([\w-]+)\/([\w-]+)$/, tab: 'feed', load: () => import('./views/feedDetail.js') },
   // ☰ 選單裡的頁面：不屬於任何底部分頁（tab: null）
   { pattern: /^\/backup$/, tab: null, load: () => import('./views/backup.js') },
+  { pattern: /^\/privacy$/, tab: null, load: () => import('./views/privacy.js') },
   { pattern: /^\/grinders$/, tab: null, load: () => import('./views/grinderList.js') },
   { pattern: /^\/grinders\/new$/, tab: null, load: () => import('./views/grinderForm.js') },
   { pattern: /^\/grinders\/([\w-]+)$/, tab: null, load: () => import('./views/grinderForm.js') },

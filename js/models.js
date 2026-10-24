@@ -1034,3 +1034,36 @@ export async function getFeedBrew(myId, owner, id) {
 
 /** 按讚／收回讚 */
 export const setLike = (myId, owner, id, liked) => (liked ? cloud.like(owner, id) : cloud.unlike(myId, owner, id));
+
+/* ----- 檢舉、刪除帳號 ----- */
+
+export const REPORT_REASONS = { spam: '垃圾訊息或廣告', inappropriate: '不當內容', harassment: '騷擾或霸凌', other: '其他' };
+export const REPORT_DETAIL_MAX = 300;
+
+/**
+ * 檢舉好友的一筆紀錄（只有站長在 Supabase 後台看得到，對方不會知道）；回傳 { ok, errors }
+ * 每天最多 10 次（資料庫強制）
+ */
+export async function reportBrew(owner, id, { reason, detail = '' }) {
+  const errors = {};
+  if (!Object.hasOwn(REPORT_REASONS, reason ?? '')) errors.reason = '請選擇原因';
+  const text = String(detail).trim();
+  if (charLength(text) > REPORT_DETAIL_MAX) errors.detail = `說明最多 ${REPORT_DETAIL_MAX} 字`;
+  if (Object.keys(errors).length) return { ok: false, errors };
+  await cloud.insertReport({ owner, id, reason, detail: text });
+  return { ok: true };
+}
+
+/**
+ * 刪除我的帳號：雲端的 profile、分享的紀錄、照片、頭像、讚、好友關係全部刪除，立即生效
+ * 本機資料保留；分享給好友的紀錄全部改回「只有我」（之後用新帳號登入也不會自動上傳），清掉同步狀態
+ */
+export async function deleteAccount() {
+  await cloud.deleteAccount();
+  const shared = (await db.getAll('brews')).filter((b) => b.visibility === 'friends');
+  await db.transact(['brews', 'sync'], (s) => {
+    for (const b of shared) s.brews.put({ ...b, visibility: 'private' });
+    s.sync.clear();
+  });
+  return { privatized: shared.length };
+}

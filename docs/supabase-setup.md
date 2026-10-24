@@ -76,7 +76,17 @@ Supabase 後台 → **Project Settings → API Keys**，把這兩個值告訴 Cl
 
 Claude 會：
 1. 填進 `js/config.js` 的 `PRODUCTION`
-2. `sw.js` 的 `CACHE_VERSION` +1、commit、push（push 到 main 就會部署）
+2. 把 Project URL 加進 `index.html` CSP 的 `connect-src`、`img-src`（不加的話 App 連不到 Supabase）
+3. `sw.js` 的 `CACHE_VERSION` +1、commit、push（push 到 main 就會部署）
+
+## 5-1. 部署「刪除帳號」的 Edge Function（你，或讓 Claude 在你登入後執行）
+
+```sh
+npx supabase@2.120.0 functions deploy delete-account   # 需要先完成第 2 步的 login、link
+```
+
+- 函式用到的 service_role key 由 Supabase 自動提供，**不用、也不要**自己設定任何金鑰
+- Supabase 後台 → Edge Functions → delete-account：確認 **Verify JWT** 是開著的
 
 ## 6. 實際登入一次（你）
 
@@ -90,4 +100,5 @@ Claude 會：
 - [ ] Storage：`brew-photos`、`avatars` 都是 Private
 - [ ] Authentication → Providers：只有 Google 開著，Email 關閉
 - [ ] Project Settings → Data API → Exposed schemas：只有 `public`、`graphql_public`（**不能有 `private`**）
+- [ ] Edge Functions：`delete-account` 已部署，Verify JWT 開著
 - [ ] repo 裡沒有 secret／service_role key、資料庫密碼、Google Client Secret

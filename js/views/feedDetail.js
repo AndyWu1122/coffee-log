@@ -1,7 +1,10 @@
-// #/feed/<owner>/<id> 好友紀錄的詳細內容：完整參數、風味、筆記、照片、按讚的人
+// #/feed/<owner>/<id> 好友紀錄的詳細內容：完整參數、風味、筆記、照片、按讚的人；檢舉這筆紀錄、封鎖對方
 // 這頁的內容全部來自他人：文字、網址一律經過 esc() 才放進 innerHTML
-import { getSocialState, socialErrorMessage, getFeedBrew, FLAVOR, flavorNote, formatSeconds } from '../models.js';
-import { esc, setTitle, showMessage } from './ui.js';
+import {
+  getSocialState, socialErrorMessage, getFeedBrew, FLAVOR, flavorNote, formatSeconds,
+  REPORT_REASONS, REPORT_DETAIL_MAX, reportBrew, blockUser,
+} from '../models.js';
+import { esc, setTitle, toast, showMessage, showErrors, segmentedHtml, bindSegmented, segmentedValue } from './ui.js';
 import { feedCardHtml, bindLikes } from './feed.js';
 
 export async function render(container, { params: [owner, id], isCurrent }) {
@@ -68,7 +71,69 @@ export async function render(container, { params: [owner, id], isCurrent }) {
         </ul>
       </section>` : ''}
     ${item.notes ? `<section class="section"><h2>筆記</h2><p class="detail-text detail-notes">${esc(item.notes)}</p></section>` : ''}
-    <a class="btn btn-block" href="#/feed">回好友動態</a>`;
+    <a class="btn btn-block" href="#/feed">回好友動態</a>
+
+    <section class="section safety">
+      <div class="photo-actions">
+        <button type="button" class="btn" data-action="report">檢舉</button>
+        <button type="button" class="btn btn-danger" data-action="block">封鎖</button>
+      </div>
+      <form class="form" id="report-form" novalidate hidden>
+        <p class="hint">檢舉只有站長看得到，對方不會知道是誰檢舉的。</p>
+        <div class="field" data-field="reason">
+          <span class="label">原因</span>
+          ${segmentedHtml('reason', REASON_OPTIONS, '', { wrap: true })}
+          <div class="error"></div>
+        </div>
+        <div class="field" data-field="detail">
+          <label for="report-detail">說明（選填）</label>
+          <textarea id="report-detail" name="detail" maxlength="${REPORT_DETAIL_MAX}" placeholder="最多 ${REPORT_DETAIL_MAX} 字"></textarea>
+          <div class="error"></div>
+        </div>
+        <button class="btn btn-primary btn-block" type="submit">送出檢舉</button>
+      </form>
+    </section>`;
 
   bindLikes(container, state.user.id, new Map([[`${item.owner}/${item.id}`, item]]));
+
+  // 檢舉：按「檢舉」才展開表單
+  const form = container.querySelector('#report-form');
+  bindSegmented(form);
+  container.querySelector('[data-action="report"]').addEventListener('click', () => {
+    form.hidden = !form.hidden;
+    if (!form.hidden) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const submit = form.querySelector('[type="submit"]');
+    submit.disabled = true;
+    try {
+      const result = await reportBrew(item.owner, item.id, { reason: segmentedValue(form, 'reason'), detail: form.detail.value });
+      if (!result.ok) return showErrors(form, result.errors);
+      form.hidden = true;
+      form.reset();
+      const reasons = form.querySelector('.segmented[data-name="reason"]');
+      reasons.dataset.value = '';
+      for (const b of reasons.querySelectorAll('button')) b.setAttribute('aria-pressed', 'false');
+      toast('已送出檢舉，謝謝你');
+    } catch (err) {
+      toast(err?.code === 'P0001' ? '今天的檢舉次數已達上限，明天再試' : socialErrorMessage(err));
+    } finally {
+      submit.disabled = false;
+    }
+  });
+
+  // 封鎖：同時解除好友，對方看不到你的任何東西，也不會知道被封鎖
+  container.querySelector('[data-action="block"]').addEventListener('click', async () => {
+    if (!confirm(`確定封鎖「${item.nickname}」？\n會同時解除好友，雙方都看不到對方分享的紀錄。對方不會收到通知。`)) return;
+    try {
+      await blockUser(item.owner);
+      toast('已封鎖');
+      location.hash = '#/feed';
+    } catch (err) {
+      toast(socialErrorMessage(err));
+    }
+  });
 }
+
+const REASON_OPTIONS = Object.entries(REPORT_REASONS).map(([value, label]) => ({ value, label }));
