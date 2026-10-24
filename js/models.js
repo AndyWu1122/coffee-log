@@ -173,11 +173,18 @@ export async function deleteBean(id) {
 
 /* ===== 沖煮紀錄 ===== */
 
-/** 紀錄列表：依 brewedAt 新→舊，附上豆名、粉水比、養豆天數 */
-export async function listBrews() {
-  const [brews, beans] = await Promise.all([db.getAll('brews'), db.getAll('beans')]);
+/**
+ * 紀錄列表：依 brewedAt 新→舊，附上豆名、粉水比、養豆天數
+ * 篩選：beanId 指定豆子；minRating 只列評分 ≥ 此值（未評分的不列）
+ */
+export async function listBrews({ beanId = '', minRating = null } = {}) {
+  const [brews, beans] = await Promise.all([
+    beanId ? db.getAllByIndex('brews', 'beanId', beanId) : db.getAll('brews'),
+    db.getAll('beans'),
+  ]);
   const beanById = new Map(beans.map((b) => [b.id, b]));
   return brews
+    .filter((b) => !minRating || (b.rating ?? 0) >= minRating)
     .sort((a, b) => b.brewedAt.localeCompare(a.brewedAt))
     .map((brew) => {
       const bean = beanById.get(brew.beanId);

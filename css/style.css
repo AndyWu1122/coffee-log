@@ -218,6 +218,24 @@ input:focus, select:focus, textarea:focus {
 .btn-block { width: 100%; }
 .actions { display: grid; gap: 12px; margin-top: 8px; }
 
+.filter-bar { display: grid; grid-template-columns: 3fr 2fr; gap: 10px; }
+.list-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 44px;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font: inherit;
+  min-height: 44px;
+  padding: 0 4px;
+}
+
 .toolbar { display: flex; justify-content: flex-end; margin-bottom: 12px; }
 .toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 0.9rem; min-height: var(--tap); }
 .toggle input { width: 22px; min-height: 22px; height: 22px; }
