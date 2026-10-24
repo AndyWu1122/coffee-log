@@ -1,6 +1,6 @@
 // 進入點 + hash 路由
-import { esc, toast } from './views/ui.js';
-import { socialAvailable, completeSignIn, requestSync } from './models.js';
+import { esc, toast, BADGES_EVENT } from './views/ui.js';
+import { socialAvailable, completeSignIn, requestSync, getSocialBadges } from './models.js';
 
 // 各 view 用動態 import 延遲載入；每個 view 匯出 render(container, params)
 const routes = [
@@ -202,6 +202,39 @@ async function start() {
   window.addEventListener('hashchange', navigate);
   navigate();
   setupSync();
+  setupBadges();
+}
+
+/* ===== 咖啡社群的提示「!」 ===== */
+// ☰ 按鈕：收到好友邀請（強調色）；底部「好友」分頁：好友有新貼文（--badge-new）
+// 時機和同步一樣（啟動、恢復網路、切回前景），另外 views 操作完會發出 BADGES_EVENT；不做即時推播
+
+function setupBadges() {
+  if (!socialAvailable) return;
+  const menuBtn = document.getElementById('menu-btn');
+  const feedTab = document.querySelector('.tabbar [data-tab="feed"]');
+  const requestBadge = document.getElementById('request-badge');
+  const feedBadge = document.getElementById('feed-badge');
+  let token = 0;
+  const update = async () => {
+    const t = ++token; // 連續觸發時只採用最後一次的結果
+    try {
+      const { requests, feed } = await getSocialBadges();
+      if (t !== token) return;
+      requestBadge.hidden = !requests;
+      menuBtn.setAttribute('aria-label', requests ? '選單（有新的好友邀請）' : '選單');
+      feedBadge.hidden = !feed;
+      feedTab.setAttribute('aria-label', feed ? '好友（有新貼文）' : '好友');
+    } catch (err) {
+      console.warn('提示檢查失敗', err); // 離線等：維持原本的顯示
+    }
+  };
+  update();
+  window.addEventListener(BADGES_EVENT, update);
+  window.addEventListener('online', update);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') update();
+  });
 }
 
 /* ===== 咖啡社群：分享給好友的紀錄在背景同步 ===== */

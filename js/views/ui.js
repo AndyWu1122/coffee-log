@@ -95,6 +95,13 @@ export function avatarHtml({ nickname, avatarUrl }, { large = false } = {}) {
   return `<span class="${cls} avatar-initial" aria-hidden="true">${esc(initial)}</span>`;
 }
 
+/**
+ * 社群提示（☰ 的好友邀請、「好友」分頁的新貼文）可能改變了：app.js 收到後重新檢查
+ * 用事件通知，views 不直接呼叫 app.js
+ */
+export const BADGES_EVENT = 'social-badges-changed';
+export const notifyBadgesChanged = () => window.dispatchEvent(new Event(BADGES_EVENT));
+
 /** 頁面層級的訊息（連不上伺服器、需要網路等），可附「重試」按鈕 */
 export function showMessage(container, message, onRetry) {
   container.innerHTML = `

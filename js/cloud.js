@@ -190,6 +190,10 @@ export const unblock = (otherId) => run(async (sb) => {
 export const listBlocks = () => run(async (sb) =>
   unwrap(await sb.from('blocks').select('blocked, blocked_nickname, created_at').order('created_at', { ascending: false })));
 
+/** 有沒有收到還沒處理的好友邀請（☰ 按鈕的提示；只查一筆） */
+export const hasIncomingRequests = (myId) => run(async (sb) =>
+  unwrap(await sb.from('friendships').select('requester').eq('addressee', uuid(myId)).eq('status', 'pending').limit(1)).length > 0);
+
 /* ===== 自己的 shared_brews（同步用） ===== */
 
 /** 自己在雲端的所有紀錄 [{ id, photo_path }]（分批讀，避開一次 1000 筆的上限） */
@@ -252,6 +256,11 @@ export const listFeed = (myId, { offset, limit }) => run(async (sb) =>
   unwrap(await sb.from('shared_brews').select(BREW_COLUMNS).neq('owner', uuid(myId))
     .order('brewed_at', { ascending: false }).order('id', { ascending: false })
     .range(offset, offset + limit - 1)));
+
+/** 好友最新一篇紀錄的建立時間（「好友」分頁的新貼文提示；RLS 只回傳看得到的）；沒有回傳 null */
+export const latestFriendBrewAt = (myId) => run(async (sb) =>
+  unwrap(await sb.from('shared_brews').select('created_at').neq('owner', uuid(myId))
+    .order('created_at', { ascending: false }).limit(1))[0]?.created_at ?? null);
 
 /** 單筆紀錄；讀不到（不是好友、被封鎖、已刪除）回傳 null */
 export const getSharedBrew = (owner, id) => run(async (sb) =>

@@ -4,7 +4,7 @@ import {
   createProfile, updateNickname, prepareAvatar, saveAvatar, removeAvatar, PHOTO_ACCEPT,
   formatFriendCode, friendInviteUrl, qrSvg, regenerateFriendCode, deleteAccount,
 } from '../models.js';
-import { esc, setTitle, toast, showErrors, avatarHtml, showMessage, copyText } from './ui.js';
+import { esc, setTitle, toast, showErrors, avatarHtml, showMessage, copyText, notifyBadgesChanged } from './ui.js';
 
 export async function render(container, { isCurrent }) {
   setTitle('帳號');
@@ -253,6 +253,7 @@ function renderReady(container, { user, profile }, { isCurrent, rerender }) {
     submit.textContent = '刪除中…';
     try {
       await deleteAccount();
+      notifyBadgesChanged(); // 沒登入了：「!」全部消失
       toast('帳號已刪除');
       rerender();
     } catch (err) {
@@ -269,6 +270,7 @@ function bindSignOut(container, rerender) {
     try {
       await signOut();
     } catch { /* 網路失敗也已經清掉本機的登入狀態 */ }
+    notifyBadgesChanged(); // 沒登入了：「!」全部消失
     toast('已登出');
     rerender();
   });

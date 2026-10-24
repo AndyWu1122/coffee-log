@@ -3,7 +3,7 @@
 import {
   getSocialState, socialErrorMessage, listFeed, setLike, formatRatio, formatSeconds, flavorNote,
 } from '../models.js';
-import { esc, setTitle, toast, avatarHtml, showMessage } from './ui.js';
+import { esc, setTitle, toast, avatarHtml, showMessage, notifyBadgesChanged } from './ui.js';
 
 const dateFmt = new Intl.DateTimeFormat('zh-TW', {
   month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
@@ -29,6 +29,7 @@ export async function render(container, { isCurrent }) {
     return;
   }
   if (!isCurrent()) return;
+  if (page) notifyBadgesChanged(); // 看過動態牆了：「好友」分頁的「!」消失
 
   if (state.status === 'unavailable') return showMessage(container, '這個網址沒有開放社群功能');
   if (state.status !== 'ready') {

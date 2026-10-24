@@ -119,8 +119,22 @@ try {
   const pb = await chrome.newPage(base, { isolated: true });
   await prepare(pb);
   await signIn(pb, await realSession(B));
+  // 「好友」分頁的「!」：好友有新貼文時出現（切回前景時檢查），顏色和 ☰ 的好友邀請提示不同
+  // 檢查實際有沒有畫出來（不只看 hidden 屬性：CSS 的 display 會蓋掉它）
+  const shown = (sel) => `getComputedStyle(document.querySelector('${sel}')).display !== 'none'`;
+  const feedBadge = shown('#feed-badge');
+  const recheck = (page) => page.eval(`document.dispatchEvent(new Event('visibilitychange')); true`);
+  await recheck(pb);
+  await pb.waitFor(feedBadge, { label: 'B 的「好友」分頁出現「!」' });
+  check('好友有新貼文：「好友」分頁出現「!」', true);
+  check('「好友」分頁的 aria-label 提示有新貼文', (await pb.eval(`document.querySelector('.tabbar [data-tab="feed"]').getAttribute('aria-label')`)) === '好友（有新貼文）');
+  const badgeColors = await pb.eval(`['#request-badge', '#feed-badge'].map((s) => getComputedStyle(document.querySelector(s)).backgroundColor)`);
+  check('新貼文和好友邀請的「!」顏色不同', badgeColors[0] !== badgeColors[1], badgeColors.join(' / '));
+  check('沒有好友邀請時 ☰ 沒有「!」', !(await pb.eval(shown('#request-badge'))));
   await visit(pb, base, '#/feed');
   await pb.waitFor(`document.querySelector('.feed-card')`, { label: '動態牆的卡片' });
+  await pb.waitFor(`!(${feedBadge})`, { label: '看過動態牆後「!」消失' });
+  check('看過動態牆後「好友」分頁的「!」消失', true);
   check('B 的動態牆有 A 的紀錄', (await pb.eval(`document.querySelectorAll('.feed-card').length`)) === 1);
   check('A 的暱稱照原樣顯示成文字', (await text(pb, '.feed-card .person-name')) === A_NICK);
   check('豆名（<script>）照原樣顯示成文字', (await text(pb, '.feed-card .card-title')) === ATTACK);
@@ -170,6 +184,9 @@ try {
   await m(pa, 'm.syncNow()');
   const merged = (await sharedRow(B, brewId))?.[0];
   check('本機修改後，雲端以本機為準（筆記被覆蓋回來）', merged?.notes === NOTES && merged?.rating === 5);
+  await recheck(pb);
+  await sleep(1500);
+  check('好友只是修改舊紀錄：「好友」分頁不出現「!」', !(await pb.eval(feedBadge)));
 
   /* ===== 離線時新增，恢復網路後自動上傳 ===== */
   await pa.setOffline(true);
@@ -185,6 +202,9 @@ try {
   await pa.setOffline(false);
   await until(async () => (await sharedRow(B, offlineId))?.length === 1, '恢復網路後自動上傳');
   check('恢復網路後自動上傳（online 事件）', true);
+  await recheck(pb);
+  await pb.waitFor(feedBadge, { label: 'A 又分享一篇後 B 的「!」再出現' });
+  check('看過動態牆之後好友又分享新的：「!」再出現', true);
 
   /* ===== 別台裝置上傳的紀錄不會被刪掉 ===== */
   const otherDevice = await insertBrew(A, { withPhoto: false });

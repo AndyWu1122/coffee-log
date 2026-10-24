@@ -5,7 +5,7 @@ import {
   getSocialState, socialErrorMessage, listFriends, sendFriendRequest, normalizeFriendCode, formatFriendCode,
   acceptFriend, removeFriendship, blockUser, unblockUser, toLocalDateStr,
 } from '../models.js';
-import { esc, setTitle, toast, showErrors, avatarHtml, showMessage, copyText } from './ui.js';
+import { esc, setTitle, toast, showErrors, avatarHtml, showMessage, copyText, notifyBadgesChanged } from './ui.js';
 
 export async function render(container, { query, isCurrent }) {
   setTitle('好友管理');
@@ -28,6 +28,8 @@ export async function render(container, { query, isCurrent }) {
   if (state.status === 'unavailable') return showMessage(container, '這個網址沒有開放社群功能');
   if (state.status !== 'ready') return renderNotReady(container, state, code);
   renderReady(container, state, lists, { code, rerender });
+  // ☰ 的「!」跟著重新檢查（邀請可能已經被對方取消，或剛接受、拒絕、封鎖完重畫）
+  notifyBadgesChanged();
 }
 
 /* ===== 還沒登入或還沒設定暱稱 ===== */

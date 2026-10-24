@@ -56,7 +56,7 @@ async function desired(brew, userId) {
 }
 
 /** 本機 session 的使用者 id（只讀 IndexedDB，不載入 supabase-js、不連網路）；沒登入回傳 null */
-async function sessionUserId() {
+export async function sessionUserId() {
   const value = await db.getMeta(SESSION_KEY);
   try {
     return JSON.parse(value)?.user?.id ?? null;

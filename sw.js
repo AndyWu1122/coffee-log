@@ -1,7 +1,7 @@
 // Service Worker：安裝時預先快取所有檔案，之後一律從快取讀取（離線可用）
 // ⚠ 修改任何前端檔案後，CACHE_VERSION 要 +1，使用者才會收到新版本
 // 它也是 ☰ 選單顯示的版本號（app.js 用 'version' 訊息詢問）
-const CACHE_VERSION = 16;
+const CACHE_VERSION = 17;
 const CACHE_NAME = `coffee-log-v${CACHE_VERSION}`;
 
 const ASSETS = [

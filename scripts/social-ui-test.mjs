@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { api, anonKey, check, failures, summary, createUser, realSession, cleanup, call } from './supabase-local.mjs';
 import {
-  startServer, launchChrome, inspectJpeg, extraMetadata,
+  startServer, launchChrome, inspectJpeg, extraMetadata, sleep,
   prepare, visit, click, fill, submit, text, toast, fieldError, metaKeys, noInjection, signIn, exifJpeg,
 } from './chrome.mjs';
 
@@ -46,6 +46,8 @@ try {
   await prepare(pa);
   check('本機：☰ 選單有帳號、好友', await pa.eval(`[...document.querySelectorAll('[data-social]')].every((e) => !e.hidden)`));
   check('開 App 時不會載入 supabase-js（用到社群功能才載入）', await pa.eval('!window.supabase'));
+  check('沒登入：☰ 和「好友」分頁都沒有「!」',
+    await pa.eval(`['#request-badge', '#feed-badge'].every((s) => getComputedStyle(document.querySelector(s)).display === 'none')`));
   await visit(pa, base, '#/account');
   await pa.waitFor(`document.querySelector('[data-action="google"]')`, { label: '「用 Google 登入」按鈕' });
   check('沒登入：顯示「用 Google 登入」', true);
@@ -136,6 +138,17 @@ try {
   check('送出後回到好友頁，A 出現在「送出的邀請」', (await text(pb, '#outgoing .person-name')) === A_NICK);
   check('B 的畫面上 A 的暱稱沒有變成 HTML', await noInjection(pb));
 
+  /* ===== ☰ 的「!」：收到邀請的 A 有，送出邀請的 B 沒有 ===== */
+  // 檢查實際有沒有畫出來（不只看 hidden 屬性：CSS 的 display 會蓋掉它）
+  const badgeShown = `getComputedStyle(document.querySelector('#request-badge')).display !== 'none'`;
+  const requestBadge = (page) => page.eval(badgeShown);
+  await pa.eval(`document.dispatchEvent(new Event('visibilitychange')); true`); // 切回前景時重新檢查
+  await pa.waitFor(badgeShown, { label: 'A 的 ☰ 出現「!」' });
+  check('收到邀請：☰ 按鈕出現「!」', true);
+  check('收到邀請：☰ 按鈕的 aria-label 提示有新的好友邀請', (await pa.eval(`document.querySelector('#menu-btn').getAttribute('aria-label')`)) === '選單（有新的好友邀請）');
+  await sleep(1000); // B 的好友頁重畫後也重新檢查過了
+  check('送出邀請的 B：☰ 按鈕沒有「!」', !(await requestBadge(pb)));
+
   /* ===== A 接受 ===== */
   await visit(pa, base, '#/friends');
   await pa.waitFor(`document.querySelector('#incoming .person')`, { label: '收到的邀請' });
@@ -146,6 +159,8 @@ try {
   await toast(pa, '已成為好友');
   await pa.waitFor(`document.querySelector('#friends .person-name')?.textContent === ${q(B_NICK)}`, { label: '好友名單有 B' });
   check('接受後 B 出現在好友名單', true);
+  await pa.waitFor(`!(${badgeShown})`, { label: 'A 的 ☰「!」消失' });
+  check('接受邀請後 ☰ 按鈕的「!」消失', (await pa.eval(`document.querySelector('#menu-btn').getAttribute('aria-label')`)) === '選單');
 
   await visit(pb, base, '#/friends');
   await pb.waitFor(`document.querySelector('#friends .person')`, { label: 'B 的好友名單' });

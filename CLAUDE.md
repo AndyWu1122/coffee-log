@@ -46,7 +46,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 **beans**：id, name, origin, process(washed/natural/honey/other), roastLevel(light/light-medium/medium-light/medium/dark，即 淺/淺中/中淺/中/深焙), roastDate(YYYY-MM-DD), bagWeightG(整包重量 g，選填), archived(bool), createdAt
 **grinders**：id, name(必填), notes(選填，例如刻度說明), archived(bool), createdAt
 **brews**：id, beanId, grinderId(選填，'' ＝未指定；v1 舊紀錄沒有這個欄位), brewedAt, dripper, grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes, visibility(private/friends，舊資料沒有這個欄位＝private)
-**meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil、社群登入狀態 `auth:*`）；**不匯出、匯入取代全部時也不清除**（token 不會進備份檔，匯入也不會被登出）
+**meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil、社群登入狀態 `auth:*`、動態牆看到哪 `feedSeenAt`）；**不匯出、匯入取代全部時也不清除**（token 不會進備份檔，匯入也不會被登出）
 **photos**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 1600px、品質 0.8，約 200KB), width, height, createdAt；每筆紀錄最多 1 張，跟 brews 分開存
 **thumbs**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 300px)；列表只讀這個，不載入原圖；不匯出，匯入時由照片重新產生
 **sync**（DB v5 加入，keyPath brewId）：brewId, userId, row(上次同步的 shared_brews 內容 JSON), photoAt(上次同步的照片 createdAt), error(''/rate_limited/invalid/failed), failedRow, failedOn；**不匯出、匯入取代全部時也不清除**
@@ -68,6 +68,9 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - 底部分頁列：紀錄｜豆子｜好友（只放每天會用的頁面；之後的統計頁也放這裡）；「好友」是動態牆，有 `data-social`，`js/config.js` 沒設定時隱藏
 - **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：帳號、好友管理、磨豆機、備份、隱私說明；帳號、好友管理有 `data-social`，`js/config.js` 沒設定時隱藏）
 - ☰ 選單裡的頁面不屬於任何分頁，路由設 `tab: null`，底部分頁都不亮
+- 社群提示「!」（`app.js` 的 `setupBadges`，`models.getSocialBadges`）：☰ 按鈕＝收到好友邀請（`--accent`）；底部「好友」分頁＝好友有新貼文（`--badge-new`，兩種顏色要能區分）
+  - 新貼文＝好友最新貼文的 `created_at` 比 meta 的 `feedSeenAt`（讀動態牆第一頁時記下，雲端時間、記 userId）新；好友修改舊紀錄不算
+  - 檢查時機和同步一樣（啟動、`online`、切回前景），views 操作完用 `notifyBadgesChanged()` 發事件；沒登入不載入 supabase-js；不做即時推播
 
 ## 主題（深色／淺色）
 - ☰ 選單「外觀」：自動（跟系統）｜淺色｜深色；結果寫在 `<html data-theme="dark|light">`

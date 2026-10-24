@@ -1045,10 +1045,38 @@ async function toFeedItems(myId, rows) {
   return rows.map((row) => toFeedItem(row, { myId, profiles, avatarUrls, photoUrls, likes }));
 }
 
-/** 好友動態（依沖煮時間新→舊）：{ items, hasMore }；offset 是已載入的筆數 */
+/**
+ * 好友動態（依沖煮時間新→舊）：{ items, hasMore }；offset 是已載入的筆數
+ * 讀第一頁時記下「看過了」（getSocialBadges 的新貼文提示）
+ */
 export async function listFeed(myId, { offset = 0 } = {}) {
+  // 先查好友最新貼文的時間再讀動態牆：讀的期間才新增的貼文比它新，下次仍會提示
+  const latest = offset === 0 ? await cloud.latestFriendBrewAt(myId) : null;
   const rows = await cloud.listFeed(myId, { offset, limit: FEED_PAGE_SIZE + 1 }); // 多拿一筆判斷還有沒有
-  return { items: await toFeedItems(myId, rows.slice(0, FEED_PAGE_SIZE)), hasMore: rows.length > FEED_PAGE_SIZE };
+  const items = await toFeedItems(myId, rows.slice(0, FEED_PAGE_SIZE));
+  if (latest) await db.setMeta(FEED_SEEN_KEY, { userId: myId, at: latest });
+  return { items, hasMore: rows.length > FEED_PAGE_SIZE };
+}
+
+/* ----- 提示：☰ 按鈕（收到好友邀請）、底部「好友」分頁（好友有新貼文） ----- */
+
+// 上次看動態牆時，好友最新貼文的建立時間（雲端的時間，不受手機時鐘影響）；記在 meta，換帳號就不算數
+const FEED_SEEN_KEY = 'feedSeenAt';
+
+/**
+ * { requests: 有沒有收到好友邀請, feed: 好友有沒有新貼文 }
+ * 沒登入直接回傳都沒有（只讀本機，不載入 supabase-js）；連不上伺服器會丟出錯誤（呼叫端維持原本的顯示）
+ */
+export async function getSocialBadges() {
+  const none = { requests: false, feed: false };
+  if (!socialAvailable) return none;
+  const userId = await sync.sessionUserId();
+  if (!userId) return none;
+  const [requests, latest, seen] = await Promise.all([
+    cloud.hasIncomingRequests(userId), cloud.latestFriendBrewAt(userId), db.getMeta(FEED_SEEN_KEY),
+  ]);
+  const seenAt = seen?.userId === userId ? seen.at : null; // 還沒看過動態牆：好友有任何貼文就提示
+  return { requests, feed: latest != null && (seenAt == null || new Date(latest) > new Date(seenAt)) };
 }
 
 /** 好友的一筆紀錄；讀不到（不是好友、被封鎖、已刪除或改回只有我）回傳 null */
