@@ -1,16 +1,19 @@
-// #/feed/<owner>/<id> 好友紀錄的詳細內容：完整參數、風味、筆記、照片、按讚的人；檢舉這筆紀錄、封鎖對方
-// 這頁的內容全部來自他人：文字、網址一律經過 esc() 才放進 innerHTML
+// #/social/<owner>/<id> 紀錄的詳細內容：完整參數、風味、筆記、照片、按讚的人、留言（js/views/comments.js）
+// 好友的紀錄：檢舉這筆紀錄、封鎖對方；自己的紀錄：這台裝置有這筆時顯示「編輯」
+// ?comments=1（從卡片上的留言數點進來）：捲到留言區
+// 這頁的內容大多來自他人：文字、網址一律經過 esc() 才放進 innerHTML
 import {
   getSocialState, socialErrorMessage, getFeedBrew, FLAVOR, flavorNote, formatSeconds,
   REPORT_REASONS, REPORT_DETAIL_MAX, reportBrew, blockUser,
 } from '../models.js';
 import { esc, setTitle, toast, showMessage, showErrors, segmentedHtml, bindSegmented, segmentedValue } from './ui.js';
 import { feedCardHtml, bindLikes } from './feed.js';
+import { renderComments } from './comments.js';
 
-export async function render(container, { params: [owner, id], isCurrent }) {
-  setTitle('好友的紀錄');
-  const rerender = () => render(container, { params: [owner, id], isCurrent });
-  if (!navigator.onLine) return showMessage(container, '需要網路才能看好友動態', rerender);
+export async function render(container, { params: [owner, id], query = {}, isCurrent }) {
+  setTitle('紀錄');
+  const rerender = () => render(container, { params: [owner, id], query, isCurrent });
+  if (!navigator.onLine) return showMessage(container, '需要網路才能看社群', rerender);
 
   container.innerHTML = '<p class="hint">載入中…</p>';
   let state;
@@ -26,14 +29,15 @@ export async function render(container, { params: [owner, id], isCurrent }) {
 
   if (state.status === 'unavailable') return showMessage(container, '這個網址沒有開放社群功能');
   if (state.status !== 'ready') {
-    container.innerHTML = '<div class="empty"><p>要先登入才能看好友動態</p><a class="btn btn-primary" href="#/account">前往帳號</a></div>';
+    container.innerHTML = '<div class="empty"><p>要先登入才能看社群</p><a class="btn btn-primary" href="#/account">前往帳號</a></div>';
     return;
   }
   // 不是好友、被封鎖、已刪除或改回只有我：一律同樣的訊息
   if (!item) {
-    container.innerHTML = '<div class="empty"><p>找不到這筆紀錄（可能已經刪除，或不再分享）</p><a class="btn" href="#/feed">回好友動態</a></div>';
+    container.innerHTML = '<div class="empty"><p>找不到這筆紀錄（可能已經刪除，或不再分享）</p><a class="btn" href="#/social">回社群</a></div>';
     return;
   }
+  setTitle(item.mine ? '我的紀錄' : `${item.nickname} 的紀錄`);
 
   const bean = [item.origin, item.process, item.roastLevel, item.restDays != null ? `養豆 ${item.restDays} 天` : '']
     .filter(Boolean);
@@ -71,9 +75,11 @@ export async function render(container, { params: [owner, id], isCurrent }) {
         </ul>
       </section>` : ''}
     ${item.notes ? `<section class="section"><h2>筆記</h2><p class="detail-text detail-notes">${esc(item.notes)}</p></section>` : ''}
-    <a class="btn btn-block" href="#/feed">回好友動態</a>
+    ${item.canEdit ? `<a class="btn btn-block" href="#/brew/${encodeURIComponent(item.id)}" data-action="edit">編輯</a>` : ''}
+    <div id="comments-root"></div>
+    <a class="btn btn-block" href="#/social">回社群</a>
 
-    <section class="section safety">
+    ${item.mine ? '' : `<section class="section safety">
       <div class="photo-actions">
         <button type="button" class="btn" data-action="report">檢舉</button>
         <button type="button" class="btn btn-danger" data-action="block">封鎖</button>
@@ -92,11 +98,15 @@ export async function render(container, { params: [owner, id], isCurrent }) {
         </div>
         <button class="btn btn-primary btn-block" type="submit">送出檢舉</button>
       </form>
-    </section>
+    </section>`}
   </div>`;
 
   // 綁在這頁自己的元素上（#app 換頁不會被替換，綁在上面的監聽器會殘留）
   bindLikes(container.querySelector('#feed-detail-page'), state.user.id, new Map([[`${item.owner}/${item.id}`, item]]));
+  renderComments(container.querySelector('#comments-root'), {
+    myId: state.user.id, me: state.profile, item, isCurrent, scrollTo: query.comments === '1',
+  });
+  if (item.mine) return; // 自己的紀錄：沒有檢舉、封鎖
 
   // 檢舉：按「檢舉」才展開表單
   const form = container.querySelector('#report-form');
@@ -131,7 +141,7 @@ export async function render(container, { params: [owner, id], isCurrent }) {
     try {
       await blockUser(item.owner);
       toast('已封鎖');
-      location.hash = '#/feed';
+      location.hash = '#/social';
     } catch (err) {
       toast(socialErrorMessage(err));
     }

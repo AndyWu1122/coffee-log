@@ -62,8 +62,9 @@
     <a href="#/beans" data-tab="beans">
       <span class="tab-icon" aria-hidden="true">🫘</span>豆子
     </a>
-    <a href="#/feed" data-tab="feed" data-social hidden>
-      <span class="tab-icon" aria-hidden="true">👥<span class="notify-badge notify-badge-new" id="feed-badge" hidden>!</span></span>好友
+    <!-- 社群：數字＝好友新貼文＋我貼文的新留言＋回覆我的（app.js 的 setupBadges） -->
+    <a href="#/social" data-tab="social" data-social hidden>
+      <span class="tab-icon" aria-hidden="true">💬<span class="notify-badge notify-badge-new" id="social-badge" hidden></span></span>社群
     </a>
   </nav>
 

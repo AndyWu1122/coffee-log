@@ -1,42 +1,47 @@
-// #/feed 好友動態（底部分頁「好友」）：好友分享的紀錄，依沖煮時間新→舊；每次 20 筆，按「載入更多」再載
-// 這頁的內容全部來自他人：文字、網址一律經過 esc() 才放進 innerHTML
+// #/social 社群（底部分頁「社群」）：自己和好友分享的紀錄，依沖煮時間新→舊；每次 20 筆，按「載入更多」再載
+// 上方切換「全部｜我的」（#/social?mine=1 只看自己的）；卡片顯示讚數、留言數，有新留言的留言數會標示
+// 這頁的內容大多來自他人：文字、網址一律經過 esc() 才放進 innerHTML
 import {
   getSocialState, socialErrorMessage, listFeed, setLike, formatRatio, formatSeconds, flavorNote,
 } from '../models.js';
-import { esc, setTitle, toast, avatarHtml, showMessage, notifyBadgesChanged } from './ui.js';
+import { esc, setTitle, toast, avatarHtml, showMessage, notifyBadgesChanged, segmentedHtml, bindSegmented } from './ui.js';
 
 const dateFmt = new Intl.DateTimeFormat('zh-TW', {
   month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
 });
 export const formatDate = (iso) => dateFmt.format(new Date(iso));
 export const stars = (rating) => (rating ? '★'.repeat(rating) + '☆'.repeat(5 - rating) : '');
-export const detailHref = (item) => `#/feed/${encodeURIComponent(item.owner)}/${encodeURIComponent(item.id)}`;
+export const detailHref = (item, { comments = false } = {}) =>
+  `#/social/${encodeURIComponent(item.owner)}/${encodeURIComponent(item.id)}${comments ? '?comments=1' : ''}`;
 const keyOf = (item) => `${item.owner}/${item.id}`;
 
-export async function render(container, { isCurrent }) {
-  setTitle('好友動態');
-  const rerender = () => render(container, { isCurrent });
-  if (!navigator.onLine) return showMessage(container, '需要網路才能看好友動態', rerender);
+const FILTERS = [{ value: 'all', label: '全部' }, { value: 'mine', label: '我的' }];
+
+export async function render(container, { query = {}, isCurrent }) {
+  setTitle('社群');
+  const mine = query.mine === '1';
+  const rerender = () => render(container, { query, isCurrent });
+  if (!navigator.onLine) return showMessage(container, '需要網路才能看社群', rerender);
 
   container.innerHTML = '<p class="hint">載入中…</p>';
   let state;
   let page;
   try {
     state = await getSocialState();
-    if (state.status === 'ready') page = await listFeed(state.user.id);
+    if (state.status === 'ready') page = await listFeed(state.user.id, { mine });
   } catch (err) {
     if (isCurrent()) showMessage(container, socialErrorMessage(err), rerender);
     return;
   }
   if (!isCurrent()) return;
-  if (page) notifyBadgesChanged(); // 看過動態牆了：「好友」分頁的「!」消失
+  if (page) notifyBadgesChanged(); // 看過了：「社群」分頁的數字歸零
 
   if (state.status === 'unavailable') return showMessage(container, '這個網址沒有開放社群功能');
   if (state.status !== 'ready') {
     const action = state.status === 'signed-out' ? '登入' : '設定暱稱';
     container.innerHTML = `
       <div class="empty">
-        <p>要先${action}才能看好友動態</p>
+        <p>要先${action}才能看社群</p>
         <a class="btn btn-primary" href="#/account">前往${action}</a>
       </div>`;
     return;
@@ -44,27 +49,39 @@ export async function render(container, { isCurrent }) {
 
   const myId = state.user.id;
   const items = new Map(page.items.map((item) => [keyOf(item), item]));
-  container.innerHTML = `<div id="feed-page">
-    <div class="toolbar"><a class="link-btn" href="#/friends">好友管理</a></div>
-    ${items.size ? `
-      <ul class="list feed" id="feed">${page.items.map((item) => feedCardHtml(item)).join('')}</ul>
-      <button type="button" class="btn btn-block" data-action="more" ${page.hasMore ? '' : 'hidden'}>載入更多</button>` : `
+  const empty = mine ? `
       <div class="empty">
-        <p>好友還沒有分享紀錄</p>
+        <p>你還沒有分享給好友的紀錄</p>
+        <p class="hint">在沖煮紀錄的「誰看得到」選「👥 好友」，就會出現在這裡。</p>
+      </div>` : `
+      <div class="empty">
+        <p>還沒有人分享紀錄</p>
         <p class="hint">在沖煮紀錄的「誰看得到」選「👥 好友」，就會分享給好友。</p>
         <a class="btn" href="#/friends">加好友</a>
-      </div>`}
+      </div>`;
+  container.innerHTML = `<div id="feed-page">
+    <div class="toolbar feed-toolbar">
+      ${segmentedHtml('filter', FILTERS, mine ? 'mine' : 'all')}
+      <a class="link-btn" href="#/friends">好友管理</a>
+    </div>
+    ${items.size ? `
+      <ul class="list feed" id="feed">${page.items.map((item) => feedCardHtml(item)).join('')}</ul>
+      <button type="button" class="btn btn-block" data-action="more" ${page.hasMore ? '' : 'hidden'}>載入更多</button>` : empty}
   </div>`;
 
   // 綁在這頁自己的元素上：#app 換頁不會被替換，綁在 container 上的監聽器會殘留，
   // 帶著舊的 items 和新的一起處理同一次點擊（舊的按讚、新的收回，互相抵消）
-  bindLikes(container.querySelector('#feed-page'), myId, items);
+  const pageEl = container.querySelector('#feed-page');
+  bindLikes(pageEl, myId, items);
+  bindSegmented(pageEl.querySelector('.feed-toolbar'), (name, value) => {
+    location.hash = value === 'mine' ? '#/social?mine=1' : '#/social';
+  });
 
   const moreBtn = container.querySelector('[data-action="more"]');
   moreBtn?.addEventListener('click', async () => {
     moreBtn.disabled = true;
     try {
-      const next = await listFeed(myId, { offset: items.size });
+      const next = await listFeed(myId, { offset: items.size, mine });
       if (!isCurrent()) return;
       // 載入期間有人新增紀錄時，同一筆可能出現兩次：已經在畫面上的跳過
       const fresh = next.items.filter((item) => !items.has(keyOf(item)));
@@ -79,7 +96,7 @@ export async function render(container, { isCurrent }) {
   });
 }
 
-/** 一筆好友紀錄的卡片；detail 為 true 時（詳細頁）不再連到自己 */
+/** 一筆紀錄的卡片；detail 為 true 時（詳細頁）不再連到自己、不顯示留言數（下面就是留言） */
 export function feedCardHtml(item, { detail = false } = {}) {
   const params = [
     item.dripper,
@@ -102,13 +119,20 @@ export function feedCardHtml(item, { detail = false } = {}) {
       <div class="feed-head">
         ${avatarHtml(item)}
         <div class="person-text">
-          <div class="person-name">${esc(item.nickname)}</div>
+          <div class="person-name">${esc(item.nickname)}${item.mine ? ' <span class="me-tag">我</span>' : ''}</div>
           <div class="hint">${esc(formatDate(item.brewedAt))}</div>
         </div>
       </div>
       ${detail ? `<div class="feed-body">${body}</div>` : `<a class="feed-body" href="${esc(detailHref(item))}">${body}</a>`}
-      <div class="feed-foot">${likeHtml(item)}</div>
+      <div class="feed-foot">${likeHtml(item)}${detail ? '' : commentLinkHtml(item)}</div>
     </li>`;
+}
+
+/** 卡片上的留言數：連到詳細頁的留言區；有新留言時標示 */
+function commentLinkHtml(item) {
+  const label = `留言 ${item.commentCount} 則${item.hasNewComments ? '（有新留言）' : ''}`;
+  return `<a class="comment-link${item.hasNewComments ? ' has-new' : ''}" href="${esc(detailHref(item, { comments: true }))}"
+    aria-label="${esc(label)}"><span aria-hidden="true">💬</span> ${item.commentCount}</a>`;
 }
 
 /** 卡片上的風味標籤：最多 3 個，其餘顯示 +N（顏色來自 App 自己的風味輪資料） */
@@ -145,7 +169,12 @@ function likeHtml(item) {
  */
 export function bindLikes(root, myId, items) {
   const busy = new Set();
-  const redraw = (card, item) => { card.querySelector('.feed-foot').innerHTML = likeHtml(item); };
+  const redraw = (card, item) => {
+    const foot = card.querySelector('.feed-foot');
+    const comments = foot.querySelector('.comment-link');
+    foot.innerHTML = likeHtml(item);
+    if (comments) foot.append(comments);
+  };
   const apply = (item, liked) => {
     item.likedByMe = liked;
     item.likeCount += liked ? 1 : -1;

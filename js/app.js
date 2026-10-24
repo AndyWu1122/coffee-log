@@ -1,6 +1,6 @@
 // 進入點 + hash 路由
 import { esc, toast, appVersion, BADGES_EVENT } from './views/ui.js';
-import { socialAvailable, completeSignIn, requestSync, getSocialBadges } from './models.js';
+import { socialAvailable, completeSignIn, requestSync, getSocialBadges, badgeText } from './models.js';
 
 // 各 view 用動態 import 延遲載入；每個 view 匯出 render(container, params)
 const routes = [
@@ -11,9 +11,9 @@ const routes = [
   { pattern: /^\/beans$/, tab: 'beans', load: () => import('./views/beanList.js') },
   { pattern: /^\/beans\/new$/, tab: 'beans', load: () => import('./views/beanForm.js') },
   { pattern: /^\/beans\/([\w-]+)$/, tab: 'beans', load: () => import('./views/beanForm.js') },
-  // 好友動態（底部分頁，js/config.js 沒設定時不顯示）
-  { pattern: /^\/feed$/, tab: 'feed', load: () => import('./views/feed.js') },
-  { pattern: /^\/feed\/([\w-]+)\/([\w-]+)$/, tab: 'feed', load: () => import('./views/feedDetail.js') },
+  // 社群：動態牆與紀錄的詳細頁（底部分頁，js/config.js 沒設定時不顯示）；#/social?mine=1 只看自己的
+  { pattern: /^\/social$/, tab: 'social', load: () => import('./views/feed.js') },
+  { pattern: /^\/social\/([\w-]+)\/([\w-]+)$/, tab: 'social', load: () => import('./views/feedDetail.js') },
   // ☰ 選單裡的頁面：不屬於任何底部分頁（tab: null）
   { pattern: /^\/backup$/, tab: null, load: () => import('./views/backup.js') },
   { pattern: /^\/privacy$/, tab: null, load: () => import('./views/privacy.js') },
@@ -40,6 +40,12 @@ let navToken = 0;
 async function navigate() {
   const token = ++navToken;
   const { path, query } = parseHash();
+
+  // 1.1.0 以前的網址（#/feed、#/feed/<owner>/<id>）改名成 #/social
+  if (/^\/feed(\/|$)/.test(path)) {
+    location.replace(`#/social${path.slice('/feed'.length)}`);
+    return;
+  }
 
   let match = null;
   const route = routes.find((r) => (match = path.match(r.pattern)));
@@ -201,26 +207,29 @@ async function start() {
   setupBadges();
 }
 
-/* ===== 咖啡社群的提示「!」 ===== */
-// ☰ 按鈕：收到好友邀請（強調色）；底部「好友」分頁：好友有新貼文（--badge-new）
+/* ===== 咖啡社群的提示 ===== */
+// ☰ 按鈕的「!」：收到好友邀請（強調色）
+// 底部「社群」分頁的數字（--badge-new）：好友新貼文＋我貼文的新留言＋回覆我的，超過 99 顯示 99+，0 不顯示
 // 時機和同步一樣（啟動、恢復網路、切回前景），另外 views 操作完會發出 BADGES_EVENT；不做即時推播
 
 function setupBadges() {
   if (!socialAvailable) return;
   const menuBtn = document.getElementById('menu-btn');
-  const feedTab = document.querySelector('.tabbar [data-tab="feed"]');
+  const socialTab = document.querySelector('.tabbar [data-tab="social"]');
   const requestBadge = document.getElementById('request-badge');
-  const feedBadge = document.getElementById('feed-badge');
+  const socialBadge = document.getElementById('social-badge');
   let token = 0;
   const update = async () => {
     const t = ++token; // 連續觸發時只採用最後一次的結果
     try {
-      const { requests, feed } = await getSocialBadges();
+      const { requests, count } = await getSocialBadges();
       if (t !== token) return;
       requestBadge.hidden = !requests;
       menuBtn.setAttribute('aria-label', requests ? '選單（有新的好友邀請）' : '選單');
-      feedBadge.hidden = !feed;
-      feedTab.setAttribute('aria-label', feed ? '好友（有新貼文）' : '好友');
+      const text = badgeText(count);
+      socialBadge.textContent = text;
+      socialBadge.hidden = !text;
+      socialTab.setAttribute('aria-label', text ? `社群（${text} 則新通知）` : '社群');
     } catch (err) {
       console.warn('提示檢查失敗', err); // 離線等：維持原本的顯示
     }

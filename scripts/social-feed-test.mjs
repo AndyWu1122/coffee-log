@@ -1,6 +1,6 @@
 // 動態牆與同步的前端端對端測試（docs/social-spec.md 階段 4）
 // 用 headless Chrome 開兩個互相隔離的瀏覽器環境：A 在紀錄表單選「好友」並附照片 → 同步到本機 Supabase →
-// B 在好友動態看到、按讚、看詳細內容；A 離線時改的紀錄恢復網路後自動送出；改回只有我、刪除時雲端跟著刪
+// B 在社群頁看到、按讚、看詳細內容；A 離線時改的紀錄恢復網路後自動送出；改回只有我、刪除時雲端跟著刪
 // 也確認：豆名、產地、筆記、暱稱裡的 HTML 只顯示成文字；照片沒有 EXIF；C（不是好友）讀不到；封鎖後 B 看不到
 //
 // 登入：Google 登入無法自動化，改用本機 admin API 拿真的 session 放進 App 的儲存空間（只在這支測試裡做）
@@ -55,7 +55,7 @@ try {
   /* ===== A：新增一筆分享給好友的紀錄（透過表單） ===== */
   const pa = await chrome.newPage(base, { isolated: true });
   await prepare(pa);
-  check('底部分頁有「好友」', await pa.eval(`!document.querySelector('.tabbar [data-tab="feed"]').hidden`));
+  check('底部分頁有「社群」', await pa.eval(`!document.querySelector('.tabbar [data-tab="social"]').hidden`));
   await signIn(pa, await realSession(A));
   const bean = { name: ATTACK, origin: ATTR_ATTACK, process: 'washed', roastLevel: 'light', roastDate: '2026-10-01' };
   const beanId = await m(pa, `(await m.saveBean(${q(bean)})).bean.id`);
@@ -115,26 +115,26 @@ try {
   await visit(pa, base, `#/brew/${brewId}`);
   check('編輯頁顯示「已分享給好友」', (await pa.waitFor(`document.querySelector('#share-status:not([hidden])')?.textContent`)) === '已分享給好友');
 
-  /* ===== B：好友動態 ===== */
+  /* ===== B：社群頁 ===== */
   const pb = await chrome.newPage(base, { isolated: true });
   await prepare(pb);
   await signIn(pb, await realSession(B));
-  // 「好友」分頁的「!」：好友有新貼文時出現（切回前景時檢查），顏色和 ☰ 的好友邀請提示不同
+  // 「社群」分頁的數字：好友有新貼文時出現（切回前景時檢查），顏色和 ☰ 的好友邀請提示不同
   // 檢查實際有沒有畫出來（不只看 hidden 屬性：CSS 的 display 會蓋掉它）
   const shown = (sel) => `getComputedStyle(document.querySelector('${sel}')).display !== 'none'`;
-  const feedBadge = shown('#feed-badge');
+  const feedBadge = shown('#social-badge');
   const recheck = (page) => page.eval(`document.dispatchEvent(new Event('visibilitychange')); true`);
   await recheck(pb);
-  await pb.waitFor(feedBadge, { label: 'B 的「好友」分頁出現「!」' });
-  check('好友有新貼文：「好友」分頁出現「!」', true);
-  check('「好友」分頁的 aria-label 提示有新貼文', (await pb.eval(`document.querySelector('.tabbar [data-tab="feed"]').getAttribute('aria-label')`)) === '好友（有新貼文）');
-  const badgeColors = await pb.eval(`['#request-badge', '#feed-badge'].map((s) => getComputedStyle(document.querySelector(s)).backgroundColor)`);
-  check('新貼文和好友邀請的「!」顏色不同', badgeColors[0] !== badgeColors[1], badgeColors.join(' / '));
+  await pb.waitFor(feedBadge, { label: 'B 的「社群」分頁出現數字' });
+  check('好友有新貼文：「社群」分頁顯示 1', (await text(pb, '#social-badge')) === '1');
+  check('「社群」分頁的 aria-label 提示有新通知', (await pb.eval(`document.querySelector('.tabbar [data-tab="social"]').getAttribute('aria-label')`)) === '社群（1 則新通知）');
+  const badgeColors = await pb.eval(`['#request-badge', '#social-badge'].map((s) => getComputedStyle(document.querySelector(s)).backgroundColor)`);
+  check('新通知的數字和好友邀請的「!」顏色不同', badgeColors[0] !== badgeColors[1], badgeColors.join(' / '));
   check('沒有好友邀請時 ☰ 沒有「!」', !(await pb.eval(shown('#request-badge'))));
-  await visit(pb, base, '#/feed');
+  await visit(pb, base, '#/social');
   await pb.waitFor(`document.querySelector('.feed-card')`, { label: '動態牆的卡片' });
-  await pb.waitFor(`!(${feedBadge})`, { label: '看過動態牆後「!」消失' });
-  check('看過動態牆後「好友」分頁的「!」消失', true);
+  await pb.waitFor(`!(${feedBadge})`, { label: '看過社群頁後數字消失' });
+  check('看過社群頁後「社群」分頁的數字消失', true);
   check('B 的動態牆有 A 的紀錄', (await pb.eval(`document.querySelectorAll('.feed-card').length`)) === 1);
   check('A 的暱稱照原樣顯示成文字', (await text(pb, '.feed-card .person-name')) === A_NICK);
   check('豆名（<script>）照原樣顯示成文字', (await text(pb, '.feed-card .card-title')) === ATTACK);
@@ -148,7 +148,7 @@ try {
   const cLike = await rest('likes', { method: 'POST', token: C.token, body: { brew_owner: A.id, brew_id: brewId } });
   check('C 不能對 A 的紀錄按讚', cLike.status >= 400, `HTTP ${cLike.status}`);
 
-  await visit(pb, base, `#/feed/${A.id}/${brewId}`);
+  await visit(pb, base, `#/social/${A.id}/${brewId}`);
   await pb.waitFor(`document.querySelector('.detail-notes')`, { label: '詳細頁的筆記' });
   check('詳細頁：筆記（含換行、<script>、<b>）照原樣顯示成文字', (await text(pb, '.detail-notes')) === NOTES);
   check('詳細頁：產地（屬性跳脫攻擊）照原樣顯示', (await text(pb, '.detail-text')).includes(ATTR_ATTACK));
@@ -164,7 +164,7 @@ try {
   await pb.eval(`location.hash = '#/'`);
   await pb.waitFor(`location.hash === '#/' && document.querySelector('.fab, .empty')`, { label: '紀錄列表' });
   await rest('likes', { method: 'POST', token: B.token, body: { brew_owner: A.id, brew_id: brewId } }); // 另一台裝置按讚
-  await pb.eval(`location.hash = '#/feed'`);
+  await pb.eval(`location.hash = '#/social'`);
   await pb.waitFor(`${likeBtn}?.getAttribute('aria-pressed') === 'true'`, { label: '動態牆顯示已讚' });
   await click(pb, `.feed-card[data-key="${A.id}/${brewId}"] [data-action="like"]`);
   await until(async () => rows(await rest(`likes?brew_id=eq.${brewId}`, { token: A.token }))?.length === 0, '換頁後收回讚', 5000);
@@ -186,7 +186,7 @@ try {
   check('本機修改後，雲端以本機為準（筆記被覆蓋回來）', merged?.notes === NOTES && merged?.rating === 5);
   await recheck(pb);
   await sleep(1500);
-  check('好友只是修改舊紀錄：「好友」分頁不出現「!」', !(await pb.eval(feedBadge)));
+  check('好友只是修改舊紀錄：「社群」分頁不出現數字', !(await pb.eval(feedBadge)));
 
   /* ===== 離線時新增，恢復網路後自動上傳 ===== */
   await pa.setOffline(true);
@@ -203,8 +203,8 @@ try {
   await until(async () => (await sharedRow(B, offlineId))?.length === 1, '恢復網路後自動上傳');
   check('恢復網路後自動上傳（online 事件）', true);
   await recheck(pb);
-  await pb.waitFor(feedBadge, { label: 'A 又分享一篇後 B 的「!」再出現' });
-  check('看過動態牆之後好友又分享新的：「!」再出現', true);
+  await pb.waitFor(feedBadge, { label: 'A 又分享一篇後 B 的數字再出現' });
+  check('看過社群頁之後好友又分享新的：數字再出現', (await text(pb, '#social-badge')) === '1');
 
   /* ===== 別台裝置上傳的紀錄不會被刪掉 ===== */
   const otherDevice = await insertBrew(A, { withPhoto: false });
@@ -223,15 +223,15 @@ try {
   await m(pa, 'm.syncNow()');
   check('刪除紀錄：雲端跟著刪除', (await sharedRow(A, offlineId))?.length === 0);
 
-  await visit(pb, base, '#/feed');
+  await visit(pb, base, '#/social');
   await pb.waitFor(`document.querySelector('.feed-card')`);
   check('B 的動態牆只剩別台裝置上傳的那筆', (await pb.eval(`[...document.querySelectorAll('.feed-card')].map((c) => c.dataset.key)`)).join() === `${A.id}/${otherDevice}`);
-  await visit(pb, base, `#/feed/${A.id}/${brewId}`);
+  await visit(pb, base, `#/social/${A.id}/${brewId}`);
   check('改回只有我的紀錄：詳細頁顯示找不到', (await pb.waitFor(`document.querySelector('.empty p')?.textContent`)).includes('找不到這筆紀錄'));
 
   /* ===== 封鎖後 B 看不到 ===== */
   await rest('blocks', { method: 'POST', token: A.token, body: { blocked: B.id } });
-  await visit(pb, base, '#/feed');
+  await visit(pb, base, '#/social');
   await pb.waitFor(`document.querySelector('.empty')`, { label: '空的動態牆' });
   check('A 封鎖 B 之後，B 的動態牆是空的', !(await pb.eval(`document.querySelector('.feed-card')`)));
 

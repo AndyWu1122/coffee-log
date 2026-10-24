@@ -243,7 +243,7 @@ export const brewPhotoUrls = (paths) => run(async (sb) => {
   return Object.fromEntries(rows.filter((r) => r.signedUrl && !r.error).map((r) => [r.path, r.signedUrl]));
 });
 
-/* ===== 好友動態 ===== */
+/* ===== 社群（動態牆） ===== */
 
 const BREW_COLUMNS = [
   'owner', 'id', 'bean_name', 'bean_origin', 'bean_process', 'roast_level', 'roast_date', 'brewed_at',
@@ -251,16 +251,29 @@ const BREW_COLUMNS = [
   'rating', 'acidity', 'sweetness', 'bitterness', 'body', 'flavor_notes', 'notes', 'photo_path',
 ].join(', ');
 
-/** 好友的紀錄（RLS 只回傳已接受、沒有封鎖的好友），依沖煮時間新→舊 */
-export const listFeed = (myId, { offset, limit }) => run(async (sb) =>
-  unwrap(await sb.from('shared_brews').select(BREW_COLUMNS).neq('owner', uuid(myId))
+/**
+ * 動態牆的紀錄，依沖煮時間新→舊；mine 為 true 時只有自己的，否則是自己＋好友的
+ * （RLS 只回傳自己、已接受且沒有封鎖的好友）
+ */
+export const listFeed = (myId, { offset, limit, mine = false }) => run(async (sb) => {
+  let query = sb.from('shared_brews').select(BREW_COLUMNS);
+  if (mine) query = query.eq('owner', uuid(myId));
+  return unwrap(await query
     .order('brewed_at', { ascending: false }).order('id', { ascending: false })
-    .range(offset, offset + limit - 1)));
+    .range(offset, offset + limit - 1));
+});
 
 /** 好友最新一篇紀錄的建立時間（「好友」分頁的新貼文提示；RLS 只回傳看得到的）；沒有回傳 null */
 export const latestFriendBrewAt = (myId) => run(async (sb) =>
   unwrap(await sb.from('shared_brews').select('created_at').neq('owner', uuid(myId))
     .order('created_at', { ascending: false }).limit(1))[0]?.created_at ?? null);
+
+/** 好友在 since 之後新增的紀錄數（社群分頁的數字；since 為 null 時算全部），最多算到 limit 筆 */
+export const countFriendBrewsSince = (myId, since, limit = 100) => run(async (sb) => {
+  let query = sb.from('shared_brews').select('id').neq('owner', uuid(myId));
+  if (since) query = query.gt('created_at', since);
+  return unwrap(await query.order('created_at', { ascending: false }).limit(limit)).length;
+});
 
 /** 單筆紀錄；讀不到（不是好友、被封鎖、已刪除）回傳 null */
 export const getSharedBrew = (owner, id) => run(async (sb) =>
@@ -291,6 +304,57 @@ export const listProfiles = (ids) => run(async (sb) => {
   if (!unique.length) return [];
   return unwrap(await sb.from('profiles').select('id, nickname, avatar_path').in('id', unique));
 });
+
+/* ===== 留言 ===== */
+
+const COMMENT_COLUMNS = 'id, brew_owner, brew_id, parent_id, author, author_nickname, reply_to_user, reply_to_nickname, body, created_at';
+
+/** 一筆紀錄的所有留言（RLS：讀得到紀錄、且和留言者沒有封鎖），舊→新 */
+export const listComments = (owner, id) => run(async (sb) => {
+  const all = [];
+  for (let from = 0; ; from += PAGE) {
+    const rows = unwrap(await sb.from('comments').select(COMMENT_COLUMNS)
+      .eq('brew_owner', uuid(owner)).eq('brew_id', uuid(id))
+      .order('created_at').order('id').range(from, from + PAGE - 1));
+    all.push(...rows);
+    if (rows.length < PAGE) return all;
+  }
+});
+
+/** 這些紀錄各有幾則留言（看得到的）：{ 'owner/id': n } */
+export const countComments = (brews) => run(async (sb) => {
+  if (!brews.length) return {};
+  const ids = [...new Set(brews.map((b) => uuid(b.id)))];
+  const keys = new Set(brews.map((b) => `${b.owner}/${b.id}`));
+  const counts = {};
+  for (let from = 0; ; from += PAGE) {
+    const rows = unwrap(await sb.from('comments').select('brew_owner, brew_id').in('brew_id', ids)
+      .order('id').range(from, from + PAGE - 1));
+    for (const r of rows) {
+      const key = `${r.brew_owner}/${r.brew_id}`;
+      if (keys.has(key)) counts[key] = (counts[key] ?? 0) + 1;
+    }
+    if (rows.length < PAGE) return counts;
+  }
+});
+
+/** 留言或回覆（author 由資料庫用 auth.uid() 決定；兩層、回覆對象、每天 100 則都由資料庫檢查）；回傳新增的那一列 */
+export const insertComment = ({ owner, id, body, parentId = null, replyToUser = null }) => run(async (sb) =>
+  unwrap(await sb.from('comments').insert({
+    brew_owner: uuid(owner), brew_id: uuid(id), body,
+    parent_id: parentId ? uuid(parentId) : null, reply_to_user: replyToUser ? uuid(replyToUser) : null,
+  }).select(COMMENT_COLUMNS).single()));
+
+/** 刪除留言（留言作者或貼文作者才刪得到，RLS）；回傳有沒有刪到 */
+export const deleteComment = (commentId) => run(async (sb) =>
+  unwrap(await sb.from('comments').delete().eq('id', uuid(commentId)).select('id')).length === 1);
+
+/**
+ * 我的留言通知（只查目前登入的人）：{ post_comments, replies, latest_post_comment_at, latest_reply_at, posts }
+ * postSince／replySince：上次看過的時間（雲端時間），null 為全部
+ */
+export const commentActivity = (postSince, replySince) => run(async (sb) =>
+  unwrap(await sb.rpc('comment_activity', { post_since: postSince, reply_since: replySince })));
 
 /* ===== 檢舉、刪除帳號 ===== */
 

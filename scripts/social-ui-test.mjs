@@ -46,8 +46,8 @@ try {
   await prepare(pa);
   check('本機：☰ 選單有帳號、好友', await pa.eval(`[...document.querySelectorAll('[data-social]')].every((e) => !e.hidden)`));
   check('開 App 時不會載入 supabase-js（用到社群功能才載入）', await pa.eval('!window.supabase'));
-  check('沒登入：☰ 和「好友」分頁都沒有「!」',
-    await pa.eval(`['#request-badge', '#feed-badge'].every((s) => getComputedStyle(document.querySelector(s)).display === 'none')`));
+  check('沒登入：☰ 沒有「!」、「社群」分頁沒有數字',
+    await pa.eval(`['#request-badge', '#social-badge'].every((s) => getComputedStyle(document.querySelector(s)).display === 'none')`));
   await visit(pa, base, '#/account');
   await pa.waitFor(`document.querySelector('[data-action="google"]')`, { label: '「用 Google 登入」按鈕' });
   check('沒登入：顯示「用 Google 登入」', true);

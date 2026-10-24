@@ -990,20 +990,22 @@ export async function getShareStatus(brewId) {
   return SHARE_STATUS[await sync.brewStatus(brew)] ?? null;
 }
 
-/* ----- 好友動態 ----- */
+/* ----- 社群（動態牆） ----- */
 
 export const FEED_PAGE_SIZE = 20;
 
-/** 雲端的一列 → 畫面用的資料（中文標籤、衍生值算好）；所有文字都來自他人，顯示時一律要跳脫 */
-function toFeedItem(row, { myId, profiles, avatarUrls, photoUrls, likes }) {
+/** 雲端的一列 → 畫面用的資料（中文標籤、衍生值算好）；文字多半來自他人，顯示時一律要跳脫 */
+function toFeedItem(row, { myId, profiles, avatarUrls, photoUrls, likes, commentCounts, newCommentKeys }) {
   const owner = profiles.get(row.owner);
   const brewLikes = likes.filter((l) => l.brew_owner === row.owner && l.brew_id === row.id);
   const likers = brewLikes.map((l) => profiles.get(l.user_id)).filter(Boolean);
   const num = (v) => (v == null ? null : Number(v)); // numeric 欄位
   const brew = { coffeeG: num(row.coffee_g), waterG: num(row.water_g) };
+  const key = `${row.owner}/${row.id}`;
   return {
     owner: row.owner,
     id: row.id,
+    mine: row.owner === myId,
     nickname: owner?.nickname ?? '（不明）',
     avatarUrl: avatarUrls[owner?.avatar_path] ?? null,
     beanName: row.bean_name,
@@ -1029,64 +1031,200 @@ function toFeedItem(row, { myId, profiles, avatarUrls, photoUrls, likes }) {
     // 按讚的人：看得到 profile 的列出暱稱（自己排最前面），其他人（不是我的好友）只算人數
     likers: likers.sort((a, b) => Number(b.id === myId) - Number(a.id === myId)).map((p) => (p.id === myId ? '你' : p.nickname)),
     otherLikers: brewLikes.length - likers.length,
+    commentCount: commentCounts[key] ?? 0,
+    hasNewComments: newCommentKeys.has(key),
   };
 }
 
-/** 一批雲端紀錄 → 畫面用的資料（一起查讚、profile、頭像與照片的 signed URL） */
-async function toFeedItems(myId, rows) {
+/** 一批雲端紀錄 → 畫面用的資料（一起查讚、留言數、profile、頭像與照片的 signed URL） */
+async function toFeedItems(myId, rows, { newCommentKeys = new Set() } = {}) {
   if (!rows.length) return [];
-  const likes = await cloud.listLikes(rows);
+  const [likes, commentCounts] = await Promise.all([cloud.listLikes(rows), cloud.countComments(rows)]);
   const profileRows = await cloud.listProfiles([...rows.map((r) => r.owner), ...likes.map((l) => l.user_id)]);
   const [avatarUrls, photoUrls] = await Promise.all([
     cloud.avatarUrls(profileRows.map((p) => p.avatar_path)),
     cloud.brewPhotoUrls(rows.map((r) => r.photo_path)),
   ]);
   const profiles = new Map(profileRows.map((p) => [p.id, p]));
-  return rows.map((row) => toFeedItem(row, { myId, profiles, avatarUrls, photoUrls, likes }));
+  return rows.map((row) => toFeedItem(row, { myId, profiles, avatarUrls, photoUrls, likes, commentCounts, newCommentKeys }));
 }
 
 /**
- * 好友動態（依沖煮時間新→舊）：{ items, hasMore }；offset 是已載入的筆數
- * 讀第一頁時記下「看過了」（getSocialBadges 的新貼文提示）
+ * 動態牆（依沖煮時間新→舊）：{ items, hasMore }；offset 是已載入的筆數
+ * mine 為 false（全部）：自己＋好友的；true（我的）：只有自己的
+ * 讀第一頁時記下「看過了」（社群分頁的數字）：全部＝好友新貼文、我貼文的新留言、回覆我的；我的＝後兩個
+ * 有新留言的貼文 hasNewComments 為 true（只在這次標示）
  */
-export async function listFeed(myId, { offset = 0 } = {}) {
-  // 先查好友最新貼文的時間再讀動態牆：讀的期間才新增的貼文比它新，下次仍會提示
-  const latest = offset === 0 ? await cloud.latestFriendBrewAt(myId) : null;
-  const rows = await cloud.listFeed(myId, { offset, limit: FEED_PAGE_SIZE + 1 }); // 多拿一筆判斷還有沒有
-  const items = await toFeedItems(myId, rows.slice(0, FEED_PAGE_SIZE));
-  if (latest) await db.setMeta(FEED_SEEN_KEY, { userId: myId, at: latest });
+export async function listFeed(myId, { offset = 0, mine = false } = {}) {
+  // 先查「最新的時間」再讀動態牆：讀的期間才新增的比它新，下次仍會算進數字
+  let latestPost = null;
+  let activity = null;
+  if (offset === 0) {
+    [latestPost, activity] = await Promise.all([
+      mine ? null : cloud.latestFriendBrewAt(myId),
+      Promise.all([seenAt(COMMENTS_SEEN_KEY, myId), seenAt(REPLIES_SEEN_KEY, myId)])
+        .then(([p, r]) => cloud.commentActivity(p, r)),
+    ]);
+  }
+  const rows = await cloud.listFeed(myId, { offset, limit: FEED_PAGE_SIZE + 1, mine }); // 多拿一筆判斷還有沒有
+  const items = await toFeedItems(myId, rows.slice(0, FEED_PAGE_SIZE), { newCommentKeys: new Set(activity?.posts ?? []) });
+  const seen = (key, at) => (at ? db.setMeta(key, { userId: myId, at }) : null);
+  await Promise.all([
+    seen(FEED_SEEN_KEY, latestPost),
+    seen(COMMENTS_SEEN_KEY, activity?.latest_post_comment_at),
+    seen(REPLIES_SEEN_KEY, activity?.latest_reply_at),
+  ]);
   return { items, hasMore: rows.length > FEED_PAGE_SIZE };
 }
 
-/* ----- 提示：☰ 按鈕（收到好友邀請）、底部「好友」分頁（好友有新貼文） ----- */
+/* ----- 提示：☰ 按鈕（收到好友邀請）、底部「社群」分頁（新通知的數字） ----- */
 
-// 上次看動態牆時，好友最新貼文的建立時間（雲端的時間，不受手機時鐘影響）；記在 meta，換帳號就不算數
-const FEED_SEEN_KEY = 'feedSeenAt';
+// 上次看社群頁時，各種通知最新一則的建立時間（雲端的時間，不受手機時鐘影響）；記在 meta，換帳號就不算數
+const FEED_SEEN_KEY = 'feedSeenAt';         // 好友的新貼文
+const COMMENTS_SEEN_KEY = 'commentsSeenAt'; // 別人在我的貼文留言
+const REPLIES_SEEN_KEY = 'repliesSeenAt';   // 別人在別人的貼文回覆我
+const BADGE_COUNT_MAX = 100;                // 每種最多算到 100（畫面顯示 99+）
+
+/** meta 記下的「看過了」時間；不是這個帳號記的、或還沒看過回傳 null（全部算新的） */
+async function seenAt(key, userId) {
+  const seen = await db.getMeta(key);
+  return seen?.userId === userId ? seen.at : null;
+}
 
 /**
- * { requests: 有沒有收到好友邀請, feed: 好友有沒有新貼文 }
+ * { requests: 有沒有收到好友邀請, count: 社群分頁的數字（好友新貼文＋我貼文的新留言＋回覆我的） }
  * 沒登入直接回傳都沒有（只讀本機，不載入 supabase-js）；連不上伺服器會丟出錯誤（呼叫端維持原本的顯示）
  */
 export async function getSocialBadges() {
-  const none = { requests: false, feed: false };
+  const none = { requests: false, count: 0 };
   if (!socialAvailable) return none;
   const userId = await sync.sessionUserId();
   if (!userId) return none;
-  const [requests, latest, seen] = await Promise.all([
-    cloud.hasIncomingRequests(userId), cloud.latestFriendBrewAt(userId), db.getMeta(FEED_SEEN_KEY),
+  const [feedSeen, commentsSeen, repliesSeen] = await Promise.all(
+    [FEED_SEEN_KEY, COMMENTS_SEEN_KEY, REPLIES_SEEN_KEY].map((key) => seenAt(key, userId)),
+  );
+  const [requests, posts, activity] = await Promise.all([
+    cloud.hasIncomingRequests(userId),
+    cloud.countFriendBrewsSince(userId, feedSeen, BADGE_COUNT_MAX),
+    cloud.commentActivity(commentsSeen, repliesSeen),
   ]);
-  const seenAt = seen?.userId === userId ? seen.at : null; // 還沒看過動態牆：好友有任何貼文就提示
-  return { requests, feed: latest != null && (seenAt == null || new Date(latest) > new Date(seenAt)) };
+  return { requests, count: posts + (activity?.post_comments ?? 0) + (activity?.replies ?? 0) };
 }
 
-/** 好友的一筆紀錄；讀不到（不是好友、被封鎖、已刪除或改回只有我）回傳 null */
+/** 數字徽章的文字：0 → ''（隱藏）、1–99、超過 99 → '99+' */
+export const badgeText = (n) => (!n ? '' : n > 99 ? '99+' : String(n));
+
+/**
+ * 動態牆的一筆紀錄（好友的或自己的）；讀不到（不是好友、被封鎖、已刪除或改回只有我）回傳 null
+ * 自己的紀錄：這台裝置有這筆時 canEdit 為 true（詳細頁顯示「編輯」）
+ */
 export async function getFeedBrew(myId, owner, id) {
   const row = await cloud.getSharedBrew(owner, id);
-  return row ? (await toFeedItems(myId, [row]))[0] : null;
+  if (!row) return null;
+  const [item] = await toFeedItems(myId, [row]);
+  item.canEdit = item.mine && Boolean(await db.get('brews', id));
+  return item;
 }
 
 /** 按讚／收回讚 */
 export const setLike = (myId, owner, id, liked) => (liked ? cloud.like(owner, id) : cloud.unlike(myId, owner, id));
+
+/* ----- 留言與回覆 ----- */
+
+export const COMMENT_MAX = 300; // 和資料庫的 check 一致
+
+/** 留言內容驗證（資料庫也有同樣的 check）：去掉前後空白後 1–300 字；回傳錯誤訊息或 '' */
+export function validateComment(body) {
+  const s = String(body ?? '').trim();
+  if (!s) return '請輸入留言';
+  const n = charLength(s);
+  if (n > COMMENT_MAX) return `最多 ${COMMENT_MAX} 字（目前 ${n} 字）`;
+  if (/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/.test(s)) return '不能有特殊字元';
+  return '';
+}
+
+/** 留言失敗時的訊息 */
+export function commentErrorMessage(err) {
+  if (err?.code === 'P0001') return '今天的留言已達上限（100 則），明天再試';
+  // 不是好友、被封鎖、紀錄已刪除或改回只有我、回覆的留言已刪除：都一樣
+  if (['42501', '403', '23503'].includes(err?.code)) return '這篇紀錄或留言已經看不到了，重新整理看看';
+  return socialErrorMessage(err);
+}
+
+/** 相對時間：剛剛、5 分鐘前、3 小時前、2 天前；超過 7 天顯示日期 */
+export function formatRelative(iso, now = Date.now()) {
+  const t = new Date(iso).getTime();
+  const minutes = Math.floor((now - t) / 60000);
+  if (minutes < 1) return '剛剛';
+  if (minutes < 60) return `${minutes} 分鐘前`;
+  if (minutes < 60 * 24) return `${Math.floor(minutes / 60)} 小時前`;
+  if (minutes < 60 * 24 * 7) return `${Math.floor(minutes / (60 * 24))} 天前`;
+  const d = new Date(t);
+  const sameYear = d.getFullYear() === new Date(now).getFullYear();
+  return `${sameYear ? '' : `${d.getFullYear()}/`}${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+/**
+ * 雲端的一列留言 → 畫面用的資料
+ * 暱稱：看得到對方的 profile（自己、好友）就用現在的暱稱和頭像；看不到（好友的好友）用留言當下記下的暱稱
+ * 所有文字都可能來自他人，顯示時一律要跳脫
+ */
+function toComment(row, { myId, brewOwner, profiles, avatarUrls }) {
+  const author = profiles.get(row.author);
+  const replyTo = row.reply_to_user ? profiles.get(row.reply_to_user) : null;
+  return {
+    id: row.id,
+    parentId: row.parent_id,
+    author: row.author,
+    nickname: author?.nickname ?? (row.author_nickname || '（不明）'),
+    avatarUrl: avatarUrls[author?.avatar_path] ?? null,
+    replyToUser: row.reply_to_user,
+    replyToNickname: row.reply_to_user ? (replyTo?.nickname ?? row.reply_to_nickname ?? null) : null,
+    body: row.body,
+    createdAt: row.created_at,
+    mine: row.author === myId,
+    canDelete: row.author === myId || brewOwner === myId, // 和資料庫的刪除政策一致
+  };
+}
+
+async function toComments(myId, brewOwner, rows) {
+  const profileRows = await cloud.listProfiles(rows.flatMap((r) => [r.author, r.reply_to_user]).filter(Boolean));
+  const avatarUrls = await cloud.avatarUrls(profileRows.map((p) => p.avatar_path));
+  const profiles = new Map(profileRows.map((p) => [p.id, p]));
+  return rows.map((row) => toComment(row, { myId, brewOwner, profiles, avatarUrls }));
+}
+
+/**
+ * 一筆紀錄的留言：{ threads: [{ ...主留言, replies: [回覆, ...] }], count }
+ * 主留言、回覆都是舊→新；回覆的回覆也在同一則主留言下（replyToNickname 顯示「@暱稱」）
+ */
+export async function listComments(myId, owner, id) {
+  const comments = await toComments(myId, owner, await cloud.listComments(owner, id));
+  const threads = comments.filter((c) => !c.parentId).map((c) => ({ ...c, replies: [] }));
+  const byId = new Map(threads.map((t) => [t.id, t]));
+  for (const c of comments) if (c.parentId) byId.get(c.parentId)?.replies.push(c);
+  return { threads, count: comments.length };
+}
+
+/**
+ * 留言或回覆；回傳 { ok, error } 或 { ok: true, comment }
+ * replyTo：要回覆的那則留言（主留言或回覆）。回覆一律掛在主留言下；回覆別人的回覆時記下對象（@暱稱）
+ * 被資料庫拒絕會丟出錯誤（用 commentErrorMessage 顯示）
+ */
+export async function addComment(myId, owner, id, { body, replyTo = null }) {
+  const error = validateComment(body);
+  if (error) return { ok: false, error };
+  const parentId = replyTo ? (replyTo.parentId ?? replyTo.id) : null;
+  const replyToUser = replyTo?.parentId && replyTo.author !== myId ? replyTo.author : null;
+  const row = await cloud.insertComment({ owner, id, body: String(body).trim(), parentId, replyToUser });
+  const [comment] = await toComments(myId, owner, [row]);
+  return { ok: true, comment };
+}
+
+/** 刪除留言（主留言的回覆由資料庫一起刪除）；沒刪到（沒有權限或已經刪除）丟出錯誤 */
+export async function deleteComment(commentId) {
+  if (!(await cloud.deleteComment(commentId))) throw new Error('這則留言已經刪除，或你沒有權限刪除');
+}
 
 /* ----- 檢舉、刪除帳號 ----- */
 

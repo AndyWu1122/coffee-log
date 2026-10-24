@@ -84,7 +84,7 @@ try {
   /* ===== B：檢舉 A 的紀錄 ===== */
   const pb = await openPage(chrome, base);
   await signIn(pb, await realSession(B));
-  await visit(pb, base, `#/feed/${A.id}/${brewId}`);
+  await visit(pb, base, `#/social/${A.id}/${brewId}`);
   await pb.waitFor(`document.querySelector('[data-action="report"]')`, { label: '檢舉按鈕' });
   check('檢舉表單一開始是收起來的', await pb.eval(`document.querySelector('#report-form').hidden`));
   await click(pb, '[data-action="report"]');
@@ -115,7 +115,7 @@ try {
   const legacy = await pb.eval(`import('./js/views/ui.js').then((ui) => [18, '1.0.0', '1.0', 'abc', 0, 1.5, null, {}].map(ui.normalizeAppVersion))`);
   check('舊版 SW 回整數 18 → 字串 "18"；格式不對 → null', JSON.stringify(legacy) === JSON.stringify(['18', '1.0.0', null, null, null, null, null, null]),
     JSON.stringify(legacy));
-  await visit(pb, base, `#/feed/${A.id}/${brewId}`);
+  await visit(pb, base, `#/social/${A.id}/${brewId}`);
   await pb.waitFor(`document.querySelector('.feed-photo')?.complete`, { label: '照片載入' });
   const cached = await pb.eval(`(async () => {
     const urls = [];
@@ -129,8 +129,9 @@ try {
   /* ===== B：從詳細頁封鎖 A ===== */
   await click(pb, '[data-action="block"]');
   await toast(pb, '已封鎖');
-  await pb.waitFor(`location.hash === '#/feed' && document.querySelector('.empty')`, { label: '回到空的動態牆' });
-  check('封鎖後回到動態牆，看不到 A 的紀錄', !(await pb.eval(`document.querySelector('.feed-card')`)));
+  await pb.waitFor(`location.hash === '#/social' && document.querySelector('#feed-page')`, { label: '回到社群頁' });
+  check('封鎖後回到社群頁，看不到 A 的紀錄（只剩自己的）',
+    (await pb.eval(`[...document.querySelectorAll('.feed-card')].map((c) => c.dataset.key)`)).join() === `${B.id}/${bBrew}`);
   check('封鎖名單有 A', (await adminRows(`blocks?blocker=eq.${B.id}`)).some((b) => b.blocked === A.id));
 
   /* ===== A：刪除帳號 ===== */
@@ -188,7 +189,8 @@ try {
 
   /* ===== CSP ===== */
   // App 的每一頁（含分享卡片的 canvas、照片的 blob 網址）都不能因為 CSP 壞掉
-  for (const hash of ['#/', `#/brew/${brewId}`, `#/brew/${brewId}/share`, '#/brew/new', '#/beans', `#/beans/${beanId}`, '#/grinders', '#/backup', '#/feedback']) {
+  for (const hash of ['#/', `#/brew/${brewId}`, `#/brew/${brewId}/share`, '#/brew/new', '#/beans', `#/beans/${beanId}`, '#/grinders', '#/backup', '#/feedback',
+    '#/social', '#/social?mine=1', `#/social/${A.id}/${brewId}?comments=1`]) {
     await visit(pa, base, hash);
     await pa.waitFor(`document.querySelector('#app').children.length > 0 && !document.querySelector('#app > .hint')`, { label: `${hash} 載入` });
   }

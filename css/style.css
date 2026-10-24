@@ -14,7 +14,7 @@
   --accent-text: #1c140f;
   --danger: #e0685a;
   --ok: #7fb685;
-  --badge-new: #6cb4e0;      /* 「好友」分頁的新貼文提示（和 ☰ 的強調色區分） */
+  --badge-new: #6cb4e0;      /* 「社群」分頁的新通知數字（和 ☰ 的強調色區分） */
   --badge-new-text: #1c140f;
   --shadow: rgba(0, 0, 0, 0.45);
   /* QR code 不分主題都是淺底深色，相機才掃得到 */
@@ -100,7 +100,7 @@ a { color: var(--accent); }
 }
 .menu-btn[aria-expanded="true"] { background: var(--surface-2); }
 
-/* 社群提示「!」：☰ 按鈕＝收到好友邀請（強調色）；底部「好友」分頁＝好友有新貼文（--badge-new）
+/* 社群提示：☰ 按鈕的「!」＝收到好友邀請（強調色）；底部「社群」分頁的數字＝新通知（--badge-new）
    外圈用所在位置的底色（header、tabbar 都是 --surface）隔開圖示 */
 .menu-btn, .tab-icon { position: relative; }
 .notify-badge {
@@ -651,6 +651,71 @@ a.feed-body:active { background: var(--surface-2); }
 .detail-text { margin: 0; overflow-wrap: anywhere; }
 .detail-notes { white-space: pre-wrap; }
 .feed + .section { margin-top: 24px; }
+
+/* 社群頁：全部｜我的、自己的卡片標「我」、卡片上的留言數 */
+.feed-toolbar { justify-content: space-between; align-items: center; gap: 12px; }
+.feed-toolbar .segmented { flex: 0 1 200px; }
+.me-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.comment-link {
+  margin-left: auto;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: var(--text-dim);
+  text-decoration: none;
+  flex: none;
+}
+.comment-link.has-new { color: var(--badge-new-text); background: var(--badge-new); font-weight: 600; }
+
+/* 詳細頁的留言：主留言舊→新，回覆縮排在下面 */
+.comments h2 .hint { font-weight: 400; }
+.comment-list, .comment-replies { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.comment-list { margin-top: 8px; }
+.comment-replies { margin: 10px 0 0 42px; }
+.comment-replies:empty { display: none; }
+.comment { display: flex; gap: 10px; min-width: 0; }
+.comment[hidden] { display: none; }
+.comment .avatar { width: 32px; height: 32px; font-size: 0.9rem; }
+.comment-main { min-width: 0; flex: 1; }
+.comment-meta { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.comment-meta .person-name { font-size: 0.95rem; }
+.comment-meta .hint { font-size: 0.8rem; }
+.comment-body { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.comment.pending { opacity: 0.6; }
+.mention { color: var(--accent); font-weight: 600; }
+.comment-actions { display: flex; gap: 8px; margin-left: -4px; }
+.comment-actions .link-btn { min-height: 36px; font-size: 0.85rem; color: var(--text-dim); }
+.comment-actions .link-btn.danger { color: var(--danger); }
+.more-replies { margin-left: 42px; font-size: 0.9rem; }
+.comment-form { margin-top: 16px; display: grid; gap: 8px; }
+.comment-form textarea { min-height: 72px; }
+.comment-form .field.invalid textarea { border-color: var(--danger); }
+.comment-form-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.comment-form-foot .btn { min-width: 96px; }
+.comment-length.near { color: var(--accent); font-weight: 600; }
+.comment-length.over { color: var(--danger); font-weight: 600; }
+.comment-target {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 0 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 0.9rem;
+}
+.comment-target[hidden] { display: none; }
 
 /* ===== 安全與隱私：檢舉、封鎖、刪除帳號、隱私說明 ===== */
 .safety { margin-top: 32px; }
