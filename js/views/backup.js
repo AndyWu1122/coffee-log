@@ -9,13 +9,13 @@ const IMPORT_MODES = [
 
 export async function render(container, { isCurrent }) {
   setTitle('備份');
-  const { beans, brews } = await exportData();
+  const { beans, grinders, brews } = await exportData();
   if (!isCurrent()) return;
 
   container.innerHTML = `
     <section class="section">
       <h2>匯出</h2>
-      <p class="hint">目前有 ${beans.length} 支豆子、${brews.length} 筆紀錄。建議定期匯出，存到雲端硬碟。</p>
+      <p class="hint">目前有 ${beans.length} 支豆子、${grinders.length} 台磨豆機、${brews.length} 筆紀錄。建議定期匯出，存到雲端硬碟。</p>
       <button class="btn btn-primary btn-block" type="button" id="export">匯出 JSON</button>
     </section>
 
@@ -60,7 +60,7 @@ export async function render(container, { isCurrent }) {
     const replace = segmentedValue(container, 'mode') === 'replace';
     if (replace) {
       const current = await exportData();
-      const ok = confirm(`將刪除現有的 ${current.beans.length} 支豆子、${current.brews.length} 筆紀錄，改用備份檔內容。確定？`);
+      const ok = confirm(`將刪除現有的 ${current.beans.length} 支豆子、${current.grinders.length} 台磨豆機、${current.brews.length} 筆紀錄，改用備份檔內容。確定？`);
       if (!ok) return;
     }
 
@@ -73,7 +73,7 @@ export async function render(container, { isCurrent }) {
         </div>`;
       return;
     }
-    toast(`已匯入 ${result.beans} 支豆子、${result.brews} 筆紀錄`);
+    toast(`已匯入 ${result.beans} 支豆子、${result.grinders} 台磨豆機、${result.brews} 筆紀錄`);
     location.hash = '#/';
   });
 }

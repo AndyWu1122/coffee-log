@@ -10,6 +10,10 @@ const routes = [
   { pattern: /^\/beans\/new$/, tab: 'beans', load: () => import('./views/beanForm.js') },
   { pattern: /^\/beans\/([\w-]+)$/, tab: 'beans', load: () => import('./views/beanForm.js') },
   { pattern: /^\/backup$/, tab: 'backup', load: () => import('./views/backup.js') },
+  // ☰ 選單裡的頁面：不屬於任何底部分頁（tab: null）
+  { pattern: /^\/grinders$/, tab: null, load: () => import('./views/grinderList.js') },
+  { pattern: /^\/grinders\/new$/, tab: null, load: () => import('./views/grinderForm.js') },
+  { pattern: /^\/grinders\/([\w-]+)$/, tab: null, load: () => import('./views/grinderForm.js') },
 ];
 
 /** 解析 "#/brew/new?from=abc" → { path: '/brew/new', query: { from: 'abc' } } */
@@ -35,7 +39,7 @@ async function navigate() {
   }
 
   for (const a of document.querySelectorAll('.tabbar a')) {
-    a.classList.toggle('active', a.dataset.tab === route.tab);
+    a.classList.toggle('active', route.tab !== null && a.dataset.tab === route.tab);
   }
 
   try {
@@ -54,6 +58,35 @@ async function navigate() {
     if (token !== navToken) return;
     container.innerHTML = `<div class="empty"><p>發生錯誤：${esc(err.message)}</p><a class="btn" href="#/">回首頁</a></div>`;
   }
+}
+
+/* ===== 右上角 ☰ 選單 ===== */
+
+function setupMenu() {
+  const btn = document.getElementById('menu-btn');
+  const list = document.getElementById('app-menu');
+  const setOpen = (open) => {
+    list.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+  };
+  const isOpen = () => !list.hidden;
+
+  btn.addEventListener('click', () => {
+    setOpen(!isOpen());
+    if (isOpen()) list.querySelector('[role="menuitem"]')?.focus();
+  });
+  // 點選單項目、點選單外面、按 Esc、換頁都關閉
+  list.addEventListener('click', (e) => { if (e.target.closest('[role="menuitem"]')) setOpen(false); });
+  document.addEventListener('click', (e) => {
+    if (isOpen() && !e.target.closest('.menu')) setOpen(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isOpen()) {
+      setOpen(false);
+      btn.focus();
+    }
+  });
+  window.addEventListener('hashchange', () => setOpen(false));
 }
 
 /* ===== PWA：Service Worker 與新版本提示 ===== */
@@ -98,6 +131,7 @@ function setupServiceWorker() {
 
 window.addEventListener('hashchange', navigate);
 navigate();
+setupMenu();
 setupServiceWorker();
 // 申請持久儲存，降低瀏覽器（特別是 iOS）自動清除資料的機會
 navigator.storage?.persist?.().catch(() => {});

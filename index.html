@@ -19,6 +19,14 @@
 <body>
   <header class="app-header">
     <h1 id="page-title">手沖紀錄</h1>
+    <!-- 不常調整的設定放在這個選單，不加到底部分頁列 -->
+    <div class="menu">
+      <button type="button" class="menu-btn" id="menu-btn" aria-label="選單"
+        aria-haspopup="menu" aria-expanded="false" aria-controls="app-menu">☰</button>
+      <div class="menu-list" id="app-menu" role="menu" hidden>
+        <a role="menuitem" href="#/grinders"><span aria-hidden="true">⚙️</span>磨豆機</a>
+      </div>
+    </div>
   </header>
 
   <main id="app"></main>

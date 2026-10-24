@@ -5,7 +5,9 @@ import { isFlavorNote, sortFlavorNotes } from './flavorWheel.js';
 // views 只依賴 models，風味輪資料由這裡轉出
 export { FLAVOR_WHEEL, flavorNote, sortFlavorNotes } from './flavorWheel.js';
 
-export const SCHEMA_VERSION = 1;
+// 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；匯入時仍接受 v1
+export const SCHEMA_VERSION = 2;
+const IMPORTABLE_VERSIONS = [1, 2];
 
 export const PROCESS = { washed: '水洗', natural: '日曬', honey: '蜜處理', other: '其他' };
 // 由淺到深排列
@@ -130,6 +132,12 @@ export function validateBrew(b) {
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
+export function validateGrinder(g) {
+  const errors = {};
+  if (!g.name?.trim()) errors.name = '請輸入磨豆機名稱';
+  return { ok: Object.keys(errors).length === 0, errors };
+}
+
 /* ===== 正規化：表單值或匯入的 JSON → 要存進 DB 的物件（只留規格內的欄位） ===== */
 
 const toIso = (v) => {
@@ -154,6 +162,7 @@ function normalizeBrew(input) {
   return {
     id: input.id || newId(),
     beanId: input.beanId || '',
+    grinderId: input.grinderId || '', // 空字串＝未指定；舊紀錄沒有這個欄位
     brewedAt: toIso(input.brewedAt),
     dripper: String(input.dripper ?? '').trim(),
     grindSetting: String(input.grindSetting ?? '').trim(),
@@ -171,6 +180,20 @@ function normalizeBrew(input) {
   };
 }
 
+function normalizeGrinder(input) {
+  return {
+    id: input.id || newId(),
+    name: String(input.name ?? '').trim(),
+    notes: String(input.notes ?? '').trim(),
+    archived: Boolean(input.archived),
+    createdAt: toIso(input.createdAt) ?? new Date().toISOString(),
+  };
+}
+
+/** 未封存在前，再依建立時間新→舊（豆子、磨豆機共用） */
+const byArchivedThenNewest = (a, b) =>
+  Number(a.archived) - Number(b.archived) || b.createdAt.localeCompare(a.createdAt);
+
 /* ===== 豆子 ===== */
 
 /** 豆子列表：未封存在前，再依建立時間新→舊；附上「烘焙至今天數」 */
@@ -178,7 +201,7 @@ export async function listBeans({ includeArchived = false } = {}) {
   const beans = await db.getAll('beans');
   return beans
     .filter((b) => includeArchived || !b.archived)
-    .sort((a, b) => Number(a.archived) - Number(b.archived) || b.createdAt.localeCompare(a.createdAt))
+    .sort(byArchivedThenNewest)
     .map((b) => ({ ...b, daysSinceRoast: restDays(new Date(), b.roastDate) }));
 }
 
@@ -213,18 +236,67 @@ export async function deleteBean(id) {
   return { ok: true };
 }
 
+/* ===== 磨豆機 ===== */
+
+export async function listGrinders({ includeArchived = false } = {}) {
+  const grinders = await db.getAll('grinders');
+  return grinders.filter((g) => includeArchived || !g.archived).sort(byArchivedThenNewest);
+}
+
+export const getGrinder = (id) => db.get('grinders', id);
+
+/** 新增或更新磨豆機；回傳 { ok, grinder } 或 { ok: false, errors } */
+export async function saveGrinder(input) {
+  const existing = input.id ? await db.get('grinders', input.id) : null;
+  const grinder = normalizeGrinder({
+    ...input, id: existing?.id, archived: existing?.archived, createdAt: existing?.createdAt,
+  });
+  const { ok, errors } = validateGrinder(grinder);
+  if (!ok) return { ok, errors };
+  await db.put('grinders', grinder);
+  return { ok: true, grinder };
+}
+
+export async function setGrinderArchived(id, archived) {
+  const grinder = await db.get('grinders', id);
+  if (!grinder) throw new Error('找不到這台磨豆機');
+  await db.put('grinders', { ...grinder, archived: Boolean(archived) });
+}
+
+/** 有紀錄引用的磨豆機不可刪除 */
+export async function deleteGrinder(id) {
+  const count = await db.countByIndex('brews', 'grinderId', id);
+  if (count > 0) {
+    return { ok: false, message: `這台磨豆機有 ${count} 筆沖煮紀錄，無法刪除，請改用「封存」` };
+  }
+  await db.remove('grinders', id);
+  return { ok: true };
+}
+
+/**
+ * 新紀錄預設的磨豆機：最近一筆紀錄用的那台（需存在且未封存），否則第一台；都沒有回傳 ''
+ */
+export async function defaultGrinderId() {
+  const [brews, grinders] = await Promise.all([db.getAll('brews'), listGrinders()]);
+  const latest = brews.reduce((cur, b) => (!cur || b.brewedAt > cur.brewedAt ? b : cur), null);
+  if (latest?.grinderId && grinders.some((g) => g.id === latest.grinderId)) return latest.grinderId;
+  return grinders[0]?.id ?? '';
+}
+
 /* ===== 沖煮紀錄 ===== */
 
 /**
- * 紀錄列表：依 brewedAt 新→舊，附上豆名、粉水比、養豆天數
+ * 紀錄列表：依 brewedAt 新→舊，附上豆名、磨豆機名稱、粉水比、養豆天數
  * 篩選：beanId 指定豆子；minRating 只列評分 ≥ 此值（未評分的不列）
  */
 export async function listBrews({ beanId = '', minRating = null } = {}) {
-  const [brews, beans] = await Promise.all([
+  const [brews, beans, grinders] = await Promise.all([
     beanId ? db.getAllByIndex('brews', 'beanId', beanId) : db.getAll('brews'),
     db.getAll('beans'),
+    db.getAll('grinders'),
   ]);
   const beanById = new Map(beans.map((b) => [b.id, b]));
+  const grinderById = new Map(grinders.map((g) => [g.id, g]));
   return brews
     .filter((b) => !minRating || (b.rating ?? 0) >= minRating)
     .sort((a, b) => b.brewedAt.localeCompare(a.brewedAt))
@@ -233,6 +305,7 @@ export async function listBrews({ beanId = '', minRating = null } = {}) {
       return {
         ...brew,
         beanName: bean?.name ?? '（已刪除的豆子）',
+        grinderName: grinderById.get(brew.grinderId)?.name ?? '',
         ratio: ratio(brew),
         restDays: restDays(brew.brewedAt, bean?.roastDate),
       };
@@ -246,6 +319,7 @@ export async function saveBrew(input) {
   const brew = normalizeBrew(input);
   const { ok, errors } = validateBrew(brew);
   if (ok && !(await db.get('beans', brew.beanId))) errors.beanId = '找不到這支豆子';
+  if (brew.grinderId && !(await db.get('grinders', brew.grinderId))) errors.grinderId = '找不到這台磨豆機';
   if (Object.keys(errors).length) return { ok: false, errors };
   await db.put('brews', brew);
   return { ok: true, brew };
@@ -266,8 +340,8 @@ export async function latestBrewByBean() {
 /* ===== 備份：JSON 匯出匯入 ===== */
 
 export async function exportData() {
-  const [beans, brews] = await Promise.all([db.getAll('beans'), db.getAll('brews')]);
-  return { schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), beans, brews };
+  const [beans, grinders, brews] = await Promise.all([db.getAll('beans'), db.getAll('grinders'), db.getAll('brews')]);
+  return { schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), beans, grinders, brews };
 }
 
 export const exportFileName = () => `coffee-log-${todayLocal()}.json`;
@@ -275,7 +349,8 @@ export const exportFileName = () => `coffee-log-${todayLocal()}.json`;
 /**
  * 匯入備份 JSON 文字。整份檔案都通過驗證才寫入（單一交易），否則完全不動。
  * replace：true 先清空現有資料；false 依 id 合併（同 id 以檔案為準）
- * 回傳 { ok: true, beans, brews }（筆數）或 { ok: false, errors: [訊息...] }
+ * v1 檔案沒有 grinders，視為空陣列；brews 沒有 grinderId 會補成 ''
+ * 回傳 { ok: true, beans, grinders, brews }（筆數）或 { ok: false, errors: [訊息...] }
  */
 export async function importData(text, { replace = false } = {}) {
   let data;
@@ -284,11 +359,12 @@ export async function importData(text, { replace = false } = {}) {
   } catch {
     return { ok: false, errors: ['不是有效的 JSON 檔案'] };
   }
-  if (data?.schemaVersion !== SCHEMA_VERSION) {
+  if (!IMPORTABLE_VERSIONS.includes(data?.schemaVersion)) {
     return { ok: false, errors: [`不支援的資料版本：${data?.schemaVersion ?? '無'}（目前為 ${SCHEMA_VERSION}）`] };
   }
-  if (!Array.isArray(data.beans) || !Array.isArray(data.brews)) {
-    return { ok: false, errors: ['檔案缺少 beans 或 brews 資料'] };
+  if (data.schemaVersion === 1 && data.grinders === undefined) data.grinders = [];
+  if (!Array.isArray(data.beans) || !Array.isArray(data.brews) || !Array.isArray(data.grinders)) {
+    return { ok: false, errors: ['檔案缺少 beans、grinders 或 brews 資料'] };
   }
 
   const errors = [];
@@ -303,9 +379,22 @@ export async function importData(text, { replace = false } = {}) {
     return bean;
   });
 
-  // 紀錄引用的豆子必須在檔案裡；合併模式下也可以是資料庫裡已有的
+  const grinders = data.grinders.map((input, i) => {
+    const grinder = normalizeGrinder(input ?? {});
+    const label = `第 ${i + 1} 台磨豆機「${grinder.name || '未命名'}」`;
+    if (!input?.id) errors.push(`${label}：缺少 id`);
+    const v = validateGrinder(grinder);
+    if (!v.ok) errors.push(`${label}：${describe(v.errors)}`);
+    return grinder;
+  });
+
+  // 紀錄引用的豆子、磨豆機必須在檔案裡；合併模式下也可以是資料庫裡已有的
   const knownBeanIds = new Set(beans.map((b) => b.id));
-  if (!replace) for (const b of await db.getAll('beans')) knownBeanIds.add(b.id);
+  const knownGrinderIds = new Set(grinders.map((g) => g.id));
+  if (!replace) {
+    for (const b of await db.getAll('beans')) knownBeanIds.add(b.id);
+    for (const g of await db.getAll('grinders')) knownGrinderIds.add(g.id);
+  }
 
   const brews = data.brews.map((input, i) => {
     const brew = normalizeBrew(input ?? {});
@@ -314,6 +403,7 @@ export async function importData(text, { replace = false } = {}) {
     const v = validateBrew(brew);
     if (!v.ok) errors.push(`${label}：${describe(v.errors)}`);
     else if (!knownBeanIds.has(brew.beanId)) errors.push(`${label}：找不到對應的豆子`);
+    else if (brew.grinderId && !knownGrinderIds.has(brew.grinderId)) errors.push(`${label}：找不到對應的磨豆機`);
     return brew;
   });
 
@@ -324,14 +414,14 @@ export async function importData(text, { replace = false } = {}) {
     return { ok: false, errors: shown };
   }
 
-  await db.bulkPut({ beans, brews }, { clear: replace });
-  return { ok: true, beans: beans.length, brews: brews.length };
+  await db.bulkPut({ beans, grinders, brews }, { clear: replace });
+  return { ok: true, beans: beans.length, grinders: grinders.length, brews: brews.length };
 }
 
 /** 「再沖一杯」要複製的參數；評分、風味、筆記、總時間是每杯的結果，不複製 */
 export function brewTemplateFrom(brew) {
-  const { beanId, dripper, grindSetting, coffeeG, waterG, tempC } = brew;
-  return { beanId, dripper, grindSetting, coffeeG, waterG, tempC };
+  const { beanId, grinderId = '', dripper, grindSetting, coffeeG, waterG, tempC } = brew;
+  return { beanId, grinderId, dripper, grindSetting, coffeeG, waterG, tempC };
 }
 
 /** 最近用過的濾杯名稱（不重複），給表單的建議清單 */

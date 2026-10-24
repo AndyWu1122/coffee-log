@@ -1,7 +1,7 @@
 // #/brew/new、#/brew/<id> 新增 / 編輯沖煮紀錄
 import {
   getBrew, saveBrew, deleteBrew, listBeans, listRecentDrippers, latestBrewByBean, brewTemplateFrom,
-  ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
+  listGrinders, defaultGrinderId, ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors } from './ui.js';
 import { createFlavorPicker } from './flavorPicker.js';
@@ -11,12 +11,14 @@ const shortDate = new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'num
 
 export async function render(container, { id, query, isCurrent }) {
   const isNew = id === null;
-  const [brew, beans, drippers, latestByBean, source] = await Promise.all([
+  const [brew, beans, grinders, drippers, latestByBean, source, defaultGrinder] = await Promise.all([
     isNew ? null : getBrew(id),
     listBeans({ includeArchived: true }),
+    listGrinders({ includeArchived: true }),
     listRecentDrippers(),
     isNew ? latestBrewByBean() : new Map(),
     isNew && query.from ? getBrew(query.from) : null,
+    isNew ? defaultGrinderId() : '',
   ]);
   if (!isCurrent()) return;
 
@@ -39,8 +41,13 @@ export async function render(container, { id, query, isCurrent }) {
   }
   setTitle(isNew ? '新增紀錄' : '編輯紀錄');
 
+  // 磨豆機同樣只列未封存的；編輯時原本那台即使已封存也列出
+  const grinderOptions = grinders.filter((g) => !g.archived || g.id === brew?.grinderId);
+  const hasActiveGrinder = grinders.some((g) => !g.archived);
+
   const b = brew ?? {
     beanId: beanOptions[0].id,
+    grinderId: defaultGrinder,
     brewedAt: new Date().toISOString(),
     dripper: drippers[0] ?? '',
     grindSetting: '', coffeeG: '', waterG: '', tempC: '',
@@ -57,6 +64,8 @@ export async function render(container, { id, query, isCurrent }) {
         b.beanId = beanOptions[0].id;
         notice += '（原本的豆子已封存，請重新選擇豆子）';
       }
+      // 原紀錄沒有磨豆機、或那台已封存／刪除時，改用預設值
+      if (!grinderOptions.some((g) => g.id === b.grinderId)) b.grinderId = defaultGrinder;
     } else {
       notice = '找不到要複製的紀錄';
     }
@@ -85,12 +94,25 @@ export async function render(container, { id, query, isCurrent }) {
         <div class="error"></div>
       </div>
 
+      <div class="field" data-field="dripper">
+        <label for="dripper">濾杯</label>
+        <input id="dripper" name="dripper" list="dripper-list" value="${esc(b.dripper)}" placeholder="V60" autocomplete="off">
+        <datalist id="dripper-list">${drippers.map((d) => `<option value="${esc(d)}">`).join('')}</datalist>
+        <div class="error"></div>
+      </div>
+
       <div class="field-row">
-        <div class="field" data-field="dripper">
-          <label for="dripper">濾杯</label>
-          <input id="dripper" name="dripper" list="dripper-list" value="${esc(b.dripper)}" placeholder="V60" autocomplete="off">
-          <datalist id="dripper-list">${drippers.map((d) => `<option value="${esc(d)}">`).join('')}</datalist>
+        <div class="field" data-field="grinderId">
+          <label for="grinderId">磨豆機</label>
+          <select id="grinderId" name="grinderId">
+            <option value="">未指定</option>
+            ${grinderOptions.map((g) => `
+              <option value="${esc(g.id)}" ${g.id === b.grinderId ? 'selected' : ''}>
+                ${esc(g.name)}${g.archived ? '（已封存）' : ''}
+              </option>`).join('')}
+          </select>
           <div class="error"></div>
+          ${hasActiveGrinder ? '' : '<a class="field-link" href="#/grinders/new">＋ 新增磨豆機</a>'}
         </div>
         <div class="field" data-field="grindSetting">
           <label for="grindSetting">研磨度</label>
@@ -191,6 +213,7 @@ export async function render(container, { id, query, isCurrent }) {
     const result = await saveBrew({
       id: brew?.id,
       beanId: f.beanId.value,
+      grinderId: f.grinderId.value,
       brewedAt: fromLocalInputValue(f.brewedAt.value),
       dripper: f.dripper.value,
       grindSetting: f.grindSetting.value,

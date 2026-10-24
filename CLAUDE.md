@@ -21,22 +21,30 @@ js/app.js          # 進入點 + hash 路由
 js/db.js           # 唯一存取 IndexedDB 的地方
 js/models.js       # 驗證、計算（粉水比、養豆天數）
 js/flavorWheel.js  # SCA 風味輪靜態資料（三層、中英、大類顏色），由 models.js 轉出給 views
-js/views/          # brewList, brewForm, beanList, beanForm, backup, flavorPicker（風味輪 SVG）, ui（共用 DOM 工具）
+js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, flavorPicker（風味輪 SVG）, ui（共用 DOM 工具）
 icons/
 ```
 
 ## 分層規則
 views → models → db，每層只呼叫下一層。views 不可直接碰 IndexedDB。
 
-## 資料模型（schemaVersion: 1）
+## 資料模型（備份 schemaVersion: 2／IndexedDB DB_VERSION: 2）
 **beans**：id, name, origin, process(washed/natural/honey/other), roastLevel(light/light-medium/medium-light/medium/dark，即 淺/淺中/中淺/中/深焙), roastDate(YYYY-MM-DD), archived(bool), createdAt
-**brews**：id, beanId, brewedAt, dripper, grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes
-- brews 建索引：beanId、brewedAt
+**grinders**：id, name(必填), notes(選填，例如刻度說明), archived(bool), createdAt
+**brews**：id, beanId, grinderId(選填，'' ＝未指定；v1 舊紀錄沒有這個欄位), brewedAt, dripper, grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes
+- brews 建索引：beanId、brewedAt、grinderId（v2 加入）
+- 有紀錄引用的豆子、磨豆機不能刪除，只能封存
+- DB 升級：`onupgradeneeded` 每一步都先檢查是否已存在，既有 store 用升級交易取得後再加索引，絕不改動舊資料
 - 衍生值不儲存：粉水比 = waterG / coffeeG、養豆天數 = 沖煮日 − roastDate，在 models.js 計算
 - id 用 crypto.randomUUID()
 
 ## 路由（hash）
-`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入
+`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`
+
+## 介面配置
+- 底部分頁列：紀錄｜豆子｜備份（常用功能）
+- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：磨豆機）
+- ☰ 選單裡的頁面不屬於任何分頁，路由設 `tab: null`，底部分頁都不亮
 
 ## 不做計時器
 使用者的秤本身有計時功能，App 不做計時器；總時間在表單手動輸入（分、秒兩欄）。
@@ -44,6 +52,7 @@ views → models → db，每層只呼叫下一層。views 不可直接碰 Index
 ## 備份
 - 匯出全部資料為 JSON（含 schemaVersion），可匯入還原
 - 匯入分「合併」（依 id 覆蓋）與「取代全部」；整份檔案驗證通過才在單一交易內寫入
+- 匯入接受 schemaVersion 1 與 2：v1 沒有 grinders（視為空陣列），brews 沒有 grinderId（補成 ''）
 
 ## 開發順序
 - v0.1：db.js + 豆子 CRUD + 紀錄 CRUD + 列表

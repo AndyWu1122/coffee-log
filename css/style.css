@@ -44,7 +44,53 @@ a { color: var(--accent); }
   padding: 12px var(--gap);
   padding-top: calc(12px + env(safe-area-inset-top, 0px));
 }
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: calc(4px + env(safe-area-inset-top, 0px));
+  padding-bottom: 4px;
+  padding-right: 4px;
+}
 .app-header h1 { margin: 0; font-size: 1.25rem; }
+
+/* ===== 右上角 ☰ 選單 ===== */
+.menu { position: relative; }
+.menu-btn {
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.menu-btn[aria-expanded="true"] { background: var(--surface-2); }
+.menu-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  min-width: 180px;
+  padding: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.menu-list a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 12px;
+  border-radius: 10px;
+  color: var(--text);
+  text-decoration: none;
+}
+.menu-list a:hover, .menu-list a:focus-visible { background: var(--surface); outline: none; }
 
 /* ===== 主內容：預留底部分頁列與 FAB 空間 ===== */
 #app {
@@ -161,6 +207,13 @@ input:focus, select:focus, textarea:focus {
 .error:empty { display: none; }
 
 .hint { color: var(--text-dim); font-size: 0.85rem; }
+.field-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 0.95rem;
+  text-decoration: none;
+}
 .notice {
   background: var(--surface-2);
   border-left: 4px solid var(--accent);

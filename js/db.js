@@ -1,6 +1,8 @@
 // 唯一存取 IndexedDB 的地方
 const DB_NAME = 'coffee-log';
-const DB_VERSION = 1;
+// v1：beans、brews（索引 beanId、brewedAt）
+// v2：新增 grinders；brews 加 grinderId 索引（只加索引，不改舊紀錄）
+const DB_VERSION = 2;
 
 let dbPromise = null;
 
@@ -9,15 +11,21 @@ export function openDB() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
+    // 全新安裝與從舊版升級走同一段：每一步都先檢查是否已存在
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains('beans')) {
         db.createObjectStore('beans', { keyPath: 'id' });
       }
-      if (!db.objectStoreNames.contains('brews')) {
-        const brews = db.createObjectStore('brews', { keyPath: 'id' });
-        brews.createIndex('beanId', 'beanId');
-        brews.createIndex('brewedAt', 'brewedAt');
+      // 既有的 store 要從升級交易取得，才能在上面加索引
+      const brews = db.objectStoreNames.contains('brews')
+        ? req.transaction.objectStore('brews')
+        : db.createObjectStore('brews', { keyPath: 'id' });
+      if (!brews.indexNames.contains('beanId')) brews.createIndex('beanId', 'beanId');
+      if (!brews.indexNames.contains('brewedAt')) brews.createIndex('brewedAt', 'brewedAt');
+      if (!brews.indexNames.contains('grinderId')) brews.createIndex('grinderId', 'grinderId');
+      if (!db.objectStoreNames.contains('grinders')) {
+        db.createObjectStore('grinders', { keyPath: 'id' });
       }
     };
     req.onsuccess = () => {
@@ -27,7 +35,8 @@ export function openDB() {
       resolve(db);
     };
     req.onerror = () => reject(req.error);
-    req.onblocked = () => reject(new Error('資料庫被其他分頁占用，請關閉其他分頁後重試'));
+    // 升級時若其他分頁還開著舊連線會先 blocked；對方關閉連線（onversionchange）後會自動繼續，不要 reject
+    req.onblocked = () => console.warn('資料庫升級等待其他分頁關閉連線…');
   });
   dbPromise.catch(() => { dbPromise = null; });
   return dbPromise;
