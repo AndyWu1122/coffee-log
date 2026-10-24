@@ -9,7 +9,8 @@
 
 ---
 
-> **目前的正式專案**：ref `rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），2026-10-24 建立；migration、`delete-account`、前端設定都已完成，Google 登入已實際測試成功
+> **目前的正式專案**：ref `rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），2026-10-24 建立；migration、`delete-account`、前端設定都已完成，Google 登入已實際測試成功。
+> 2026-10-25：意見回饋的 migration 與 `feedback` 已部署；**還沒設定 `RESEND_API_KEY`、`FEEDBACK_TO`**（回饋會存下來，但不寄信，見 5-2）
 
 ## 1. 建立 Supabase 專案（你）
 
