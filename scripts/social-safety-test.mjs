@@ -104,6 +104,11 @@ try {
 
   /* ===== Service Worker 沒有快取 Supabase 的網址（API、signed URL） ===== */
   await pb.waitFor(`navigator.serviceWorker.controller !== null`, { label: 'Service Worker 接手', timeout: 15000 });
+  // ☰ 選單的版本號＝sw.js 的 CACHE_VERSION（要在受 Service Worker 控制的頁面檢查：visit 的強制重新整理會略過 Service Worker）
+  const swVersion = (await readFile(path.join(root, 'sw.js'), 'utf8')).match(/const CACHE_VERSION = (\d+);/)?.[1];
+  const shownVersion = await pb.waitFor(`(() => { const el = document.querySelector('#app-version'); return !el.hidden && el.textContent; })()`,
+    { label: '選單的版本號' });
+  check('☰ 選單顯示的版本號等於 sw.js 的 CACHE_VERSION', Boolean(swVersion) && shownVersion === `版本 ${swVersion}`, shownVersion);
   await visit(pb, base, `#/feed/${A.id}/${brewId}`);
   await pb.waitFor(`document.querySelector('.feed-photo')?.complete`, { label: '照片載入' });
   const cached = await pb.eval(`(async () => {
@@ -113,6 +118,7 @@ try {
   })()`);
   check('Service Worker 的快取只有 App 自己的檔案', cached.length > 0 && cached.every((u) => u.startsWith(base)),
     cached.filter((u) => !u.startsWith(base)).join(' '));
+
 
   /* ===== B：從詳細頁封鎖 A ===== */
   await click(pb, '[data-action="block"]');

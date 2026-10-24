@@ -143,6 +143,21 @@ function setupServiceWorker() {
   let waitingWorker = null;
   let updateRequested = false;
 
+  // ☰ 選單的版本號：問目前接管這個頁面的 Service Worker（它的 CACHE_VERSION 就是正在跑的版本）
+  // 舊版 Service Worker 不認得這個訊息，不會回覆，版本號就維持隱藏
+  const showVersion = () => {
+    const worker = navigator.serviceWorker.controller;
+    if (!worker) return;
+    const { port1, port2 } = new MessageChannel();
+    port1.onmessage = (e) => {
+      const el = document.getElementById('app-version');
+      el.textContent = `版本 ${e.data}`;
+      el.hidden = false;
+    };
+    worker.postMessage('version', [port2]);
+  };
+  showVersion();
+
   const showUpdate = (worker) => {
     waitingWorker = worker;
     banner.hidden = false;
@@ -156,6 +171,7 @@ function setupServiceWorker() {
   // 新版接手後才重新整理；第一次安裝時的接手不重新整理
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (updateRequested) location.reload();
+    else showVersion(); // 第一次安裝：剛接手，現在才問得到
   });
 
   navigator.serviceWorker.register('sw.js').then((reg) => {

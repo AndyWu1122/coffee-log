@@ -99,6 +99,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 ## PWA / 離線
 - `sw.js` 安裝時預先快取 `ASSETS` 清單中的所有檔案，之後一律從快取讀取
 - **修改任何前端檔案後，`sw.js` 的 `CACHE_VERSION` 要 +1**，否則使用者不會收到新版本
+  - 它也是 ☰ 選單最下面顯示的「版本 N」：app.js 用 `'version'` 訊息問目前接管頁面的 Service Worker（沒有 Service Worker 時不顯示），不另外維護版本號
 - **新增前端檔案時，要加進 `sw.js` 的 `ASSETS`**，否則離線時載不到
 - 有新版時畫面底部顯示「有新版本可用」，使用者按「更新」才切換（避免填表單時被重新整理）
 - 圖示來源是 `icons/icon.svg`（滿版、圖案在中心安全區），PNG 由它用 headless Chrome 轉出
