@@ -56,5 +56,48 @@ async function navigate() {
   }
 }
 
+/* ===== PWA：Service Worker 與新版本提示 ===== */
+
+function setupServiceWorker() {
+  // 區網 http 等非 secure context 沒有 serviceWorker，直接略過
+  if (!('serviceWorker' in navigator)) return;
+
+  const banner = document.getElementById('update-banner');
+  let waitingWorker = null;
+  let updateRequested = false;
+
+  const showUpdate = (worker) => {
+    waitingWorker = worker;
+    banner.hidden = false;
+  };
+
+  document.getElementById('update-btn').addEventListener('click', () => {
+    updateRequested = true;
+    waitingWorker?.postMessage('skipWaiting');
+  });
+
+  // 新版接手後才重新整理；第一次安裝時的接手不重新整理
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (updateRequested) location.reload();
+  });
+
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg.waiting);
+    reg.addEventListener('updatefound', () => {
+      const worker = reg.installing;
+      worker?.addEventListener('statechange', () => {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdate(worker);
+      });
+    });
+    // 加到主畫面的 App 可能長時間不重開，切回前景時檢查更新
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reg.update().catch(() => {});
+    });
+  }).catch((err) => console.warn('Service Worker 註冊失敗', err));
+}
+
 window.addEventListener('hashchange', navigate);
 navigate();
+setupServiceWorker();
+// 申請持久儲存，降低瀏覽器（特別是 iOS）自動清除資料的機會
+navigator.storage?.persist?.().catch(() => {});

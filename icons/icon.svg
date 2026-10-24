@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 滿版背景；圖案都在中心半徑 205 的安全區內，可直接當 maskable / apple-touch-icon -->
+  <rect width="512" height="512" fill="#2b1d14"/>
+  <!-- 濾杯 -->
+  <rect x="140" y="132" width="232" height="22" rx="11" fill="#d9984f"/>
+  <path d="M158 154 H354 L290 246 H222 Z" fill="#d9984f"/>
+  <path d="M206 170 L236 232 M256 170 V232 M306 170 L276 232" stroke="#2b1d14" stroke-width="8" stroke-linecap="round" opacity="0.35"/>
+  <rect x="204" y="246" width="104" height="16" rx="8" fill="#b97a38"/>
+  <!-- 咖啡滴 -->
+  <path d="M256 268 q-7 10 0 16 q7 -6 0 -16 Z" fill="#d9984f"/>
+  <!-- 杯子 -->
+  <path d="M164 292 H348 V336 a64 64 0 0 1 -64 64 H228 a64 64 0 0 1 -64 -64 Z" fill="#f3e9df"/>
+  <rect x="164" y="292" width="184" height="14" fill="#6b4226"/>
+  <path d="M348 308 h14 a30 30 0 0 1 0 60 h-20" fill="none" stroke="#f3e9df" stroke-width="14" stroke-linecap="round"/>
+</svg>

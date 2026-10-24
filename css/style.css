@@ -264,3 +264,26 @@ input:focus, select:focus, textarea:focus {
   transition: opacity 0.2s, transform 0.2s;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ===== 新版本提示 ===== */
+.update-banner {
+  position: fixed;
+  left: 12px; right: 12px;
+  bottom: calc(var(--tabbar-h) + 12px + var(--safe-bottom));
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 616px;
+  margin: 0 auto;
+  padding: 10px 10px 10px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.update-banner .btn { min-height: 44px; }
+/* 提示出現時，把 FAB 與 toast 往上移，避免被蓋住 */
+body:has(.update-banner:not([hidden])) .fab { bottom: calc(var(--tabbar-h) + 100px + var(--safe-bottom)); }
+body:has(.update-banner:not([hidden])) .toast { bottom: calc(var(--tabbar-h) + 180px + var(--safe-bottom)); }

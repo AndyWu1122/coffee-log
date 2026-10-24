@@ -6,7 +6,7 @@
 - 純 HTML / CSS / JavaScript（ES Modules），**不使用框架、不使用打包工具**
 - 儲存：IndexedDB（可用 `idb` 小型 wrapper，或自己包一層）
 - PWA：manifest.json + Service Worker，需可離線使用
-- 部署：GitHub Pages
+- 部署：GitHub Pages（repo 名稱預定 `coffee-log`，所有路徑用相對路徑）
 - 介面以手機直向為主（mobile-first），按鈕要大，方便沖咖啡時單手操作
 
 ## 資料夾結構
@@ -48,6 +48,15 @@ views → models → db，每層只呼叫下一層。views 不可直接碰 Index
 - v0.3：PWA（manifest、離線）+ 部署 GitHub Pages
 - 一次只做一個版本，做完要能實際使用再進下一版
 
+## PWA / 離線
+- `sw.js` 安裝時預先快取 `ASSETS` 清單中的所有檔案，之後一律從快取讀取
+- **修改任何前端檔案後，`sw.js` 的 `CACHE_VERSION` 要 +1**，否則使用者不會收到新版本
+- **新增前端檔案時，要加進 `sw.js` 的 `ASSETS`**，否則離線時載不到
+- 有新版時畫面底部顯示「有新版本可用」，使用者按「更新」才切換（避免填表單時被重新整理）
+- 圖示來源是 `icons/icon.svg`（滿版、圖案在中心安全區），PNG 由它用 headless Chrome 轉出
+
 ## 開發習慣
 - 本地測試用 `python -m http.server`（ES Modules 不能用 file:// 開）
+- 本地開發時 Service Worker 會快取檔案：在 DevTools → Application → Service Workers 勾選「Update on reload」
+- 手機用區網 http 測試時不是 secure context，Service Worker 不會啟用（其他功能正常）
 - 每完成一個功能就 git commit
