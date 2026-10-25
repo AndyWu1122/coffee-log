@@ -12,6 +12,7 @@
 > **目前的正式專案**：ref `rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），2026-10-24 建立；migration、`delete-account`、前端設定都已完成，Google 登入已實際測試成功。
 > 2026-10-25：意見回饋的 migration 與 `feedback` 已部署，`RESEND_API_KEY`、`FEEDBACK_TO` 已設定（見 5-2）；Email 一開始沒收到，原因是 `RESEND_API_KEY` 無效（Resend 回 401），2026-10-26 換新 key 後已正常（排查步驟見 5-2 的「沒收到 Email」）
 > 2026-10-26：新版 `feedback`（log 會寫出沒寄信的原因）已先部署；`feature/comments` 的 migration 與前端**尚未部署**，步驟見 5-3
+> 2026-10-25：留言、封鎖不解除好友（1.2.0）、更新內容（1.3.0）都已部署上線；`feature/admin`（開發者後台，1.4.0）**尚未部署**，步驟見 5-4
 
 ## 1. 建立 Supabase 專案（你）
 
@@ -155,6 +156,41 @@ npx supabase@2.120.0 functions deploy feedback
 - `feedback` 一定要重新部署：新版 App 送的是 `"1.1.0"` 字串，舊版 function 只收整數（會記成「不明」，不會壞）；新版也會在 log 寫出沒寄信的原因
 - 部署後確認：Supabase 後台 → Edge Functions → feedback 的 **Verify JWT** 開著；Table Editor 有 `comments`，RLS enabled
 - 最後才把分支合併到 main 並 push（前端部署）。順序反過來的話，新版 App 會在留言區顯示錯誤，直到後端部署完成
+
+## 5-4. 部署 feature/admin（開發者後台，1.4.0）
+
+和之前一樣，**後端先上、前端最後**（舊版 App 不會用到新的函式，先部署不影響使用中的人）：
+
+```sh
+npx supabase@2.120.0 link --project-ref rygsjrzddhhhdqpoayoa
+npx supabase@2.120.0 db push --dry-run                     # 應該只列出 20261026100000_admin.sql
+npx supabase@2.120.0 db push                               # 套用（確認後輸入 Y）
+npx supabase@2.120.0 functions deploy admin-delete-user
+npx supabase@2.120.0 functions deploy delete-account       # 刪除流程搬到 _shared/account.ts，要重新部署
+```
+
+- migration：`private.admins`、`public.admin_audit_log`（不能修改、刪除）、`private.removed_brews`、後台函式 `public.admin_*`、Storage 的開發者政策
+- 部署後確認：Supabase 後台 → Edge Functions → `admin-delete-user` 的 **Verify JWT** 開著
+
+### 設定第一個開發者（你，在 Supabase 後台 → SQL Editor）
+
+App 裡**沒有任何方法**新增開發者（`private.admins` 沒有開放給 API），只能由你在 SQL Editor 執行。先用那個 Google 帳號在 App 登入過一次、設好暱稱，再執行：
+
+```sql
+-- 把 <你的 Gmail> 換成開發者的 Google 帳號
+insert into private.admins (user_id)
+select id from auth.users where email = '<你的 Gmail>';
+
+-- 確認（應該列出 1 筆）
+select a.user_id, u.email, a.created_at
+from private.admins a join auth.users u on u.id = a.user_id;
+```
+
+- 拿掉開發者：`delete from private.admins where user_id = '<user id>';`
+- 開發者不能從後台刪除自己或其他開發者；要刪就先從 `private.admins` 移除
+- 操作紀錄 `public.admin_audit_log` 連 SQL Editor 都不能修改或刪除（trigger 擋下）
+
+最後才把分支合併到 main 並 push（前端 1.4.0）。手機按「更新」後，開發者的 ☰ 會出現「🛠️ 開發者後台」。
 
 ## 6. 實際登入一次（你）
 
