@@ -18,8 +18,7 @@ const PRODUCTION = {
   url: 'https://rygsjrzddhhhdqpoayoa.supabase.co',
   anonKey: 'sb_publishable_jJfi96HHgNORDl1-IYFsLg_adfwn9ma',
   // 推播通知的 VAPID 公鑰（公開的）：站長用 scripts/vapid-keys.mjs 產生，私鑰只在 Supabase secrets（docs/supabase-setup.md 5-6）
-  // 空字串＝還沒設定，通知設定頁顯示「還沒開放」
-  vapidPublicKey: '',
+  vapidPublicKey: 'BM1eH8UaRF0TQ7osqvQ1DU8febYbeuCoW793WH99Odosd2nuTOh7-M8iG9HxzLxRaqpBiKRJi7H66pkdOa8MjOU',
 };
 
 function pick() {

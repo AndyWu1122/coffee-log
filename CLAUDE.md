@@ -158,7 +158,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 
 ## 咖啡社群（後端：Supabase）
 規格見 `docs/social-spec.md`（分 5 階段，每階段通過測試、使用者確認後才進下一階段）；待決事項與決定見 `docs/social-open-questions.md`。
-目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）、階段 3（帳號與好友）、階段 4（動態牆與同步）、階段 5（安全與隱私收尾），之後加上留言與回覆、封鎖不解除好友（都已部署），開發者後台（已部署）；個人檔案（`feature/profile`，正式專案尚未部署，步驟見 `docs/supabase-setup.md` 5-5）；推播通知（`feature/push`，正式專案尚未部署，步驟見 5-6）。正式專案：`rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），migration 與 `delete-account` 已部署；建立與設定步驟見 `docs/supabase-setup.md`。
+目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）、階段 3（帳號與好友）、階段 4（動態牆與同步）、階段 5（安全與隱私收尾），之後加上留言與回覆、封鎖不解除好友（都已部署），開發者後台（已部署）；個人檔案（已部署，步驟見 `docs/supabase-setup.md` 5-5）、推播通知（已部署，步驟見 5-6）。正式專案：`rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），migration 與 `delete-account` 已部署；建立與設定步驟見 `docs/supabase-setup.md`。
 
 ### 資安規則（每個階段都必須遵守）
 - 每張表和 Storage bucket 都必須開 RLS，預設拒絕
@@ -274,7 +274,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - **`config.toml` 不要設定 `[edge_runtime.secrets]`**：`supabase secrets set` 會把它一起上傳到正式專案、蓋掉真的金鑰（曾經發生過）
 - 正式專案要另外部署：`npx supabase@2.120.0 functions deploy feedback`（步驟見 `docs/supabase-setup.md` 5-2）
 
-### 推播通知（`feature/push`，1.9.0）
+### 推播通知（1.9.0，已部署）
 有人留言我的貼文、回覆我的留言時，手機跳出通知。標準 Web Push（VAPID），不用 Firebase 等第三方服務。
 - 流程：comments 新增 → trigger `private.comments_push`（通知誰、合併都在這裡判斷）→ pg_net → Edge Function `send-push`（service_role 讀訂閱、加密、送出）→ Apple／Google 的推播服務
 - **`push_subscriptions`**：id, user_id, endpoint(unique), p256dh, auth, user_agent, created_at；只能新增、讀、刪自己的（沒有 update）；每人 10 台（trigger 先 advisory lock）
@@ -288,7 +288,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
   - `send-push` 的 `verify_jwt = false`（呼叫者是資料庫），身分只靠簽章
 - **推播內容只有 `{ v, kind, nickname, owner, brewId }`**，不含留言原文；sw.js 只當文字顯示（去掉控制字元與改變方向的字元、≤ 20 字），標題「手沖紀錄」、內容「<暱稱> 留言了你的貼文／回覆了你的留言」；格式不對顯示通用的「有新的留言」（iOS 規定每則推播都要顯示）
 - **點通知**：sw.js 用驗證過的 uuid 自己組 `#/social/<owner>/<id>?comments=1`（`PUSH_ROUTE`，和 `models.isPushRoute` 一致），不合格一律 `#/social`；App 開著就 `postMessage` 讓那個視窗換頁（app.js 再檢查一次）＋`focus()`，沒開才 `openWindow`
-- 金鑰：VAPID 公鑰在 `js/config.js`（`vapidPublicKey`，正式的空字串＝還沒開放）；私鑰、`VAPID_SUBJECT`、`PUSH_WEBHOOK_SECRET` 只在 Supabase secrets；站長用 `scripts/vapid-keys.mjs` 在自己電腦產生（寫出 `.env.push`、`.env.push.sql`，被 `.env.*` 排除），**私鑰不貼給 Claude**
+- 金鑰：VAPID 公鑰在 `js/config.js`（`vapidPublicKey`；空字串＝還沒開放）；私鑰、`VAPID_SUBJECT`、`PUSH_WEBHOOK_SECRET` 只在 Supabase secrets；站長用 `scripts/vapid-keys.mjs` 在自己電腦產生（寫出 `.env.push`、`.env.push.sql`，被 `.env.*` 排除），**私鑰不貼給 Claude**
   - 本機：send-push 用 `LOCAL_VAPID`（repo 裡的測試用金鑰）與 `local-push-secret`，**所有推播改送到假推播伺服器** `host.docker.internal:54398`（保留路徑），不會連到真的推播服務；vault 由測試的 `setupPushVault()` 設定（`db reset` 會清掉）
 - 介面（`#/notifications`）：只有按「在這台裝置啟用通知」才 `Notification.requestPermission()`（不在打開 App 時問）；iPhone 不是從主畫面開啟只顯示「分享 → 加入主畫面」的說明、沒有按鈕；拒絕時說明到系統設定開啟
 - 登出：先刪這台的訂閱再登出（`models.signOut`，失敗也照樣退訂）；刪除帳號：cascade 刪訂閱、偏好、合併狀態，本機退訂；endpoint 被別的帳號佔住（23505）就退訂重訂一次

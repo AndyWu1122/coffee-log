@@ -13,7 +13,7 @@
 > 2026-10-25：意見回饋的 migration 與 `feedback` 已部署，`RESEND_API_KEY`、`FEEDBACK_TO` 已設定（見 5-2）；Email 一開始沒收到，原因是 `RESEND_API_KEY` 無效（Resend 回 401），2026-10-26 換新 key 後已正常（排查步驟見 5-2 的「沒收到 Email」）
 > 2026-10-26：新版 `feedback`（log 會寫出沒寄信的原因）已先部署；`feature/comments` 的 migration 與前端**尚未部署**，步驟見 5-3
 > 2026-10-25：留言、封鎖不解除好友（1.2.0）、更新內容（1.3.0）、開發者後台（1.4.0）與 1.4.1 的修正都已部署上線；`feature/profile`（個人檔案，1.5.0）**尚未部署**，步驟見 5-5
-> 2026-10-29：`feature/push`（推播通知，1.9.0）**尚未部署**，步驟見 5-6
+> 2026-10-29：推播通知（1.9.0）已部署：migration、`send-push`（Verify JWT 關閉）、secrets、vault 都已設定，前端公鑰已填；步驟見 5-6
 
 ## 1. 建立 Supabase 專案（你）
 
