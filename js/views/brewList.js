@@ -32,8 +32,14 @@ const thumbUrl = (blob) => {
   return u;
 };
 
-export async function render(container, { isCurrent }) {
+export async function render(container, { query = {}, isCurrent }) {
   setTitle('手沖紀錄');
+  // #/?bean=<id>（統計頁點豆子的長條）：只看這支豆子的紀錄；套用後把網址改回 #/，之後照常保留篩選
+  if (query.bean) {
+    filter.beanId = query.bean;
+    filter.minRating = '';
+    history.replaceState(null, '', `${location.pathname}${location.search}#/`);
+  }
   const [beans, latestByBean, backup] = await Promise.all([
     listBeans({ includeArchived: true }), latestBrewByBean(), getBackupStatus(),
   ]);

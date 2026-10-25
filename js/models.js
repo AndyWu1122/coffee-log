@@ -4,6 +4,7 @@ import { isFlavorNote, sortFlavorNotes, flavorNote } from './flavorWheel.js';
 import { compressPhoto, compressAvatar, makeThumb, blobToBase64, base64ToBytes, base64Length, jpegSize, PHOTO_TYPES } from './image.js';
 import { shareFileName } from './cardLayout.js';
 import { CHANGELOG, compareVersions } from './changelog.js';
+import { computeStats } from './stats.js';
 import * as cloud from './cloud.js';
 import * as sync from './sync.js';
 
@@ -481,6 +482,25 @@ export async function saveBrew(input, { photo } = {}) {
   });
   requestSync();
   return { ok: true, brew };
+}
+
+/* ===== 統計（#/stats；計算在 js/stats.js） ===== */
+
+export const STATS_PERIODS = [
+  { value: '30', label: '近 30 天' }, { value: '90', label: '近 90 天' }, { value: 'all', label: '全部' },
+];
+
+/**
+ * 統計頁的資料（只讀本機，已封存的豆子、磨豆機也算）：{ stats, beanOptions }
+ * beanOptions：有紀錄的豆子（篩選用），未封存在前；period：STATS_PERIODS 的 value；beanId：'' 為全部
+ */
+export async function getStats({ period = '30', beanId = '' } = {}) {
+  const [brews, beans, grinders] = await Promise.all([db.getAll('brews'), db.getAll('beans'), db.getAll('grinders')]);
+  const used = new Set(brews.map((b) => b.beanId));
+  const beanOptions = beans.filter((b) => used.has(b.id)).sort(byArchivedThenNewest)
+    .map((b) => ({ id: b.id, name: b.name, archived: b.archived }));
+  const known = beanOptions.some((b) => b.id === beanId);
+  return { stats: computeStats({ brews, beans, grinders, period, beanId: known ? beanId : '' }), beanOptions, beanId: known ? beanId : '' };
 }
 
 /* ===== 分享卡片 ===== */

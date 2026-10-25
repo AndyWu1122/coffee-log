@@ -20,6 +20,7 @@ const routes = [
   // 個人檔案（頭像、暱稱點過來；自己的從 ☰ →「帳號」進來）
   { pattern: /^\/user\/([\w-]+)$/, tab: 'social', load: () => import('./views/profile.js') },
   // ☰ 選單裡的頁面：不屬於任何底部分頁（tab: null）
+  { pattern: /^\/stats$/, tab: null, load: () => import('./views/stats.js') },
   { pattern: /^\/backup$/, tab: null, load: () => import('./views/backup.js') },
   { pattern: /^\/privacy$/, tab: null, load: () => import('./views/privacy.js') },
   { pattern: /^\/changelog$/, tab: null, load: () => import('./views/changelog.js') },

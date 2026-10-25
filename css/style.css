@@ -805,3 +805,79 @@ a.feed-body:active { background: var(--surface-2); }
 .admin-reason { padding: 12px; border: 1px solid var(--danger); border-radius: var(--radius); }
 .admin .person-name { color: var(--text); }
 .admin-comment .feed-head { padding: 0; }
+
+/* ===== 統計（#/stats）：圖表用 SVG，顏色只用主題變數 ===== */
+/* 資料標記（點、長條）用 --accent；7 杯平均線用 --text；格線用 --border；文字一律用 --text／--text-dim */
+.stats { display: grid; gap: 16px; }
+.stats-filters { display: grid; gap: 10px; }
+.stats-empty { padding: 32px 16px; }
+.stats-overview { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.stat-tile, .stats-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  min-width: 0;
+}
+.stat-label { font-size: 0.85rem; color: var(--text-dim); }
+.stat-value { font-size: 1.35rem; font-weight: 600; overflow-wrap: anywhere; }
+.stats-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.stats-card h2 { margin: 0; font-size: 1.05rem; }
+.stats-card > .hint { margin: 0; font-size: 0.85rem; }
+.stats-sub { margin: 6px 0 0; font-size: 0.95rem; font-weight: 600; color: var(--text-dim); }
+.chart-empty { margin: 8px 0; }
+.chart-detail { margin: 0; min-height: 1.5em; font-size: 0.9rem; color: var(--text); font-variant-numeric: tabular-nums; }
+
+.chart { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-scroll-wrap { display: flex; min-width: 0; }
+.chart-axis { flex: none; display: block; }
+.chart-scroll { flex: 1; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; }
+.chart-scroll .chart { width: auto; max-width: none; }
+.chart-grid { stroke: var(--border); stroke-width: 1; }
+.chart-label { fill: var(--text-dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart-value { fill: var(--text); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.chart-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.chart-dot.is-selected { stroke: var(--text); r: 6px; }
+.chart-ma { fill: none; stroke: var(--text); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart-bar { fill: var(--accent); }
+.chart-hit, .chart-hit-col { fill: transparent; cursor: pointer; }
+.chart-hit-col.is-selected { fill: var(--surface-2); fill-opacity: 0.6; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.85rem; color: var(--text-dim); }
+.chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.legend-line { width: 16px; height: 2px; border-radius: 1px; background: var(--text); }
+
+/* 橫條：名稱｜長條｜數值 三欄，每一列至少 44px 高（點得到），名稱太長就截斷 */
+.hbars { display: grid; gap: 2px; }
+.hbar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 6.5em) minmax(0, 1fr) 3.6em;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.hbar-row:active, .hbar-row.is-selected { background: var(--surface-2); }
+.hbar-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; }
+.hbar { display: block; width: 100%; height: 12px; }
+.hbar-value { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hbar-value small { display: block; font-size: 0.75rem; font-weight: 400; color: var(--text-dim); }
+.hbar-axis { min-height: 24px; cursor: default; }
+.hbar-ticks { position: relative; height: 20px; }
+.hbar-scale { display: block; width: 100%; height: 4px; }
+.hbar-ticks span {
+  position: absolute;
+  top: 5px;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
