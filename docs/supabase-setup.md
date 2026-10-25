@@ -163,13 +163,14 @@ npx supabase@2.120.0 functions deploy feedback
 
 ```sh
 npx supabase@2.120.0 link --project-ref rygsjrzddhhhdqpoayoa
-npx supabase@2.120.0 db push --dry-run                     # 應該只列出 20261026100000_admin.sql
+npx supabase@2.120.0 db push --dry-run                     # 應該只列出 20261026100000_admin.sql、20261027100000_rate_limit_locks.sql
 npx supabase@2.120.0 db push                               # 套用（確認後輸入 Y）
 npx supabase@2.120.0 functions deploy admin-delete-user
 npx supabase@2.120.0 functions deploy delete-account       # 刪除流程搬到 _shared/account.ts，要重新部署
 ```
 
 - migration：`private.admins`、`public.admin_audit_log`（不能修改、刪除）、`private.removed_brews`、後台函式 `public.admin_*`、Storage 的開發者政策
+- migration `*_rate_limit_locks.sql`（1.4.1）：每日上限的計數先上鎖（同時送出的請求不能超過上限）、互加好友同時送出不會出錯；只換函式內容，不動資料
 - 部署後確認：Supabase 後台 → Edge Functions → `admin-delete-user` 的 **Verify JWT** 開著
 
 ### 設定第一個開發者（你，在 Supabase 後台 → SQL Editor）

@@ -122,6 +122,25 @@ try {
   const unblock = await rest(`blocks?blocked=eq.${B.id}`, { method: 'DELETE', token: A.token });
   check('A 解除封鎖', unblock.status < 300, `HTTP ${unblock.status}`);
   check('解除封鎖後 B 又讀得到 A 的紀錄', rows(await rest(`shared_brews?owner=eq.${A.id}`, { token: B.token }))?.length > 0);
+
+  /* ----- 同時送出的請求：每日上限不會被超過、互加好友不會出錯 ----- */
+  const feedback = await Promise.all(Array.from({ length: 12 }, (_, i) =>
+    rest('feedback', { method: 'POST', token: C.token, body: { category: 'other', message: `同時送出 ${i}` } })));
+  check('同時送 12 則意見回饋：剛好 5 則成功（每天 5 則）',
+    feedback.filter((r) => r.status === 201).length === 5, feedback.map((r) => r.status).join(' '));
+
+  for (const name of ['D', 'E']) {
+    await createUser(name);
+    await rest('profiles', { method: 'POST', token: users[name].token, body: { nickname: name } });
+  }
+  const { D, E } = users;
+  const codeOf = async (u) => rows(await rest(`profiles?select=friend_code&id=eq.${u.id}`, { token: u.token }))[0].friend_code;
+  const [dCode, eCode] = await Promise.all([codeOf(D), codeOf(E)]);
+  const mutual = await Promise.all([rpc('send_friend_request', { code: eCode }, D.token), rpc('send_friend_request', { code: dCode }, E.token)]);
+  check('D、E 同時互加好友：兩邊都沒有錯誤（一個 sent、一個 accepted）',
+    mutual.map((r) => r.json).sort().join() === 'accepted,sent', mutual.map((r) => `${r.status} ${r.text}`).join(' / '));
+  check('D、E 同時互加好友：成為好友',
+    rows(await rest(`friendships?status=eq.accepted&or=(requester.eq.${E.id},addressee.eq.${E.id})`, { token: D.token }))?.length === 1);
 } catch (err) {
   failures.push(`執行錯誤：${err.message}`);
   console.error(err);
