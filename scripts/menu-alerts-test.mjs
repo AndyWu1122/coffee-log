@@ -64,8 +64,11 @@ try {
     !(await shown('#menu-badge')) && !(await shown('[data-alert="settings"]')) && !(await shown('[data-alert="changelog"]')) && !(await shown('#updated-banner')));
   check('設定頁的版本號連到更新內容', (await page.eval(`document.querySelector('#app-version a').getAttribute('href')`)) === '#/changelog');
   const settingsLinks = await page.eval(`[...document.querySelectorAll('.settings a.settings-row')].map((a) => a.getAttribute('href'))`);
-  check('設定頁有通知設定、隱私說明、更新內容、意見回饋',
-    ['#/notifications', '#/privacy', '#/changelog', '#/feedback'].every((h) => settingsLinks.includes(h)), q(settingsLinks));
+  check('設定頁有帳號、通知設定、隱私說明、更新內容、意見回饋',
+    ['#/account', '#/notifications', '#/privacy', '#/changelog', '#/feedback'].every((h) => settingsLinks.includes(h)), q(settingsLinks));
+  await page.waitFor(`document.querySelector('#settings-social')?.dataset.signedIn === 'false'`, { label: '設定頁讀完登入狀態' });
+  check('沒登入：設定頁的「我的個人檔案」、熱度圖開關停用',
+    await page.eval(`document.querySelector('#settings-profile').getAttribute('aria-disabled') === 'true' && document.querySelector('#activity-share').disabled`));
   check('沒登入：設定頁看不到開發者後台', !(await shown('.settings [data-admin]')));
 
   /* ===== ☰ 選單：只放常用的，小螢幕放得下 ===== */

@@ -80,8 +80,10 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 ## 介面配置
 - 底部分頁列：紀錄｜豆子｜社群（只放每天會用的頁面）；「社群 💬」是動態牆，有 `data-social`，`js/config.js` 沒設定時隱藏
 - **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**；☰ 只放比較常用的：帳號、好友管理（`data-social`）｜統計、磨豆機、濾杯、備份｜📖 使用教學（`#menu-tour`，按鈕不是連結）、🔧 設定與關於（375×667 要整個放得下，menu-alerts-test 會量；`.menu-list` 有 `max-height` 捲動作保險）
-- **更少用的放「設定與關於」**（`#/settings`，`js/views/settings.js`），不要加回 ☰：外觀、通知設定、隱私說明、更新內容、意見回饋、開發者後台、版本號
-  - 通知設定、意見回饋只在 `js/config.js` 有設定時顯示；開發者後台（`[data-admin]`）只有 `models.isAdmin()` 為 true 時顯示，問完在 `.settings` 記 `data-admin-checked`（測試用）
+- **所有設定都要能在「設定與關於」找到**（`#/settings`，`js/views/settings.js`），不要加回 ☰：外觀｜帳號與社群（帳號、我的個人檔案、通知設定、「讓好友看到我的熱度圖」開關）｜關於（隱私說明、更新內容、意見回饋、開發者後台、版本號）
+  - 帳號頁（☰ →「帳號」）只放編輯身分的東西：熱度圖、頭像、暱稱、好友代碼與 QR code、好友與邀請、登出、刪除帳號；新增的設定放設定頁，不要放帳號頁
+  - 設定頁整頁先畫好、不等網路；登入狀態用 `models.signedInUserId()`（只讀本機），讀完在 `#settings-social` 記 `data-signed-in`（測試用）；沒登入時「我的個人檔案」和熱度圖開關停用、寫「登入後才能使用」
+  - 帳號與社群、意見回饋只在 `js/config.js` 有設定時顯示；開發者後台（`[data-admin]`）只有 `models.isAdmin()` 為 true 時顯示，問完在 `.settings` 記 `data-admin-checked`（測試用）
 - ☰ 選單和設定頁裡的頁面不屬於任何分頁，路由設 `tab: null`，底部分頁都不亮
 - ☰ 的「!」（`app.js` 的 `setupBadges`）：選單裡需要注意的那一項後面有「!」（`.menu-alert[data-alert]`，`--accent`），☰ 按鈕上的「!」＝其中任何一項；aria-label 寫出是哪幾項
   - 好友管理＝收到好友邀請（社群）；備份＝`getBackupStatus().overdue`（有紀錄且 ≥ 14 天沒備份，首頁按「稍後」也照樣顯示，匯出後消失）；設定與關於（`data-alert="settings"`）＝還沒看過這一版的更新內容，設定頁裡「更新內容」那一行也有「!」（settings.js 自己問 `getChangelogStatus`；只進設定頁不算看過）
@@ -132,10 +134,10 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - 計算在 `js/heatmap.js`（本機日期；「近一年」＝含今天往前 365 天）：杯數 5 級（0、1、2、3、4+）；平均評分 5 級（沒評分 0，<2、<3、<4、≥4）；目前連續連到今天，今天還沒沖就從昨天算；最長連續只看近一年
 - 畫面在 `js/views/heatmap.js`（`heatmapHtml`／`bindHeatmap`／`renderMyHeatmap`）：自己畫 SVG；在自己的框裡橫向捲動、打開時捲到最右邊；點擊（不是 hover）用座標換算格子，`.chart-detail` 顯示「10/24（六）：2 杯」（評分模式加「・平均 4.5 分」）
 - 顏色只用 `--heat-0`～`--heat-4`（深淺主題各自定義；dataviz 的 `validateOrdinal` 驗證過：單一色相、亮度單調、相鄰 ΔL ≥ 0.06、最淡一級對卡片底色 ≥ 2:1）；改色要重新驗證
-- 位置：☰ →「統計」最上面、帳號頁最上面（離線、沒登入、沒有社群功能都照樣顯示）、個人檔案（簡介卡片和貼文之間）
+- 位置：☰ →「統計」最上面、帳號頁最上面（離線、沒登入、沒有社群功能都照樣顯示；下面一行提示公開設定在「設定與關於」）、個人檔案（簡介卡片和貼文之間）
 - **自己看**（統計、帳號、自己的個人檔案）：本機全部紀錄（含只有我的），可切換「杯數｜平均評分」
 - **好友看**：雲端 `brew_activity`，只有杯數和連續天數、沒有切換；雲端沒有資料（沒開、不是好友、封鎖、讀取失敗）時整塊不顯示，不寫「未公開」
-- 帳號頁「讓好友看到我的熱度圖」（預設關閉）：開關存在帳號（`activity_shares`），**只有打開的那台裝置上傳**（`device_id`＝meta `deviceId`）；另一台顯示「由另一台裝置更新」和「改用這台裝置的紀錄」按鈕；關閉時 trigger 清空雲端
+- 「設定與關於」的「讓好友看到我的熱度圖」（預設關閉；帳號頁的熱度圖下面有提示去哪裡開）：開關存在帳號（`activity_shares`），**只有打開的那台裝置上傳**（`device_id`＝meta `deviceId`）；另一台顯示「由另一台裝置更新」和「改用這台裝置的紀錄」按鈕；關閉時 trigger 清空雲端
 - 同步（`sync.js` 的 `syncActivityOnce`，和紀錄同步同一個 `request()`、互不影響）：meta `activityShare = { userId }` 沒有就跳過、不載入 supabase-js；帳號不同就不上傳（換回來照常）；讀雲端的開關，不是這台就清掉 meta；讀雲端現有的天和 `activityRows` 比對，有差異的天一次 upsert、多出來的（刪除、改日期、滑出一年）一次刪除；日期先濾掉超出台灣時間範圍的（時區比台灣快的裝置半夜）
 - 登出不清 meta（帳號判斷就夠了）；刪除帳號清掉
 
@@ -302,7 +304,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - 自我介紹用 `esc()`＋CSS `white-space: pre-line`，不要把 
  換成 `<br>`
 - 頭像、暱稱點過去（`ui.profileHref`）：社群卡片與詳細頁（`feedCardHtml` 的 `.person-link`）、留言的頭像／暱稱／@暱稱（`.comment-avatar`、`.hit-area`）、好友管理名單（封鎖名單不連）；點擊範圍 ≥ 44px，不和按讚、回覆、刪除重疊（social-profile-test 會量）
-- 編輯：自己的檔案頁「編輯個人檔案」（頭像、暱稱、自我介紹、器材、豆子，輸入框顯示「n／上限」）；☰ →「帳號」有「我的個人檔案」入口
+- 編輯：自己的檔案頁「編輯個人檔案」（頭像、暱稱、自我介紹、器材、豆子，輸入框顯示「n／上限」）；☰ →「設定與關於」有「我的個人檔案」入口
 
 ### 意見回饋
 - ☰ →「設定與關於」→「意見回饋」（`#/feedback`），要登入才能送（防灌送）；類型（bug/idea/other）、內容 ≤ 1000 字，附暱稱（author）與 App 版本號（`feedback.app_version` 是文字：`x.y.z` 或舊版的整數字串），不附 email

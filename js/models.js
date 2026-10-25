@@ -1713,6 +1713,9 @@ export const ADMIN_PAGE_SIZE = 50;
 export const ADMIN_REASON_MAX = 200; // 和資料庫的 check_reason 一致
 
 /** 目前登入的人是不是開發者（只決定要不要顯示入口）；沒登入不載入 supabase-js，連不上就當作不是 */
+/** 本機登入的使用者 id（只讀 IndexedDB，不載入 supabase-js、不連網路）；沒登入回傳 null */
+export const signedInUserId = () => (socialAvailable ? sync.sessionUserId() : Promise.resolve(null));
+
 export async function isAdmin() {
   if (!socialAvailable || !(await sync.sessionUserId())) return false;
   try {

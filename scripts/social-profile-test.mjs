@@ -183,11 +183,11 @@ try {
   await pc.waitFor(`document.querySelector('#posts-status:not([hidden])')`, { label: 'C 自己沒有貼文' });
   check('沒有貼文：顯示提示', (await text(pc, '#posts-status')).includes('還沒有分享給好友的紀錄'));
 
-  /* ===== 自己的檔案：帳號頁的入口、編輯 ===== */
-  await visit(pa, base, '#/account');
-  await click(pa, `a[href="#/user/${A.id}"]`);
-  await pa.waitFor(`location.hash === ${q(`#/user/${A.id}`)} && document.querySelector('[data-action="edit"]')`, { label: '帳號頁 → 我的個人檔案' });
-  check('帳號頁有「我的個人檔案」，打開有「編輯個人檔案」', true);
+  /* ===== 自己的檔案：設定頁的入口、編輯 ===== */
+  await visit(pa, base, '#/settings');
+  await click(pa, `#settings-profile[href="#/user/${A.id}"]`);
+  await pa.waitFor(`location.hash === ${q(`#/user/${A.id}`)} && document.querySelector('[data-action="edit"]')`, { label: '設定頁 → 我的個人檔案' });
+  check('設定與關於有「我的個人檔案」，打開有「編輯個人檔案」', true);
   await click(pa, '[data-action="edit"]');
   check('輸入框提示字數上限', (await text(pa, '[data-count="bio"]')) === `${[...BIO].length}／150`
     && (await text(pa, '[data-count="favoriteGear"]')).endsWith('／50') && (await text(pa, '[data-count="favoriteBeans"]')).endsWith('／50')

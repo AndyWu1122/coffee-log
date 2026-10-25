@@ -217,6 +217,16 @@ a { color: var(--accent); }
 .settings-row::after { content: '›'; margin-left: auto; color: var(--text-dim); font-size: 1.3rem; }
 .settings-row:has(.menu-alert:not([hidden]))::after { margin-left: 8px; }
 .settings-row:active { background: var(--surface-2); }
+/* 一行的補充說明（例如「帳號」底下寫裡面有什麼）；停用的一行（沒登入時的「我的個人檔案」）沒有「›」 */
+.settings-text { display: grid; padding: 8px 0; min-width: 0; }
+.settings-sub { font-size: 0.8rem; color: var(--text-dim); }
+.settings-row.is-disabled { color: var(--text-dim); cursor: default; }
+.settings-row.is-disabled::after { content: none; }
+.settings-toggle { margin-top: 10px; padding: 4px 16px 12px; }
+.settings-toggle .switch-row { border-bottom: none; }
+.settings-toggle .hint { margin: 0; }
+.settings-toggle .btn { margin-top: 10px; }
+.account-heatmap-hint { margin: -8px 0 16px; font-size: 0.85rem; }
 .settings-version { margin: 0; text-align: center; font-size: 0.85rem; }
 .settings-version a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; color: var(--text-dim); }
 

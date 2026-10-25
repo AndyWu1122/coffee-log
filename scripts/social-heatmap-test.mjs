@@ -1,5 +1,6 @@
 // 沖煮熱度圖的端對端測試：互相隔離的 headless Chrome（手機直向 390px）
 // A、B 好友；C 非好友；D 是 A 的好友但被 A 封鎖；A2 是 A 的第二台裝置
+// 「讓好友看到我的熱度圖」的開關在「設定與關於」（帳號頁只有熱度圖和提示）
 // 確認：自己（帳號頁、統計頁、自己的個人檔案）有「杯數｜平均評分」切換，好友只有杯數；點圓點顯示「m/d（週）：n 杯」；打開時捲到最右邊；
 // A 沒開 → B 看 A 的檔案沒有熱度圖；打開 → 有；C、D 一直沒有；新增、刪除、改日期後雲端跟著變；
 // 第二台裝置顯示「由另一台裝置更新」且不上傳，按「改用這台」才換；關閉後雲端清空、B 又看不到；
@@ -66,6 +67,12 @@ const cloudDays = (user) => Object.fromEntries(psql(`select day || '=' || cups f
 const syncNow = (page) => page.eval(`import('/js/models.js').then((m) => m.syncNow()).then((r) => r.activity)`);
 const hasHeatmap = (page) => page.eval(`Boolean(document.querySelector('.heatmap-card'))`);
 const noHScroll = (page) => page.eval('document.documentElement.scrollWidth <= document.documentElement.clientWidth');
+/** 設定頁的開關讀完雲端的狀態 */
+async function openSettings(page, base) {
+  await visit(page, base, '#/settings');
+  await page.waitFor(`document.querySelector('#settings-social')?.dataset.signedIn && !['讀取中…', '', undefined].includes(document.querySelector('#activity-share-status')?.textContent)`, { label: '設定頁的熱度圖開關' });
+}
+
 /** 個人檔案頁畫完（貼文載入完，熱度圖要嘛已經畫好、要嘛不會畫） */
 async function openProfile(page, base, user) {
   await visit(page, base, `#/user/${user.id}`);
@@ -97,7 +104,12 @@ try {
 
   /* ===== A 自己：帳號頁 ===== */
   await visit(pa, base, '#/account');
-  await pa.waitFor(`document.querySelector('#account-heatmap .heatmap') && !['讀取中…', undefined].includes(document.querySelector('#activity-share-status')?.textContent)`, { label: 'A 的帳號頁' });
+  await pa.waitFor(`document.querySelector('#account-heatmap .heatmap') && document.querySelector('#account-main [data-action="signout"]')`, { label: 'A 的帳號頁' });
+  check('帳號頁：沒有公開開關，熱度圖下面有提示到「設定與關於」開啟',
+    !(await pa.eval(`Boolean(document.querySelector('#activity-share'))`)) && (await pa.eval(`document.querySelector('.account-heatmap-hint')?.textContent ?? ''`)).includes('設定與關於'));
+  check('帳號頁：沒有「我的個人檔案」「通知設定」的按鈕（在設定頁），有連到設定頁的說明',
+    !(await pa.eval(`Boolean(document.querySelector('#account-main a.btn[href^="#/user/"], #account-main a[href="#/notifications"]'))`))
+      && (await pa.eval(`Boolean(document.querySelector('#account-main a[href="#/settings"]'))`)));
   const scroll = await pa.eval(`(() => { const s = document.querySelector('.heatmap-scroll'); return { w: s.scrollWidth, c: s.clientWidth, left: s.scrollLeft }; })()`);
   check('390px：熱度圖在框裡橫向捲動、打開時捲到最右邊（今天）', scroll.w > scroll.c && scroll.left >= scroll.w - scroll.c - 2, q(scroll));
   check('390px：整頁不橫向捲動', await noHScroll(pa));
@@ -111,7 +123,6 @@ try {
   check('近一年 5 杯（不含 400 天前）、目前連續 2 天、最長連續 2 天', q(stats) === q(['5 杯', '2 天', '2 天']), q(stats));
   check('點今天的圓點：顯示「m/d（週）：2 杯」', (await tapDay(pa, today)) === `${dayLabel(today)}：2 杯`);
   check('點沒沖的日子：顯示 0 杯', (await tapDay(pa, await localDay(pa, 2))) === `${dayLabel(await localDay(pa, 2))}：0 杯`);
-  check('開關預設關閉', !(await pa.eval(`document.querySelector('#activity-share').checked`)) && (await pa.eval(`document.querySelector('#activity-share-status').textContent`)).includes('關閉中'));
   check('沒開：雲端沒有任何資料', Object.keys(cloudDays(A)).length === 0);
   await pa.eval(`document.querySelector('#account-heatmap').scrollIntoView(); true`);
   const { data: darkShot } = await pa.cdp('Page.captureScreenshot', { format: 'png' });
@@ -127,7 +138,17 @@ try {
   check('A 沒開：B 看 A 的檔案沒有熱度圖區塊（也沒有「未公開」之類的字）',
     !(await hasHeatmap(pb)) && !(await pb.eval(`document.querySelector('#app').textContent.includes('熱度圖')`)));
 
-  /* ===== A 打開 ===== */
+  /* ===== A 在設定頁打開 ===== */
+  await openSettings(pa, base);
+  check('設定頁：帳號與社群有帳號、我的個人檔案、通知設定',
+    q(await pa.eval(`[...document.querySelectorAll('#settings-social a.settings-row')].map((a) => a.getAttribute('href'))`))
+      === q(['#/account', `#/user/${A.id}`, '#/notifications']));
+  check('設定頁：開關預設關閉', !(await pa.eval(`document.querySelector('#activity-share').checked`))
+    && (await pa.eval(`document.querySelector('#activity-share-status').textContent`)).includes('關閉中'));
+  check('390px：設定頁不橫向捲動', await noHScroll(pa));
+  await pa.eval(`document.querySelector('#settings-social').scrollIntoView(); true`);
+  const { data: settingsShot } = await pa.cdp('Page.captureScreenshot', { format: 'png' });
+  await writeFile(path.join(shots, 'dark-settings.png'), Buffer.from(settingsShot, 'base64'));
   await click(pa, '#activity-share');
   await toast(pa, '好友現在看得到你的熱度圖');
   await pa.waitFor(`document.querySelector('#activity-share-status').textContent.includes('這台裝置')`, { label: '狀態：由這台更新' });
@@ -173,8 +194,8 @@ try {
   const pa2 = await openPage(chrome, `${base}#/backup`);
   await signIn(pa2, await realSession(A));
   await seed(pa2, [[0], [7]]);
-  await visit(pa2, base, '#/account');
-  await pa2.waitFor(`document.querySelector('#activity-share-status')?.textContent.includes('另一台')`, { label: '第二台：由另一台裝置更新' });
+  await openSettings(pa2, base);
+  check('第二台的設定頁：顯示由另一台裝置更新', (await pa2.eval(`document.querySelector('#activity-share-status').textContent`)).includes('另一台'));
   check('第二台：開關是開的、有「改用這台裝置的紀錄」',
     (await pa2.eval(`document.querySelector('#activity-share').checked`)) && !(await pa2.eval(`document.querySelector('[data-action="activity-here"]').hidden`)));
   const idle = await syncNow(pa2);
@@ -185,9 +206,8 @@ try {
   check('改用第二台：雲端換成第二台的紀錄（今天 1 杯、7 天前 1 杯）', Object.keys(moved).length === 2 && moved[today] === 1, q(moved));
   const off = await syncNow(pa);
   check('第一台之後不再上傳（被接手）', off.status === 'off' && q(cloudDays(A)) === q(moved), q(off));
-  await visit(pa, base, '#/account');
-  await pa.waitFor(`document.querySelector('#activity-share-status')?.textContent.includes('另一台')`, { label: '第一台：由另一台裝置更新' });
-  check('第一台的帳號頁：顯示由另一台裝置更新', true);
+  await openSettings(pa, base);
+  check('第一台的設定頁：顯示由另一台裝置更新', (await pa.eval(`document.querySelector('#activity-share-status').textContent`)).includes('另一台'));
 
   /* ===== 關閉 ===== */
   await click(pa2, '#activity-share');
@@ -217,6 +237,13 @@ try {
   await out.waitFor(`document.querySelector('#account-heatmap .heatmap') && document.querySelector('[data-action="google"]')`, { label: '沒登入的帳號頁' });
   check('沒登入：帳號頁有自己的熱度圖和登入按鈕、沒有公開開關',
     !(await out.eval(`Boolean(document.querySelector('#activity-share'))`)) && (await out.eval(`document.querySelector('.heatmap-stats dd').textContent`)) === '2 杯');
+  await visit(out, base, '#/settings');
+  await out.waitFor(`document.querySelector('#settings-social')?.dataset.signedIn === 'false'`, { label: '沒登入的設定頁' });
+  check('沒登入的設定頁：開關停用、寫「登入後才能開啟」、「我的個人檔案」不能點、「帳號」可以點',
+    (await out.eval(`document.querySelector('#activity-share').disabled`))
+      && (await out.eval(`document.querySelector('#activity-share-status').textContent`)).includes('登入後')
+      && (await out.eval(`document.querySelector('#settings-profile').getAttribute('aria-disabled') === 'true' && !document.querySelector('#settings-profile[href]')`))
+      && (await out.eval(`Boolean(document.querySelector('#settings-social a[href="#/account"]'))`)));
   const plain = await openPage(chrome, `http://coffee.test:${port}/#/backup`);
   await seed(plain, [[0]]);
   await visit(plain, `http://coffee.test:${port}/`, '#/account');
