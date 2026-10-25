@@ -4,9 +4,13 @@
 // 只刪這台裝置認得的雲端紀錄（sync store 有、或本機有這筆），別台裝置上傳的不會被誤刪
 // 同一支手機換帳號：sync store 的 userId 記著這筆是用哪個帳號分享的，別的帳號的紀錄不上傳、不刪，
 // 換回原本的帳號時照常同步；從來沒同步過的紀錄算目前登入的帳號
+// 沖煮熱度圖（brew_activity）也在這裡同步，見檔案最後
 import * as db from './db.js';
 import * as cloud from './cloud.js';
 import { photoForUpload } from './image.js';
+import { activityRows, WINDOW_DAYS } from './heatmap.js';
+import { localDate, addDays } from './stats.js';
+import { newId } from './id.js';
 
 // supabase-js 存 session 的位置（models.js 設定的 meta key）；沒有就代表沒登入，不必載入 supabase-js
 const SESSION_KEY = 'auth:supabase-auth';
@@ -194,6 +198,11 @@ export function request() {
       do {
         again = false;
         last = await syncOnce();
+        // 熱度圖和紀錄的同步互不影響：一邊失敗不會擋住另一邊
+        last.activity = await syncActivityOnce().catch((err) => {
+          console.warn('熱度圖同步失敗', err);
+          return { status: 'failed' };
+        });
       } while (again);
       return last;
     } finally {
@@ -220,4 +229,63 @@ export async function brewStatus(brew) {
   const d = await desired(brew, userId);
   if (st.error && st.failedRow === d.json) return st.error;
   return !st.error && st.row === d.json && st.photoAt === d.photoAt ? 'synced' : 'pending';
+}
+
+/* ===== 沖煮熱度圖：近一年每天的杯數 → 雲端 brew_activity ===== */
+// 只有打開「讓好友看到我的熱度圖」的那台裝置上傳（雲端 activity_shares.device_id），兩台手機的紀錄不會互相蓋掉
+// 本機 meta activityShare = { userId } 記著「這台負責上傳」：沒有就直接跳過，不載入 supabase-js
+// 不記動作佇列：每次讀雲端現有的（最多約 366 列）和本機應該有的比對，有差異的天才送；被別台關掉或接手時清掉本機的記號
+
+const DEVICE_KEY = 'deviceId';         // 這台裝置的 id（第一次用到時產生；不匯出、匯入也不清）
+const ACTIVITY_KEY = 'activityShare';  // { userId }：這台負責上傳熱度圖
+
+/** 這台裝置的 id */
+export async function deviceId() {
+  let id = await db.getMeta(DEVICE_KEY);
+  if (!id) {
+    id = newId();
+    await db.setMeta(DEVICE_KEY, id);
+  }
+  return id;
+}
+
+/** 記下（userId）或清掉（null）「這台負責上傳熱度圖」 */
+export const setActivityUploader = (userId) =>
+  (userId ? db.setMeta(ACTIVITY_KEY, { userId }) : db.remove('meta', ACTIVITY_KEY));
+
+/**
+ * 熱度圖同步一次：{ status, upserted, deleted }
+ * status：unavailable、idle（這台不負責上傳）、signed-out、other-account、offline、off（雲端已關閉或改由別台上傳）、done
+ */
+async function syncActivityOnce() {
+  const result = { status: 'done', upserted: 0, deleted: 0 };
+  if (!cloud.available) return { ...result, status: 'unavailable' };
+  const share = await db.getMeta(ACTIVITY_KEY);
+  if (!share) return { ...result, status: 'idle' };
+  const userId = await sessionUserId();
+  if (!userId) return { ...result, status: 'signed-out' };
+  if (share.userId !== userId) return { ...result, status: 'other-account' }; // 用另一個帳號打開的
+  if (!navigator.onLine) return { ...result, status: 'offline' };
+
+  try {
+    const remote = await cloud.getActivityShare();
+    if (!remote || remote.deviceId !== await deviceId()) {
+      await setActivityUploader(null);
+      return { ...result, status: 'off' };
+    }
+    // 日期用本機日期；資料庫用台灣時間檢查範圍，時區比台灣快的裝置在半夜可能多出「明天」，先濾掉
+    const taipeiToday = taipeiDate();
+    const want = activityRows(await db.getAll('brews'), localDate(new Date()))
+      .filter((r) => r.day <= taipeiToday && r.day > addDays(taipeiToday, -WINDOW_DAYS));
+    const wantByDay = new Map(want.map((r) => [r.day, r.cups]));
+    const have = new Map((await cloud.listActivity(userId)).map((r) => [r.day, r.cups]));
+    const upserts = want.filter((r) => have.get(r.day) !== r.cups);
+    const deletes = [...have.keys()].filter((day) => !wantByDay.has(day)); // 紀錄刪了、改了日期，或滑出一年範圍
+    await cloud.upsertActivity(upserts);
+    await cloud.deleteActivityDays(userId, deletes);
+    return { ...result, upserted: upserts.length, deleted: deletes.length };
+  } catch (err) {
+    if (err?.code === 'network' || err?.code === 'load') return { ...result, status: 'offline' };
+    throw err;
+  }
 }

@@ -21,6 +21,13 @@
   --qr-bg: #ffffff;
   --qr-fg: #1c140f;
   --tour-dim: rgba(0, 0, 0, 0.72);   /* 新手教學：亮出來以外的地方變暗 */
+  /* 沖煮熱度圖：0 杯是接近卡片底色的中性色，1–4 級同一個色相由暗到亮
+     （dataviz 的 validateOrdinal 驗證過：亮度單調、相鄰級距 ≥ 0.06、最淡一級對卡片底色 ≥ 2:1；淺色主題同） */
+  --heat-0: #45331f;
+  --heat-1: #80522a;
+  --heat-2: #ad6c33;
+  --heat-3: #d8903f;
+  --heat-4: #fac684;
 
   --radius: 14px;
   --tap: 48px;            /* 最小點擊高度 */
@@ -49,6 +56,11 @@
   --qr-bg: #ffffff;
   --qr-fg: #21160e;
   --tour-dim: rgba(33, 22, 14, 0.62);
+  --heat-0: #ece2d6;
+  --heat-1: #d9a266;
+  --heat-2: #b9752f;
+  --heat-3: #8f4e17;
+  --heat-4: #5a2d08;
 
   color-scheme: light;
 }
@@ -951,3 +963,38 @@ a.feed-body:active { background: var(--surface-2); }
 .tour-skip { margin-right: auto; background: none; border-color: transparent; color: var(--text-dim); }
 .tour-actions [data-act="next"] { min-width: 96px; }
 @media (prefers-reduced-motion: reduce) { .tour-spot { transition: none; } }
+
+/* ===== 沖煮熱度圖（js/views/heatmap.js）：統計、帳號、個人檔案共用 ===== */
+/* 和統計頁的卡片同樣的外觀（不用 .stats-card：統計頁的測試、程式用它找統計圖表） */
+.heatmap-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.heatmap-card h2 { margin: 0; font-size: 1.05rem; }
+.heatmap-card > .hint { margin: 0; font-size: 0.85rem; }
+.stats .heatmap-card { margin-bottom: 0; }
+.heatmap-scroll { padding-bottom: 10px; } /* 捲軸不蓋住最下面一排（週日） */
+.heatmap-scroll .heatmap { width: auto; }
+.heat-dot { stroke: none; }
+.heat-0 { fill: var(--heat-0); }
+.heat-1 { fill: var(--heat-1); }
+.heat-2 { fill: var(--heat-2); }
+.heat-3 { fill: var(--heat-3); }
+.heat-4 { fill: var(--heat-4); }
+.heatmap { cursor: pointer; }
+.heat-dot.is-selected { stroke: var(--text); stroke-width: 2; }
+/* 今天：圓點外面一圈（中間留一點底色，任何一級都看得出來） */
+.heat-today { fill: none; stroke: var(--text); stroke-width: 1.5; pointer-events: none; }
+.heatmap-legend { display: flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 0.8rem; color: var(--text-dim); }
+.heatmap-legend svg { display: block; }
+.heatmap-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.heatmap-stats div { min-width: 0; }
+.heatmap-stats dt { font-size: 0.8rem; color: var(--text-dim); }
+.heatmap-stats dd { margin: 0; font-size: 1.1rem; font-weight: 600; font-variant-numeric: tabular-nums; }

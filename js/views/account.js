@@ -1,30 +1,35 @@
-// #/account 帳號（從右上角 ☰ 選單進入）：Google 登入、暱稱、頭像、好友代碼與 QR code、登出、刪除帳號
+// #/account 帳號（從右上角 ☰ 選單進入）：自己的沖煮熱度圖、Google 登入、暱稱、頭像、好友代碼與 QR code、
+// 「讓好友看到我的熱度圖」、登出、刪除帳號
+// 熱度圖只用本機資料，離線、沒登入、沒有社群功能都照樣顯示；下面的社群內容另外畫在 #account-main
 import {
   getSocialState, socialErrorMessage, signInWithGoogle, signOut, isInAppBrowser,
   createProfile, updateNickname, prepareAvatar, saveAvatar, removeAvatar, PHOTO_ACCEPT,
-  formatFriendCode, friendInviteUrl, qrSvg, regenerateFriendCode, deleteAccount,
+  formatFriendCode, friendInviteUrl, qrSvg, regenerateFriendCode, deleteAccount, getActivityShare, setActivityShare,
 } from '../models.js';
 import { esc, setTitle, toast, showErrors, avatarHtml, showMessage, copyText, notifyBadgesChanged, profileHref } from './ui.js';
+import { renderMyHeatmap } from './heatmap.js';
 
 export async function render(container, { isCurrent }) {
   setTitle('帳號');
   const rerender = () => render(container, { isCurrent });
-  if (!navigator.onLine) return showMessage(container, '社群功能需要網路連線', rerender);
+  container.innerHTML = '<div id="account-heatmap"></div><div id="account-main"><p class="hint">載入中…</p></div>';
+  const main = container.querySelector('#account-main');
+  renderMyHeatmap(container.querySelector('#account-heatmap'), { isCurrent });
+  if (!navigator.onLine) return showMessage(main, '社群功能需要網路連線', rerender);
 
-  container.innerHTML = '<p class="hint">載入中…</p>';
   let state;
   try {
     state = await getSocialState();
   } catch (err) {
-    if (isCurrent()) showMessage(container, socialErrorMessage(err), rerender);
+    if (isCurrent()) showMessage(main, socialErrorMessage(err), rerender);
     return;
   }
   if (!isCurrent()) return;
 
-  if (state.status === 'unavailable') return showMessage(container, '這個網址沒有開放社群功能');
-  if (state.status === 'signed-out') return renderSignedOut(container);
-  if (state.status === 'no-profile') return renderNoProfile(container, state, rerender);
-  return renderReady(container, state, { isCurrent, rerender });
+  if (state.status === 'unavailable') return showMessage(main, '這個網址沒有開放社群功能');
+  if (state.status === 'signed-out') return renderSignedOut(main);
+  if (state.status === 'no-profile') return renderNoProfile(main, state, rerender);
+  return renderReady(main, state, { isCurrent, rerender });
 }
 
 /* ===== 沒登入 ===== */
@@ -132,6 +137,16 @@ function renderReady(container, { user, profile }, { isCurrent, rerender }) {
       <button type="button" class="link-btn" data-action="regenerate">重新產生代碼（舊代碼會失效）</button>
     </section>
 
+    <section class="section" id="activity-share-section">
+      <h2>熱度圖</h2>
+      <label class="switch-row">
+        <input type="checkbox" id="activity-share" disabled>
+        <span><strong>讓好友看到我的熱度圖</strong><span class="hint">只上傳近一年每天沖了幾杯，不含評分、豆子等其他資料；關閉時雲端的資料會刪除</span></span>
+      </label>
+      <p class="hint" id="activity-share-status" aria-live="polite">讀取中…</p>
+      <button type="button" class="btn btn-block" data-action="activity-here" hidden>改用這台裝置的紀錄</button>
+    </section>
+
     <a class="btn btn-block" href="${esc(profileHref(user.id))}">我的個人檔案</a>
     <a class="btn btn-block" href="#/friends">好友與邀請</a>
     <a class="btn btn-block" href="#/notifications">通知設定</a>
@@ -160,6 +175,8 @@ function renderReady(container, { user, profile }, { isCurrent, rerender }) {
         <button class="btn btn-danger btn-block" type="submit">永久刪除帳號</button>
       </form>
     </section>`;
+
+  bindActivityShare(container.querySelector('#activity-share-section'), isCurrent);
 
   const code = profile.friendCode;
   const inviteUrl = friendInviteUrl(code);
@@ -276,4 +293,44 @@ function bindSignOut(container, rerender) {
     toast('已登出');
     rerender();
   });
+}
+
+/* ===== 讓好友看到我的熱度圖（預設關閉；只有打開的那台裝置上傳） ===== */
+
+const ACTIVITY_STATUS = {
+  off: '關閉中：好友看不到你的熱度圖',
+  here: '已開啟：由這台裝置的紀錄更新（好友看到的是杯數和連續天數）',
+  elsewhere: '已開啟：由另一台裝置的紀錄更新；在這台按下面的按鈕，會改用這台的紀錄',
+};
+
+function bindActivityShare(section, isCurrent) {
+  const input = section.querySelector('#activity-share');
+  const status = section.querySelector('#activity-share-status');
+  const here = section.querySelector('[data-action="activity-here"]');
+  const show = ({ on, here: mine }) => {
+    input.checked = on;
+    input.disabled = false;
+    here.hidden = !on || mine;
+    status.textContent = ACTIVITY_STATUS[!on ? 'off' : mine ? 'here' : 'elsewhere'];
+  };
+  const load = () => getActivityShare().then((s) => { if (isCurrent()) show(s); }, (err) => {
+    if (isCurrent()) status.textContent = socialErrorMessage(err);
+  });
+  const apply = async (on, message) => {
+    input.disabled = true;
+    here.disabled = true;
+    try {
+      await setActivityShare(on);
+      toast(message);
+    } catch (err) {
+      toast(socialErrorMessage(err));
+    } finally {
+      here.disabled = false;
+      await load(); // 以雲端實際的狀態為準（失敗時改回原本的）
+    }
+  };
+  input.addEventListener('change', () => apply(input.checked,
+    input.checked ? '好友現在看得到你的熱度圖' : '已關閉，雲端的熱度圖資料已刪除'));
+  here.addEventListener('click', () => apply(true, '已改用這台裝置的紀錄'));
+  load();
 }

@@ -5,10 +5,11 @@
 // 暱稱、自我介紹、器材、豆子都來自使用者：一律經過 esc() 才放進 innerHTML；自我介紹的換行交給 CSS（white-space: pre-line）
 import {
   getSocialState, socialErrorMessage, getUserProfile, saveProfile, prepareAvatar, saveAvatar, removeAvatar, PHOTO_ACCEPT,
-  NICKNAME_MAX, BIO_MAX, BIO_LINES, FAVORITE_GEAR_MAX, FAVORITE_BEANS_MAX, listUserPosts,
+  NICKNAME_MAX, BIO_MAX, BIO_LINES, FAVORITE_GEAR_MAX, FAVORITE_BEANS_MAX, listUserPosts, getFriendHeatmap,
 } from '../models.js';
 import { esc, setTitle, toast, showMessage, showErrors, avatarHtml } from './ui.js';
 import { feedCardHtml, bindLikes } from './feed.js';
+import { heatmapHtml, bindHeatmap, renderMyHeatmap } from './heatmap.js';
 
 const dateFmt = new Intl.DateTimeFormat('zh-TW', { year: 'numeric', month: 'numeric', day: 'numeric' });
 const NOT_FOUND = `<div class="empty"><p>找不到這個用戶</p><a class="btn" href="#/social">回社群</a></div>`;
@@ -56,6 +57,23 @@ export async function render(container, { params: [userId], isCurrent }) {
   renderFull(container, result.profile, { user: state.user, rerender, isCurrent });
 }
 
+/**
+ * 熱度圖：自己的用這支手機上的全部紀錄（可以切換平均評分）；好友的讀雲端，只有杯數
+ * 好友沒開啟（雲端沒有資料）、讀取失敗時整塊不顯示，和沒有這個功能一樣
+ */
+async function renderHeatmap(el, p, isCurrent) {
+  if (p.mine) return renderMyHeatmap(el, { title: '沖煮熱度圖', isCurrent });
+  let h;
+  try {
+    h = await getFriendHeatmap(p.id);
+  } catch {
+    return;
+  }
+  if (!h || !isCurrent() || !el.isConnected) return;
+  el.innerHTML = heatmapHtml(h, { title: '沖煮熱度圖' });
+  bindHeatmap(el, h);
+}
+
 /** 一個欄位：有填才顯示 */
 const infoRow = (label, value) => (value ? `<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>` : '');
 
@@ -78,6 +96,7 @@ function renderFull(container, p, { user, rerender, isCurrent }) {
       ${p.mine ? '<button type="button" class="btn btn-block" data-action="edit">編輯個人檔案</button>' : ''}
     </section>
     ${p.mine ? editFormHtml(p) : ''}
+    <div id="profile-heatmap"></div>
     <section class="section profile-posts" aria-labelledby="profile-posts-title">
       <h2 id="profile-posts-title">${p.mine ? '我分享的紀錄' : '分享的紀錄'}</h2>
       <p class="hint" id="posts-status">載入中…</p>
@@ -88,6 +107,7 @@ function renderFull(container, p, { user, rerender, isCurrent }) {
   </div>`;
   const page = container.querySelector('#profile-page');
   if (p.mine) bindEdit(page, p, { user, rerender });
+  renderHeatmap(page.querySelector('#profile-heatmap'), p, isCurrent);
   renderPosts(page.querySelector('.profile-posts'), { myId: user.id, userId: p.id, mine: p.mine, isCurrent });
 }
 

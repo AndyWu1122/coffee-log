@@ -25,6 +25,7 @@ js/db.js           # 唯一存取 IndexedDB 的地方
 js/models.js       # 驗證、計算（粉水比、養豆天數）
 js/flavorWheel.js  # SCA 風味輪靜態資料（三層、中英、大類顏色），由 models.js 轉出給 views
 js/stats.js        # 統計頁的計算（純函式，不 import 任何東西，Node 可直接測），只由 models.js 使用
+js/heatmap.js      # 沖煮熱度圖的計算（純函式，只 import stats.js 的日期工具，Node 可直接測），由 models.js、sync.js 使用
 js/drippers.js     # 舊紀錄的濾杯文字 → drippers 的合併規則（純函式，Node 可直接測）；db.js 的 v6 升級與 models.js 匯入舊備份共用
 js/id.js           # newId()（db.js 升級轉換與 models.js 共用；models.js 轉出）
 js/changelog.js    # 更新內容（給使用者看的每版說明）與版本比較，由 models.js 轉出給 views
@@ -32,14 +33,14 @@ js/image.js        # 照片處理：解碼、縮小、重新編碼 JPEG、base64
 js/cardLayout.js   # 分享卡片的純計算：cover 裁切、雷達圖座標、文字換行（含避頭）、檔名；由 models.js 轉出給 views
 js/config.js       # Supabase 連線設定（依網址：localhost → 本機、github.io → 正式；null ＝ 沒有社群功能）
 js/cloud.js        # 唯一存取 Supabase 的地方（角色和 db.js 一樣）；supabase-js 用到才載入
-js/sync.js         # 好友紀錄的同步（本機 friends 紀錄 → shared_brews），只由 models.js 使用
+js/sync.js         # 好友紀錄的同步（本機 friends 紀錄 → shared_brews）、熱度圖的同步（→ brew_activity），只由 models.js 使用
 js/push.js         # 推播通知的瀏覽器那一邊（Notification、PushManager、iOS 主畫面判斷），只由 models.js 使用
 js/vendor/         # 第三方檔案原封不動（supabase-js UMD、qrcode-generator），來源與 SRI 見 js/vendor/README.md
-js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, dripperList, dripperForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, changelog（更新內容）, settings（設定與關於）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, profile（個人檔案）, stats（統計：SVG 圖表）, privacy（隱私說明）, feedback（意見回饋）, notifications（通知設定）, admin（開發者後台）, tour（新手教學：遮罩＋說明卡片，不是路由）, ui（共用 DOM 工具）
+js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, dripperList, dripperForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, changelog（更新內容）, settings（設定與關於）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, profile（個人檔案）, stats（統計：SVG 圖表）, privacy（隱私說明）, feedback（意見回饋）, notifications（通知設定）, admin（開發者後台）, tour（新手教學：遮罩＋說明卡片，不是路由）, heatmap（沖煮熱度圖的 SVG，統計／帳號／個人檔案共用）, ui（共用 DOM 工具）
 icons/
 docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟、部署指令）、overnight-report.md（2026-10-26 通宵工作的報告）
 supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）、functions/admin-delete-user（開發者刪別人的帳號）、functions/_shared/account.ts（兩者共用的刪除流程）、functions/feedback（意見回饋：存檔＋寄 Email 給站長；mail.ts 是設定檢查與錯誤說明的純函式）、functions/send-push（推播通知）、functions/_shared/webpush.ts（VAPID 簽章與 RFC 8291 加密，只用 Web Crypto）、functions/_shared/local.ts（`isLocalSupabase`：只有已知的本機網址才用公開的測試金鑰，其他一律當正式環境）
-scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs、webpush-test.mjs、onboarding-test.mjs、bean-photo-test.mjs（最後八個不需要 Supabase）、supabase-push-test.mjs、social-push-test.mjs、push-helpers.mjs（推播測試共用：解密、假推播伺服器）、vapid-keys.mjs（站長產生正式金鑰用，不是測試）
+scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs、webpush-test.mjs、onboarding-test.mjs、bean-photo-test.mjs、heatmap-test.mjs（最後九個不需要 Supabase）、supabase-activity-test.mjs、social-heatmap-test.mjs、supabase-push-test.mjs、social-push-test.mjs、push-helpers.mjs（推播測試共用：解密、假推播伺服器）、vapid-keys.mjs（站長產生正式金鑰用，不是測試）
 tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mjs 用 headless Chrome 開；不屬於 App、不放進 ASSETS）
 ```
 
@@ -52,7 +53,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 **grinders**：id, name(必填), notes(選填，例如刻度說明), archived(bool), createdAt
 **drippers**（DB v6 加入）：id, name(必填，≤ 100 字), notes(選填), archived(bool), createdAt
 **brews**：id, beanId, grinderId(選填，'' ＝未指定；v1 舊紀錄沒有這個欄位), dripperId(選填，'' ＝未指定), brewedAt, dripper(舊版自由輸入的濾杯文字，轉換後保留作為保險；新紀錄是 ''，畫面一律用 dripperId), grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes, visibility(private/friends，舊資料沒有這個欄位＝private)
-**meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil、社群登入狀態 `auth:*`、社群通知看到哪 `feedSeenAt`／`commentsSeenAt`／`repliesSeenAt`、看過哪一版的更新內容 `changelogSeen`、看過新手教學 `onboardingSeen`、濾杯轉換做過了 `dripperMigration`）；**不匯出、匯入取代全部時也不清除**（token 不會進備份檔，匯入也不會被登出）
+**meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil、社群登入狀態 `auth:*`、社群通知看到哪 `feedSeenAt`／`commentsSeenAt`／`repliesSeenAt`、看過哪一版的更新內容 `changelogSeen`、看過新手教學 `onboardingSeen`、濾杯轉換做過了 `dripperMigration`、這台裝置的 id `deviceId`、這台負責上傳熱度圖 `activityShare`）；**不匯出、匯入取代全部時也不清除**（token 不會進備份檔，匯入也不會被登出）
 **photos**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 1600px、品質 0.8，約 200KB), width, height, createdAt；每筆紀錄最多 1 張，跟 brews 分開存
 **thumbs**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 300px)；列表只讀這個，不載入原圖；不匯出，匯入時由照片重新產生
 **beanPhotos**／**beanThumbs**（DB v7 加入，keyPath beanId）：豆子的照片（每支最多 1 張，例如豆袋），格式、處理方式和 photos／thumbs 完全一樣；和紀錄的照片分開存（那邊的 key 是 brewId，現有的照片、備份、同步都不用動）
@@ -115,6 +116,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - **例外**：分享卡片是一張輸出的圖，不跟主題切換，固定用深色主題的咖啡色系；色碼常數在 `js/views/shareCard.js` 頂端，要和 style.css 的深色變數一致
 
 ## 統計（`#/stats`，☰ 選單）
+- 最上面是自己的沖煮熱度圖（見「沖煮熱度圖」），固定近一年，不受期間、豆子篩選影響；外層是 `.heatmap-card`（不是 `.stats-card`，統計的程式與測試用 `.stats-card` 找圖表）
 - **只用本機 IndexedDB 的紀錄計算**（`models.getStats` → `js/stats.js` 的 `computeStats`），不碰 Supabase、不上傳、離線可用；不加欄位、不存衍生值
 - 期間：近 30 天｜近 90 天｜全部；豆子篩選（有紀錄的豆子，含封存）；已封存的豆子、磨豆機、濾杯也算（濾杯依 dripperId 分組）；篩選條件在切頁後保留
 - 評分相關（評分變化、每支豆子、器材）只算有評分的杯；有評分 < 3 杯標「樣本少」並排在後面；7 杯移動平均從第 7 杯開始
@@ -124,6 +126,18 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - 點擊（不是 hover）才顯示詳細數字（圖下方的 `.chart-detail`）；橫條每列 ≥ 44px；點「每支豆子」的長條跳到 `#/?bean=<id>`
 - 橫條：名稱｜長條｜數值三欄（名稱太長截斷），各列長條同寬才能比較；每週超過 14 週改成在自己的框裡橫向捲動（Y 軸固定在框外）
 - 測試：`stats-test.mjs`（計算）、`stats-ui-test.mjs`（390px、深淺色、有資料／沒資料的截圖、文字重疊、CSP）
+
+## 沖煮熱度圖（1.14.0）
+- GitHub 風格：53 欄（週，最右是本週）× 7 列（週一→週日），每天一個圓點，今天加外框；上方月份、左邊「一、三、五」；圖例「少 ○○○○○ 多」；下方近一年總杯數、目前連續、最長連續
+- 計算在 `js/heatmap.js`（本機日期；「近一年」＝含今天往前 365 天）：杯數 5 級（0、1、2、3、4+）；平均評分 5 級（沒評分 0，<2、<3、<4、≥4）；目前連續連到今天，今天還沒沖就從昨天算；最長連續只看近一年
+- 畫面在 `js/views/heatmap.js`（`heatmapHtml`／`bindHeatmap`／`renderMyHeatmap`）：自己畫 SVG；在自己的框裡橫向捲動、打開時捲到最右邊；點擊（不是 hover）用座標換算格子，`.chart-detail` 顯示「10/24（六）：2 杯」（評分模式加「・平均 4.5 分」）
+- 顏色只用 `--heat-0`～`--heat-4`（深淺主題各自定義；dataviz 的 `validateOrdinal` 驗證過：單一色相、亮度單調、相鄰 ΔL ≥ 0.06、最淡一級對卡片底色 ≥ 2:1）；改色要重新驗證
+- 位置：☰ →「統計」最上面、帳號頁最上面（離線、沒登入、沒有社群功能都照樣顯示）、個人檔案（簡介卡片和貼文之間）
+- **自己看**（統計、帳號、自己的個人檔案）：本機全部紀錄（含只有我的），可切換「杯數｜平均評分」
+- **好友看**：雲端 `brew_activity`，只有杯數和連續天數、沒有切換；雲端沒有資料（沒開、不是好友、封鎖、讀取失敗）時整塊不顯示，不寫「未公開」
+- 帳號頁「讓好友看到我的熱度圖」（預設關閉）：開關存在帳號（`activity_shares`），**只有打開的那台裝置上傳**（`device_id`＝meta `deviceId`）；另一台顯示「由另一台裝置更新」和「改用這台裝置的紀錄」按鈕；關閉時 trigger 清空雲端
+- 同步（`sync.js` 的 `syncActivityOnce`，和紀錄同步同一個 `request()`、互不影響）：meta `activityShare = { userId }` 沒有就跳過、不載入 supabase-js；帳號不同就不上傳（換回來照常）；讀雲端的開關，不是這台就清掉 meta；讀雲端現有的天和 `activityRows` 比對，有差異的天一次 upsert、多出來的（刪除、改日期、滑出一年）一次刪除；日期先濾掉超出台灣時間範圍的（時區比台灣快的裝置半夜）
+- 登出不清 meta（帳號判斷就夠了）；刪除帳號清掉
 
 ## 不做計時器
 使用者的秤本身有計時功能，App 不做計時器；總時間在表單手動輸入（分、秒兩欄）。
@@ -175,7 +189,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 
 ## 咖啡社群（後端：Supabase）
 規格見 `docs/social-spec.md`（分 5 階段，每階段通過測試、使用者確認後才進下一階段）；待決事項與決定見 `docs/social-open-questions.md`。
-目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）、階段 3（帳號與好友）、階段 4（動態牆與同步）、階段 5（安全與隱私收尾），之後加上留言與回覆、封鎖不解除好友（都已部署），開發者後台（已部署）；個人檔案（已部署，步驟見 `docs/supabase-setup.md` 5-5）、推播通知（已部署，步驟見 5-6）。正式專案：`rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），migration 與 `delete-account` 已部署；建立與設定步驟見 `docs/supabase-setup.md`。
+目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）、階段 3（帳號與好友）、階段 4（動態牆與同步）、階段 5（安全與隱私收尾），之後加上留言與回覆、封鎖不解除好友（都已部署），開發者後台（已部署）；個人檔案（已部署，步驟見 `docs/supabase-setup.md` 5-5）、推播通知（已部署，步驟見 5-6）、沖煮熱度圖（還沒部署，步驟見 5-8）。正式專案：`rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），migration 與 `delete-account` 已部署；建立與設定步驟見 `docs/supabase-setup.md`。
 
 ### 資安規則（每個階段都必須遵守）
 - 每張表和 Storage bucket 都必須開 RLS，預設拒絕
@@ -246,6 +260,14 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
   - index.html 只放正式專案的網址；本機 Supabase（config.js 的 `LOCAL`）由測試用的靜態伺服器（`chrome.mjs` 的 `localCsp`）送出時才加上，所以 `python -m http.server` 開的頁面連不到本機 Supabase（本來就無法真的登入，社群功能一律用測試腳本測）
 - Service Worker 只攔截同網域的 GET，不會快取 API 或 signed URL（social-safety-test 會檢查快取內容）
 - **防點擊劫持**：meta 的 CSP 不能設 `frame-ancestors`、GitHub Pages 也不送 `X-Frame-Options`，所以 `js/theme.js` 開頭發現被 iframe 嵌入就整頁不顯示並把最上層換成 App（menu-alerts-test 會檢查）；App 自己不要用 iframe 嵌入自己
+
+### 沖煮熱度圖（`20261031100000_brew_activity.sql`）
+- `activity_shares`：user_id（主鍵，references profiles on delete cascade）, device_id, updated_at；有這一列＝開啟；**只有本人讀寫**（好友讀不到開關，也讀不到 device_id）；`after delete` trigger（security definer）刪掉這個人所有的 `brew_activity`
+- `brew_activity`：user_id, day, cups；主鍵 `(user_id, day)`；只存有沖的日子；check `cups between 1 and 50`；日期由 trigger 檢查（台灣時間今天往前 365 天內、不能是未來，23514）
+  - insert／update：本人且自己有 `activity_shares`（沒開不能寫）；update 不能改日期（PostgREST 的 upsert 會連 day 一起寫，所以欄位權限開 `day, cups`，由 trigger 擋下改日期）；delete：本人
+  - select：本人或 `private.can_view(user_id)`（已接受、雙方沒有封鎖，和 `profile_detail` 同一套）
+- 刪除帳號：profiles cascade（delete-account、admin-delete-user 不用改）
+- 測試：pgTAP `13_activity`、`supabase-activity-test.mjs`（A、B 好友，C 非好友，D 封鎖）、`social-heatmap-test.mjs`
 
 ### 留言與回覆
 - `comments`：id, brew_owner, brew_id, author, parent_id, reply_to_user, author_nickname, reply_to_nickname, body, created_at
@@ -330,6 +352,9 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - `node scripts/feedback-mail-test.mjs`：不需要 Supabase；Node 直接載入 `functions/feedback/mail.ts` 測設定檢查與 Resend 錯誤說明
 - `node scripts/drippers-test.mjs`：不需要 Supabase；Node 測 `js/drippers.js`，headless Chrome 用 1.7.0 的舊版 db.js（`git show 9b2c4c8:js/db.js`）建出 v5 的資料再開新版：升級轉換、重新整理不重複、表單預設與「再沖一杯」、封存與刪除、卡片／分享卡片／統計／上傳的列用濾杯名稱、v1／v3／v4 備份匯入
 - `node scripts/bean-photo-test.mjs`：不需要 Supabase；headless Chrome 用上一版的 db.js（`git show 3d9f2c2:js/db.js`，import 換成伺服器網址）建出 DB v6 再開新版：升級到 v7 資料都在；豆子表單選帶 EXIF／GPS 的照片 → 存下來沒有 EXIF（Canvas 自帶的 sRGB ICC 允許）、有縮圖、列表顯示；移除、封存、刪除；備份 v5 匯出、預估大小、取代全部／合併、v4 舊備份、壞掉的豆子照片整份擋下；紀錄表單的照片照常；深淺色截圖、CSP
+- `node scripts/heatmap-test.mjs`：不需要 Supabase；Node（`TZ=Asia/Taipei`）測 `js/heatmap.js`：空資料、跨年、閏年、23:59／00:01 不同天、53×7 與週一開始、月份標籤、5 級門檻、連續天數、近 365 天、50 杯上限
+- `node scripts/supabase-activity-test.mjs`：熱度圖的權限從 API 層測（A、B 好友，C 非好友，D 封鎖）：沒開不能寫、好友讀得到、C／D 讀不到、不能寫別人的、cups 0／51／未來／超過一年被拒、不能改日期、讀不到別人的開關、換裝置、關閉清空、刪除帳號
+- `node scripts/social-heatmap-test.mjs`：headless Chrome（390px）：自己和好友看到的不同、點圓點、捲到最右邊、打開／關閉、C／D 看不到、新增／刪除／改日期後同步、第二台裝置不上傳與「改用這台」、沒登入／沒有社群功能也有、深淺色截圖、CSP
 - `node scripts/onboarding-test.mjs`：不需要 Supabase；headless Chrome 測新手教學：全新使用者自動顯示、略過／Esc 後不再出現、有資料的人不顯示、從 QR code 打開不顯示也不記、☰ 重看不影響設定、沒有社群功能（`coffee.test`）少一步、每一步卡片在畫面內且不蓋住標示（390px、橫放）、深淺色截圖、CSP
 - `node scripts/menu-alerts-test.mjs`：不需要 Supabase；headless Chrome 測 ☰ 選單的項目與 375×667 放得下、設定頁（版本號、外觀切換與跟著系統）、☰ 的「!」（該備份了、更新內容）、「已更新」提示、更新內容頁，並檢查 `js/changelog.js` 第一段＝`APP_VERSION`
 - **改了 Edge Function 之後要 `docker restart supabase_edge_runtime_coffee-log`**，本機才會載入新程式

@@ -431,6 +431,41 @@ export const saveNotificationPrefs = ({ comments, replies, newPosts, likes }) =>
   unwrap(await sb.from('notification_prefs').upsert({ comments, replies, new_posts: newPosts, likes }, { onConflict: 'user_id' }));
 });
 
+/* ===== 沖煮熱度圖（brew_activity、activity_shares） ===== */
+
+/** 自己的開關：開啟時 { deviceId }（負責上傳的那台），沒開回傳 null（別人的讀不到） */
+export const getActivityShare = () => run(async (sb) => {
+  const row = unwrap(await sb.from('activity_shares').select('device_id').maybeSingle());
+  return row ? { deviceId: row.device_id } : null;
+});
+
+/** 開啟（或改由這台裝置上傳）；user_id 由資料庫用 auth.uid() 決定 */
+export const setActivityShare = (deviceId) => run(async (sb) => {
+  unwrap(await sb.from('activity_shares').upsert({ device_id: uuid(deviceId) }, { onConflict: 'user_id' }));
+});
+
+/** 關閉：刪掉開關，trigger 會把雲端的熱度圖資料全部刪除 */
+export const deleteActivityShare = (userId) => run(async (sb) => {
+  unwrap(await sb.from('activity_shares').delete().eq('user_id', uuid(userId)));
+});
+
+/** 某人每天的杯數 [{ day, cups }]（本人或沒有封鎖的好友才讀得到，其他一律是空陣列；最多約 366 列） */
+export const listActivity = (userId) => run(async (sb) =>
+  unwrap(await sb.from('brew_activity').select('day, cups').eq('user_id', uuid(userId)).order('day')));
+
+/** 新增或修改自己這幾天的杯數（一次送出；開啟後才能寫，日期範圍、杯數由資料庫檢查） */
+export const upsertActivity = (rows) => run(async (sb) => {
+  if (!rows.length) return;
+  unwrap(await sb.from('brew_activity').upsert(rows.map(({ day, cups }) => ({ day, cups })), { onConflict: 'user_id,day' }));
+});
+
+/** 刪掉自己這幾天的資料 */
+export const deleteActivityDays = (userId, days) => run(async (sb) => {
+  const valid = days.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)); // 只接受日期（組篩選字串時避免被插入其他條件）
+  if (!valid.length) return;
+  unwrap(await sb.from('brew_activity').delete().eq('user_id', uuid(userId)).in('day', valid));
+});
+
 /* ===== 檢舉、刪除帳號 ===== */
 
 /** 檢舉一筆看得到的紀錄（reporter 由資料庫用 auth.uid() 決定；每天 10 次的上限由 trigger 檢查） */

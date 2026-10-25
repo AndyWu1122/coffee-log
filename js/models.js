@@ -5,6 +5,7 @@ import { compressPhoto, compressAvatar, makeThumb, blobToBase64, base64ToBytes, 
 import { shareFileName } from './cardLayout.js';
 import { CHANGELOG, compareVersions } from './changelog.js';
 import { computeStats } from './stats.js';
+import { summarize, fromActivity, buildHeatmap } from './heatmap.js';
 import { mergeDripperNames } from './drippers.js';
 import { newId } from './id.js';
 import * as cloud from './cloud.js';
@@ -1266,6 +1267,47 @@ export function requestSync() {
   sync.request().catch((err) => console.warn('同步失敗', err));
 }
 
+/* ----- 沖煮熱度圖（計算在 js/heatmap.js；上傳在 sync.js） ----- */
+
+export const HEATMAP_MODES = [{ value: 'cups', label: '杯數' }, { value: 'rating', label: '平均評分' }];
+
+/** 自己的熱度圖：只用這支手機上的全部紀錄（含只有我的），不連網路；mode：cups／rating */
+export async function getMyHeatmap(mode = 'cups') {
+  return buildHeatmap(summarize(await db.getAll('brews')), { today: todayLocal(), mode });
+}
+
+/**
+ * 好友的熱度圖（只有杯數）：雲端沒有資料就回傳 null（對方沒開、不是好友、有封鎖都一樣，畫面整塊不顯示）
+ * 連不上伺服器會丟出錯誤
+ */
+export async function getFriendHeatmap(userId) {
+  const rows = await cloud.listActivity(userId);
+  return rows.length ? buildHeatmap(fromActivity(rows), { today: todayLocal(), mode: 'cups' }) : null;
+}
+
+/** 「讓好友看到我的熱度圖」：{ on, here }（here：這台負責上傳；on 但不是 here ＝由另一台裝置更新） */
+export async function getActivityShare() {
+  const [share, me] = await Promise.all([cloud.getActivityShare(), sync.deviceId()]);
+  return { on: Boolean(share), here: Boolean(share) && share.deviceId === me };
+}
+
+/**
+ * 打開（改由這台上傳，馬上同步一次）或關閉（雲端的熱度圖資料全部刪除）
+ * 回傳打開時第一次同步的結果 { status, upserted, deleted }
+ */
+export async function setActivityShare(on) {
+  const user = await cloud.currentUser();
+  if (!user) throw new cloud.CloudError('要先登入', 'signed-out');
+  if (!on) {
+    await cloud.deleteActivityShare(user.id);
+    await sync.setActivityUploader(null);
+    return null;
+  }
+  await cloud.setActivityShare(await sync.deviceId());
+  await sync.setActivityUploader(user.id);
+  return (await sync.request()).activity;
+}
+
 /** 立即同步並等結果 { status, uploaded, deleted, failed }（測試、重試按鈕用） */
 export const syncNow = () => sync.request();
 
@@ -1584,6 +1626,7 @@ export async function deleteAccount() {
   const userId = await sync.sessionUserId();
   await cloud.deleteAccount();
   await push.unsubscribe().catch(() => {}); // 雲端的訂閱已經 cascade 刪除；這台裝置也退訂
+  await sync.setActivityUploader(null);       // 熱度圖的雲端資料也已經 cascade 刪除
   const [brews, states] = await Promise.all([db.getAll('brews'), db.getAll('sync')]);
   const otherAccount = new Set(states.filter((st) => st.userId !== userId).map((st) => st.brewId));
   const shared = brews.filter((b) => b.visibility === 'friends' && !otherAccount.has(b.id));

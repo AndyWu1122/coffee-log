@@ -1,11 +1,12 @@
 // #/stats 統計（☰ 選單）：只用這支手機上的紀錄計算（models.getStats → js/stats.js），不連網路、不上傳
 // 圖表自己用 SVG 畫（CSP 只允許 'self' 的 script）；顏色一律用 CSS 變數（.chart-* 的樣式在 style.css），深淺色都清楚
 // 點圓點、長條才顯示詳細數字（手機沒有 hover）；豆子、器材名稱是使用者輸入：一律經過 esc()
-import { getStats, STATS_PERIODS, formatGrams } from '../models.js';
+import { getStats, getMyHeatmap, STATS_PERIODS, formatGrams } from '../models.js';
 import { esc, setTitle, segmentedHtml, bindSegmented } from './ui.js';
+import { heatmapHtml, bindHeatmap } from './heatmap.js';
 
-// 篩選條件在切頁後保留（和紀錄列表一樣）
-const filter = { period: '30', beanId: '' };
+// 篩選條件在切頁後保留（和紀錄列表一樣）；熱度圖固定是近一年，不受期間、豆子篩選影響
+const filter = { period: '30', beanId: '', heatMode: 'cups' };
 
 const md = (dateStr) => { const [, m, d] = dateStr.split('-').map(Number); return `${m}/${d}`; };
 const mdOf = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}`; };
@@ -15,11 +16,12 @@ const ratioRange = (from, to) => `1:${from}–1:${to}`;
 
 export async function render(container, { isCurrent }) {
   setTitle('統計');
-  const { stats, beanOptions, beanId } = await getStats(filter);
+  const [{ stats, beanOptions, beanId }, heatmap] = await Promise.all([getStats(filter), getMyHeatmap(filter.heatMode)]);
   if (!isCurrent()) return;
   filter.beanId = beanId;
 
   container.innerHTML = `<div id="stats-page" class="stats">
+    ${heatmapHtml(heatmap, { modes: true, mode: filter.heatMode })}
     <div class="stats-filters">
       ${segmentedHtml('period', STATS_PERIODS, filter.period)}
       <select id="stats-bean" aria-label="依豆子篩選">
@@ -36,13 +38,14 @@ export async function render(container, { isCurrent }) {
 
   const page = container.querySelector('#stats-page');
   const rerender = () => render(container, { isCurrent });
+  bindHeatmap(page, heatmap, { mode: filter.heatMode, onMode: (mode) => { filter.heatMode = mode; rerender(); } });
   bindSegmented(page.querySelector('.stats-filters'), (name, value) => { filter.period = value || filter.period; rerender(); });
   page.querySelector('#stats-bean').addEventListener('change', (e) => { filter.beanId = e.target.value; rerender(); });
   if (!stats.enough) return;
   bindRatingChart(page, stats.ratingTrend);
   bindDetails(page);
   // 每週的圖很寬時（在自己的框裡橫向捲動）：預設捲到最新的一週
-  const weekScroll = page.querySelector('.chart-scroll');
+  const weekScroll = page.querySelector('.stats-card .chart-scroll');
   if (weekScroll) weekScroll.scrollLeft = weekScroll.scrollWidth;
 }
 

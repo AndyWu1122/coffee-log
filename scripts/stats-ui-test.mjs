@@ -147,7 +147,7 @@ try {
 
   /* ===== 期間：「全部」的每週圖很寬時在自己的框裡捲動，預設在最新一週 ===== */
   await openStats(page, base, 'all');
-  const scroll = await page.eval(`(() => { const s = document.querySelector('.chart-scroll'); return s && { w: s.scrollWidth, c: s.clientWidth, left: s.scrollLeft }; })()`);
+  const scroll = await page.eval(`(() => { const s = document.querySelector('.stats-card .chart-scroll'); return s && { w: s.scrollWidth, c: s.clientWidth, left: s.scrollLeft }; })()`);
   check('「全部」（18 週）：每週的圖在框裡橫向捲動、捲到最新', Boolean(scroll) && scroll.w > scroll.c && scroll.left >= scroll.w - scroll.c - 2, q(scroll));
   check('長名稱的豆子：截斷顯示（…），完整名稱在 aria-label',
     await page.eval(`(() => { const a = document.querySelector('[data-bean="bean-b"]'); const n = a.querySelector('.hbar-name'); return n.scrollWidth > n.clientWidth && a.getAttribute('aria-label').includes('巴拿馬翡翠莊園藝伎水洗處理特級批次限量版本'); })()`));
@@ -203,7 +203,7 @@ try {
     await openStats(empty, base);
     check(`${theme === 'dark' ? '深色' : '淺色'}・沒資料：只顯示提示、不畫圖`,
       (await empty.eval(`document.querySelector('.stats-empty')?.textContent ?? ''`)).includes('多記幾杯就能看到趨勢')
-        && !(await empty.eval(`document.querySelector('#stats-page svg, .stats-card')`)));
+        && !(await empty.eval(`document.querySelector('#stats-page .stats-card')`))); // 熱度圖（.heatmap-card）不受影響、一直顯示
     const l = await layout(empty);
     check(`${theme === 'dark' ? '深色' : '淺色'}・沒資料：不會橫向捲動`, l.pageWidth <= l.viewport);
     await screenshot(empty, path.join(shotDir, `stats-${theme}-empty.png`));
@@ -213,7 +213,7 @@ try {
   await empty.eval(`import('/js/db.js').then((db) => db.bulkPut(${q(two)})).then(() => true)`);
   await openStats(empty, base, 'all');
   check('只有 2 杯：顯示「只有 2 杯，多記幾杯」、不畫圖',
-    (await empty.eval(`document.querySelector('.stats-empty')?.textContent ?? ''`)).includes('只有 2 杯') && !(await empty.eval(`document.querySelector('#stats-page svg')`)));
+    (await empty.eval(`document.querySelector('.stats-empty')?.textContent ?? ''`)).includes('只有 2 杯') && !(await empty.eval(`document.querySelector('#stats-page .stats-card svg')`)));
   check('沒資料的頁面：沒有 CSP 違規、沒有 JavaScript 錯誤', (await empty.eval('window.__csp')).length === 0 && empty.errors.length === 0,
     `${(await empty.eval('window.__csp')).join(' / ')} ${empty.errors.join(' / ')}`);
 } catch (err) {

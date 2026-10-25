@@ -318,6 +318,25 @@ git push                                    # 合併到 main 之後；GitHub Pag
 - 好友新貼文：只在紀錄**第一次**分享時通知（修改、改回只有我再分享都不算）；確認你的「好友新貼文」開關是開的
 - 合併中的通知沒有響是正常的（看通知中心的內容有沒有更新）
 
+## 5-8. 部署 feature/heatmap（沖煮熱度圖，1.14.0）
+
+只有一個 migration，**沒有新的 Edge Function、沒有新的 secret**。一樣後端先上、前端最後：
+
+```sh
+npx supabase@2.120.0 db push --dry-run      # 應該只列出 20261031100000_brew_activity.sql
+npx supabase@2.120.0 db push                # 套用（確認後輸入 Y）
+git push                                    # 合併到 main 之後；GitHub Pages 部署成 1.14.0
+```
+
+- migration：`public.activity_shares`（「讓好友看到我的熱度圖」的開關＋負責上傳的裝置，只有本人讀寫）、`public.brew_activity`（每天的杯數 1–50，日期限台灣時間近 365 天；本人寫、沒有封鎖的好友讀）；關閉時 trigger 清空雲端資料；刪除帳號 cascade
+- 舊版 App 不會碰這兩張表，照常運作；`delete-account`、`admin-delete-user` 不用重新部署（cascade）
+
+### 實機確認（你）
+
+1. App 更新到 1.14.0 後，☰ →「統計」最上面有熱度圖；點圓點會顯示那天的杯數，可以切換「平均評分」
+2. ☰ →「帳號」打開「讓好友看到我的熱度圖」→ 請好友打開你的個人檔案，看得到熱度圖（沒有平均評分的切換）
+3. 關掉開關 → 好友重新整理後看不到熱度圖；Supabase 後台的 Table Editor 裡 `brew_activity` 沒有你的資料
+
 ## 6. 實際登入一次（你）
 
 1. 手機用 Safari／Chrome 開 <https://andywu1122.github.io/coffee-log/> → ☰ →「帳號」→「用 Google 登入」→ 設定暱稱
