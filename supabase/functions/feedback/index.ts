@@ -10,11 +10,12 @@
 //
 // 沒寄出信時，function log（Supabase 後台 → Edge Functions → feedback → Logs）一定有一行 [feedback] 說明原因（不含金鑰）
 import { mailConfig, describeResendError, describeNetworkError } from './mail.ts';
+import { isLocalSupabase } from '../_shared/local.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
-// 正式專案的網址是 https://<ref>.supabase.co；本機是 http://kong:8000 之類
-const LOCAL = !new URL(SUPABASE_URL).hostname.endsWith('.supabase.co');
+// 本機（http://kong:8000）才用測試設定；其他網址一律當正式環境（_shared/local.ts）
+const LOCAL = isLocalSupabase(SUPABASE_URL);
 const RESEND_API_URL = LOCAL ? 'http://host.docker.internal:54399/emails' : 'https://api.resend.com/emails';
 const MAIL = LOCAL
   ? mailConfig({ apiKey: 'local-test-key', to: 'developer@test.local', local: true })

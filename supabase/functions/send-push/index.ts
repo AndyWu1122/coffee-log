@@ -15,11 +15,12 @@
 //   不含留言原文、筆記；點擊的網址由 sw.js 驗證 uuid 後自己組
 // log 只記數量與狀態碼（沒送出時寫原因），不記 endpoint、金鑰
 import { ENDPOINT, pushRequest, topicFor, vapidConfig } from '../_shared/webpush.ts';
+import { isLocalSupabase } from '../_shared/local.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-// 正式專案的網址是 https://<ref>.supabase.co；本機是 http://kong:8000 之類
-const LOCAL = !new URL(SUPABASE_URL).hostname.endsWith('.supabase.co');
+// 本機（http://kong:8000）才用測試設定；其他網址一律當正式環境（_shared/local.ts）
+const LOCAL = isLocalSupabase(SUPABASE_URL);
 
 // 本機測試用（公開的，和 js/config.js 的 LOCAL.vapidPublicKey 是同一組）：只在本機、只送到假推播伺服器
 const LOCAL_VAPID = {

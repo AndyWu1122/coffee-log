@@ -1,4 +1,4 @@
-// Web Push 的加密與 VAPID 簽章（supabase/functions/_shared/webpush.ts）
+// Web Push 的加密與 VAPID 簽章（supabase/functions/_shared/webpush.ts）、本機判斷（_shared/local.ts）
 // 不需要 Supabase：Node（≥ 22.18／23.6，可直接載入 .ts）用 webpush.ts 加密，再用 node:crypto 另外寫的解密驗證
 // （兩邊不共用程式，避免同一個錯誤兩邊都看不出來）
 //
@@ -9,6 +9,7 @@ import { browserKeys, decrypt, verifyVapid } from './push-helpers.mjs';
 import {
   encryptPayload, vapidAuthorization, vapidConfig, pushRequest, topicFor, ENDPOINT, b64urlEncode, b64urlDecode,
 } from '../supabase/functions/_shared/webpush.ts';
+import { isLocalSupabase } from '../supabase/functions/_shared/local.ts';
 
 let passed = 0;
 const failures = [];
@@ -74,6 +75,13 @@ if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}` || proc
     reason({ ...vapid, privateKey: vapidPair().privateKey }), reason({ ...vapid, subject: 'x' }), reason({ ...vapid, publicKey: 'abc' }),
   ]);
   check('原因都不含私鑰', reasons.every((r) => !r.includes(vapid.privateKey)));
+
+  /* ===== 本機判斷（_shared/local.ts）：只有已知的本機網址才用公開的測試金鑰 ===== */
+  check('本機的 Supabase 網址算本機', ['http://kong:8000', 'http://127.0.0.1:54321', 'http://localhost:54321'].every(isLocalSupabase));
+  const notLocal = ['https://rygsjrzddhhhdqpoayoa.supabase.co', 'https://api.example.com', 'https://kong:8000', 'http://kong.evil.com',
+    'http://example.com', '', undefined, 'not a url'];
+  check('正式、自訂網域、看不懂的網址都不算本機（不會改用測試金鑰）', notLocal.every((u) => !isLocalSupabase(u)),
+    notLocal.filter(isLocalSupabase).join(' '));
 
   /* ===== 允許的推播服務（防 SSRF） ===== */
   const allowed = [
