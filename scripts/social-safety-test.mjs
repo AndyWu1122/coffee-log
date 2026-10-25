@@ -14,7 +14,7 @@ import {
   insertBrew, photoExists, photoPath, avatarPath, AVATARS,
 } from './supabase-local.mjs';
 import {
-  root, startServer, launchChrome, prepare, visit, click, fill, submit, text, toast, fieldError, signIn, exifJpeg,
+  root, startServer, localCsp, launchChrome, prepare, visit, click, fill, submit, text, toast, fieldError, signIn, exifJpeg,
 } from './chrome.mjs';
 
 const q = JSON.stringify;
@@ -43,15 +43,22 @@ let fixtureDir;
 try {
   /* ===== CSP 的設定和 js/config.js 一致 ===== */
   const html = await readFile(path.join(root, 'index.html'), 'utf8');
-  const csp = html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1] ?? '';
-  const directive = (name) => csp.split(';').map((d) => d.trim().split(/\s+/)).find(([n]) => n === name)?.slice(1) ?? [];
+  const cspOf = (page) => page.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1] ?? '';
+  const directiveOf = (c, name) => c.split(';').map((d) => d.trim().split(/\s+/)).find(([n]) => n === name)?.slice(1) ?? [];
+  const csp = cspOf(html);
+  const directive = (name) => directiveOf(csp, name);
   const config = await readFile(path.join(root, 'js/config.js'), 'utf8');
-  const origins = [...config.matchAll(/^\s+url: '([^']+)'/gm)].map(([, u]) => new URL(u).origin);
+  const originOf = (name) => new URL(config.match(new RegExp(`const ${name} = \\{\\s+url: '([^']+)'`))[1]).origin;
+  const [productionOrigin, localOrigin] = [originOf('PRODUCTION'), originOf('LOCAL')];
+  const allows = (c, origin) => ['connect-src', 'img-src'].every((d) => directiveOf(c, d).includes(origin));
   check('index.html 有 CSP', csp.includes("default-src 'self'"), csp);
   check("CSP：script 只允許 'self'（沒有 unsafe-inline、unsafe-eval）", directive('script-src').join(' ') === "'self'", directive('script-src').join(' '));
   check("CSP：object-src 'none'、base-uri 'none'", directive('object-src').join() === "'none'" && directive('base-uri').join() === "'none'");
-  check('CSP：connect-src、img-src 包含 config.js 所有 Supabase 網址', origins.length > 0
-    && origins.every((o) => directive('connect-src').includes(o) && directive('img-src').includes(o)), origins.join(' '));
+  check('CSP：connect-src、img-src 包含 config.js 正式專案的網址', allows(csp, productionOrigin), productionOrigin);
+  check('CSP：正式版的 index.html 不允許本機 Supabase', !csp.includes(localOrigin), localOrigin);
+  const served = cspOf(await localCsp(html));
+  check('CSP：測試伺服器送出的 index.html 才加上本機 Supabase（其他不變）',
+    allows(served, localOrigin) && served.replaceAll(` ${localOrigin}`, '') === csp, served);
   check('index.html 沒有 inline script', !/<script(?![^>]*\bsrc=)[^>]*>/.test(html));
 
   /* ===== Edge Function：沒登入不能呼叫 ===== */

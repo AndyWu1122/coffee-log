@@ -205,6 +205,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - 隱私說明頁（`js/views/privacy.js`）：**修改資料收集、可見範圍、照片處理、刪除流程時要一起改**
 - **CSP**（`index.html` 的 meta）：`script-src 'self'`（不能有 inline script 或 inline 事件屬性）、`style-src-attr 'unsafe-inline'`（風味標籤顏色）、`connect-src`／`img-src` 只有 'self' 和 `js/config.js` 的 Supabase 網址
   - **`js/config.js` 新增或改網址時，CSP 要一起改**（social-safety-test 會檢查）；新增外部資源一律先改 CSP
+  - index.html 只放正式專案的網址；本機 Supabase（config.js 的 `LOCAL`）由測試用的靜態伺服器（`chrome.mjs` 的 `localCsp`）送出時才加上，所以 `python -m http.server` 開的頁面連不到本機 Supabase（本來就無法真的登入，社群功能一律用測試腳本測）
 - Service Worker 只攔截同網域的 GET，不會快取 API 或 signed URL（social-safety-test 會檢查快取內容）
 
 ### 留言與回覆

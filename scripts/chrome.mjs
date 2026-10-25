@@ -17,13 +17,25 @@ const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png',
 };
+/**
+ * 送出 App 的 index.html 時，在 CSP 的 img-src、connect-src 加上本機 Supabase（js/config.js 的 LOCAL）
+ * 正式版的 index.html 只允許正式專案的網址，本機的網址只在測試時加上
+ */
+export async function localCsp(html) {
+  const config = await readFile(path.join(root, 'js/config.js'), 'utf8');
+  const local = new URL(config.match(/const LOCAL = \{\s+url: '([^']+)'/)[1]).origin;
+  return html.replace(/(http-equiv="Content-Security-Policy" content="[^"]+")/, (csp) =>
+    csp.replace(/((?:img|connect)-src [^;"]+)/g, `$1 ${local}`));
+}
+
 export function startServer() {
   const server = createServer(async (req, res) => {
     const pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     const file = path.resolve(root, `.${pathname.endsWith('/') ? `${pathname}index.html` : pathname}`);
     if (!file.startsWith(root + path.sep)) return res.writeHead(403).end();
     try {
-      const body = await readFile(file);
+      let body = await readFile(file);
+      if (file === path.join(root, 'index.html')) body = await localCsp(body.toString('utf8'));
       res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-store' });
       res.end(body);
     } catch {
