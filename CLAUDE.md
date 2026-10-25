@@ -25,6 +25,8 @@ js/db.js           # 唯一存取 IndexedDB 的地方
 js/models.js       # 驗證、計算（粉水比、養豆天數）
 js/flavorWheel.js  # SCA 風味輪靜態資料（三層、中英、大類顏色），由 models.js 轉出給 views
 js/stats.js        # 統計頁的計算（純函式，不 import 任何東西，Node 可直接測），只由 models.js 使用
+js/drippers.js     # 舊紀錄的濾杯文字 → drippers 的合併規則（純函式，Node 可直接測）；db.js 的 v6 升級與 models.js 匯入舊備份共用
+js/id.js           # newId()（db.js 升級轉換與 models.js 共用；models.js 轉出）
 js/changelog.js    # 更新內容（給使用者看的每版說明）與版本比較，由 models.js 轉出給 views
 js/image.js        # 照片處理：解碼、縮小、重新編碼 JPEG、base64、JPEG 檔頭驗證、上傳前移除中繼資料（只由 models.js 使用）
 js/cardLayout.js   # 分享卡片的純計算：cover 裁切、雷達圖座標、文字換行（含避頭）、檔名；由 models.js 轉出給 views
@@ -32,11 +34,11 @@ js/config.js       # Supabase 連線設定（依網址：localhost → 本機、
 js/cloud.js        # 唯一存取 Supabase 的地方（角色和 db.js 一樣）；supabase-js 用到才載入
 js/sync.js         # 好友紀錄的同步（本機 friends 紀錄 → shared_brews），只由 models.js 使用
 js/vendor/         # 第三方檔案原封不動（supabase-js UMD、qrcode-generator），來源與 SRI 見 js/vendor/README.md
-js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, changelog（更新內容）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, profile（個人檔案）, stats（統計：SVG 圖表）, privacy（隱私說明）, feedback（意見回饋）, admin（開發者後台）, ui（共用 DOM 工具）
+js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, dripperList, dripperForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, changelog（更新內容）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, profile（個人檔案）, stats（統計：SVG 圖表）, privacy（隱私說明）, feedback（意見回饋）, admin（開發者後台）, ui（共用 DOM 工具）
 icons/
 docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟、部署指令）、overnight-report.md（2026-10-26 通宵工作的報告）
 supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）、functions/admin-delete-user（開發者刪別人的帳號）、functions/_shared/account.ts（兩者共用的刪除流程）、functions/feedback（意見回饋：存檔＋寄 Email 給站長；mail.ts 是設定檢查與錯誤說明的純函式）
-scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs（最後四個不需要 Supabase）
+scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs（最後五個不需要 Supabase）
 tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mjs 用 headless Chrome 開；不屬於 App、不放進 ASSETS）
 ```
 
@@ -44,16 +46,18 @@ tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mj
 views → models → db／cloud，每層只呼叫下一層。views 不可直接碰 IndexedDB 或 Supabase。
 - view 的事件監聽器掛在這一頁自己的元素上，**不要掛在 `render` 收到的 container（`#app`）**：`#app` 換頁不會被替換，監聽器會殘留並帶著舊資料處理之後的點擊
 
-## 資料模型（備份 schemaVersion: 3／IndexedDB DB_VERSION: 5）
+## 資料模型（備份 schemaVersion: 4／IndexedDB DB_VERSION: 6）
 **beans**：id, name, origin, process(washed/natural/honey/other), roastLevel(light/light-medium/medium-light/medium/dark，即 淺/淺中/中淺/中/深焙), roastDate(YYYY-MM-DD), bagWeightG(整包重量 g，選填), archived(bool), createdAt
 **grinders**：id, name(必填), notes(選填，例如刻度說明), archived(bool), createdAt
-**brews**：id, beanId, grinderId(選填，'' ＝未指定；v1 舊紀錄沒有這個欄位), brewedAt, dripper, grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes, visibility(private/friends，舊資料沒有這個欄位＝private)
-**meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil、社群登入狀態 `auth:*`、社群通知看到哪 `feedSeenAt`／`commentsSeenAt`／`repliesSeenAt`、看過哪一版的更新內容 `changelogSeen`）；**不匯出、匯入取代全部時也不清除**（token 不會進備份檔，匯入也不會被登出）
+**drippers**（DB v6 加入）：id, name(必填，≤ 100 字), notes(選填), archived(bool), createdAt
+**brews**：id, beanId, grinderId(選填，'' ＝未指定；v1 舊紀錄沒有這個欄位), dripperId(選填，'' ＝未指定), brewedAt, dripper(舊版自由輸入的濾杯文字，轉換後保留作為保險；新紀錄是 ''，畫面一律用 dripperId), grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes, visibility(private/friends，舊資料沒有這個欄位＝private)
+**meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil、社群登入狀態 `auth:*`、社群通知看到哪 `feedSeenAt`／`commentsSeenAt`／`repliesSeenAt`、看過哪一版的更新內容 `changelogSeen`、濾杯轉換做過了 `dripperMigration`）；**不匯出、匯入取代全部時也不清除**（token 不會進備份檔，匯入也不會被登出）
 **photos**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 1600px、品質 0.8，約 200KB), width, height, createdAt；每筆紀錄最多 1 張，跟 brews 分開存
 **thumbs**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 300px)；列表只讀這個，不載入原圖；不匯出，匯入時由照片重新產生
 **sync**（DB v5 加入，keyPath brewId）：brewId, userId, row(上次同步的 shared_brews 內容 JSON), photoAt(上次同步的照片 createdAt), error(''/rate_limited/invalid/failed/removed), failedRow, failedOn；**不匯出、匯入取代全部時也不清除**
-- brews 建索引：beanId、brewedAt、grinderId（v2 加入）
-- 有紀錄引用的豆子、磨豆機不能刪除，只能封存
+- brews 建索引：beanId、brewedAt、grinderId（v2 加入）、dripperId（v6 加入）
+- 有紀錄引用的豆子、磨豆機、濾杯不能刪除，只能封存
+- **濾杯轉換（v6）**：在 `onupgradeneeded` 的升級交易裡完成（單一交易，open 成功前畫面讀不到轉換一半的資料）；規則在 `js/drippers.js`：去掉所有空白、忽略大小寫後合併（「V60」「v60」「V 60」同一支），名稱用出現最多次的寫法（同票取最近一杯），空白＝未指定；只加 dripperId、不動其他欄位；meta `dripperMigration` 記著做過就不再做（全新安裝也記）
 - **照片一律在前端重新編碼成 JPEG（移除 EXIF）後才儲存**（`models.preparePhoto` → `image.compressPhoto`，經 Canvas 重畫，GPS 等資訊不會留下）
 - 只接受 JPEG／PNG／WebP（`image.PHOTO_TYPES`，表單 `accept` 用 `models.PHOTO_ACCEPT`）；iPhone 的 HEIC 由系統在選取時轉成 JPEG
 - 紀錄與照片一起寫入、一起刪除（`db.transact` 單一交易涵蓋 brews、photos、thumbs）
@@ -64,12 +68,12 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - id 用 crypto.randomUUID()
 
 ## 路由（hash）
-`#/` 紀錄列表（`?bean=<id>` 帶入豆子篩選，統計頁用）｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/account` 帳號｜`#/friends` 好友管理｜`#/social` 社群（全部）｜`#/social?mine=1` 社群（我的）｜`#/social/<owner>/<id>` 紀錄詳細（`?comments=1` 捲到留言區）｜`#/user/<id>` 個人檔案｜`#/stats` 統計｜`#/privacy` 隱私說明｜`#/changelog` 更新內容｜`#/feedback` 意見回饋｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）｜`#/admin?tab=reports|posts|users|feedback|log` 開發者後台｜`#/admin/user/<id>`｜`#/admin/post/<owner>/<id>`
+`#/` 紀錄列表（`?bean=<id>` 帶入豆子篩選，統計頁用）｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/drippers`｜`#/drippers/new`｜`#/drippers/<id>`｜`#/account` 帳號｜`#/friends` 好友管理｜`#/social` 社群（全部）｜`#/social?mine=1` 社群（我的）｜`#/social/<owner>/<id>` 紀錄詳細（`?comments=1` 捲到留言區）｜`#/user/<id>` 個人檔案｜`#/stats` 統計｜`#/privacy` 隱私說明｜`#/changelog` 更新內容｜`#/feedback` 意見回饋｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）｜`#/admin?tab=reports|posts|users|feedback|log` 開發者後台｜`#/admin/user/<id>`｜`#/admin/post/<owner>/<id>`
 - 1.1.0 以前的 `#/feed`、`#/feed/<owner>/<id>` 由 app.js 轉址到 `#/social…`
 
 ## 介面配置
 - 底部分頁列：紀錄｜豆子｜社群（只放每天會用的頁面）；「社群 💬」是動態牆，有 `data-social`，`js/config.js` 沒設定時隱藏
-- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：帳號、好友管理、統計、磨豆機、備份、隱私說明、更新內容、意見回饋、開發者後台；帳號、好友管理、意見回饋有 `data-social`，`js/config.js` 沒設定時隱藏；開發者後台有 `data-admin`，只有 `am_i_admin` 為 true 時顯示）
+- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：帳號、好友管理、統計、磨豆機、濾杯、備份、隱私說明、更新內容、意見回饋、開發者後台；帳號、好友管理、意見回饋有 `data-social`，`js/config.js` 沒設定時隱藏；開發者後台有 `data-admin`，只有 `am_i_admin` 為 true 時顯示）
 - ☰ 選單裡的頁面不屬於任何分頁，路由設 `tab: null`，底部分頁都不亮
 - ☰ 的「!」（`app.js` 的 `setupBadges`）：選單裡需要注意的那一項後面有「!」（`.menu-alert[data-alert]`，`--accent`），☰ 按鈕上的「!」＝其中任何一項；aria-label 寫出是哪幾項
   - 好友管理＝收到好友邀請（社群）；備份＝`getBackupStatus().overdue`（有紀錄且 ≥ 14 天沒備份，首頁按「稍後」也照樣顯示，匯出後消失）；更新內容＝還沒看過這一版
@@ -94,7 +98,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 
 ## 統計（`#/stats`，☰ 選單）
 - **只用本機 IndexedDB 的紀錄計算**（`models.getStats` → `js/stats.js` 的 `computeStats`），不碰 Supabase、不上傳、離線可用；不加欄位、不存衍生值
-- 期間：近 30 天｜近 90 天｜全部；豆子篩選（有紀錄的豆子，含封存）；已封存的豆子和磨豆機也算；篩選條件在切頁後保留
+- 期間：近 30 天｜近 90 天｜全部；豆子篩選（有紀錄的豆子，含封存）；已封存的豆子、磨豆機、濾杯也算（濾杯依 dripperId 分組）；篩選條件在切頁後保留
 - 評分相關（評分變化、每支豆子、器材）只算有評分的杯；有評分 < 3 杯標「樣本少」並排在後面；7 杯移動平均從第 7 杯開始
 - 粉水比以 0.5 分組（`ratioBucket`，下限包含、加 1e-9 防浮點誤差）、水溫 floor 到 1°C；每週以週一開始、用本機日期，沒沖的週是 0
 - 期間內 < 3 杯：只顯示「多記幾杯就能看到趨勢」，不畫圖；個別圖表沒資料也顯示提示
@@ -109,7 +113,8 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 ## 備份
 - 匯出全部資料為 JSON（含 schemaVersion），可匯入還原
 - 匯入分「合併」（依 id 覆蓋）與「取代全部」；整份檔案驗證通過才在單一交易內寫入
-- 匯入接受 schemaVersion 1、2、3：v1 沒有 grinders（視為空陣列），brews 沒有 grinderId（補成 ''）；v1、v2 沒有 photos（視為空陣列）
+- 匯入接受 schemaVersion 1、2、3、4：v1 沒有 grinders（視為空陣列），brews 沒有 grinderId（補成 ''）；v1、v2 沒有 photos（視為空陣列）
+- v1–v3 沒有 drippers：用和 DB 升級同一套規則（`mergeDripperNames`）從紀錄的濾杯文字建立；「合併」時名稱相同的沿用本機已有的濾杯（含封存），「取代全部」時全部新建；v4 的紀錄指向不存在的濾杯就整份不匯入
 - 照片（v3）：匯出時可選「包含照片」（預設開），`photos: [{ brewId, width, height, createdAt, data(base64 JPEG) }]`，`photosIncluded` 記錄有沒有勾；匯出前顯示預估檔案大小
 - 匯入照片的驗證：brewId 對得到紀錄、不重複、base64 正確、≤ 2MB、JPEG 檔頭解析得出尺寸（≤ 4096px），再實際解碼產生縮圖；任一張失敗整份不匯入
 - 「取代全部」連照片一起清空
@@ -198,9 +203,9 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 
 ### 動態牆與同步（階段 4）
 - 紀錄表單「誰看得到」：🔒 只有我（預設，「再沖一杯」也一律回到只有我）｜👥 好友；選好友時筆記 ≤ 500 字、風味輪 ≤ 30 個等雲端限制在表單就擋下（`sharedLimitErrors`）
-  - 豆子名稱、產地、磨豆機名稱跟著紀錄上傳（雲端 ≤ 100 字）：豆子、磨豆機表單存檔時就限制；匯入舊備份不擋，分享時由 `saveBrew` 再檢查
-- 同步不記動作佇列：每次比對「本機應該長怎樣」（`toSharedRow`，豆子、磨豆機轉成名稱）和 sync store 記的上次內容，有差異就補送；衝突一律以本機為準
-  - 存檔、刪除、改豆子／磨豆機、匯入後由 models 觸發；app.js 在啟動、`online`、切回前景時觸發；沒登入（meta 沒有 session）或沒有要同步的就不載入 supabase-js
+  - 豆子名稱、產地、磨豆機名稱、濾杯名稱跟著紀錄上傳（雲端 ≤ 100 字；濾杯名稱放進 shared_brews.dripper，雲端結構不變）：豆子、磨豆機、濾杯表單存檔時就限制；匯入舊備份不擋，分享時由 `saveBrew` 再檢查
+- 同步不記動作佇列：每次比對「本機應該長怎樣」（`toSharedRow`，豆子、磨豆機、濾杯轉成名稱）和 sync store 記的上次內容，有差異就補送；衝突一律以本機為準
+  - 存檔、刪除、改豆子／磨豆機／濾杯、匯入後由 models 觸發；app.js 在啟動、`online`、切回前景時觸發；沒登入（meta 沒有 session）或沒有要同步的就不載入 supabase-js
   - 雲端已有就 update、沒有才 insert（不用 upsert：欄位權限不能 update id、owner）
   - 改回只有我或刪除：先刪紀錄、再用 Storage API 刪照片；**只刪這台裝置認得的**（sync store 有、或本機有這筆），別台裝置上傳的不刪
   - 撞到每天 30 筆上限：記下台灣時間的日期，同一天不再重送；被 check 拒絕的內容沒改就不重送
@@ -278,6 +283,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - `node scripts/social-safety-test.mjs`：檢舉、從詳細頁封鎖、刪除帳號（用 admin 確認雲端全部刪除、本機保留）、Edge Function 的權限、CSP（每一頁沒有違規、注入的 inline script 被擋）、SW 快取
 - `node scripts/social-feedback-test.mjs`：意見回饋的畫面、Edge Function 權限、寄給站長的 Email（假 Resend）、寄信失敗仍存檔、function log 寫出看得懂的原因且不含金鑰（讀 `docker logs`）、每天 5 則、誰都讀不到
 - `node scripts/feedback-mail-test.mjs`：不需要 Supabase；Node 直接載入 `functions/feedback/mail.ts` 測設定檢查與 Resend 錯誤說明
+- `node scripts/drippers-test.mjs`：不需要 Supabase；Node 測 `js/drippers.js`，headless Chrome 用 1.7.0 的舊版 db.js（`git show 9b2c4c8:js/db.js`）建出 v5 的資料再開新版：升級轉換、重新整理不重複、表單預設與「再沖一杯」、封存與刪除、卡片／分享卡片／統計／上傳的列用濾杯名稱、v1／v3／v4 備份匯入
 - `node scripts/menu-alerts-test.mjs`：不需要 Supabase；headless Chrome 測 ☰ 的「!」（該備份了、更新內容）、「已更新」提示、更新內容頁，並檢查 `js/changelog.js` 第一段＝`APP_VERSION`
 - **改了 Edge Function 之後要 `docker restart supabase_edge_runtime_coffee-log`**，本機才會載入新程式
 - `node scripts/supabase-comments-test.mjs`：留言的權限從 API 層測（A、B 好友，C 非好友，D 被封鎖）：兩層、回覆對象、內容、每日上限、封鎖、解除好友、改回只有我、刪除帳號（delete-account）

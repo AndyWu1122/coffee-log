@@ -1,11 +1,18 @@
 // 唯一存取 IndexedDB 的地方
+import { mergeDripperNames } from './drippers.js';
+import { newId } from './id.js';
+
 const DB_NAME = 'coffee-log';
 // v1：beans、brews（索引 beanId、brewedAt）
 // v2：新增 grinders；brews 加 grinderId 索引（只加索引，不改舊紀錄）
 // v3：新增 meta（App 自己的設定／狀態，例如上次備份時間；不匯出）
 // v4：新增 photos（每筆紀錄的照片，keyPath brewId）與 thumbs（列表用 300px 縮圖）
 // v5：新增 sync（咖啡社群：每筆紀錄上次同步到雲端的內容，keyPath brewId；不匯出）
-const DB_VERSION = 5;
+// v6：新增 drippers；brews 加 dripperId 索引，並把舊紀錄的濾杯文字轉成 drippers（只加 dripperId，dripper 文字保留）
+const DB_VERSION = 6;
+
+// 濾杯轉換做過了沒（meta key）；記下時間與建立了幾支
+const DRIPPER_MIGRATION_KEY = 'dripperMigration';
 
 let dbPromise = null;
 
@@ -15,7 +22,7 @@ export function openDB() {
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     // 全新安裝與從舊版升級走同一段：每一步都先檢查是否已存在
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (event) => {
       const db = req.result;
       if (!db.objectStoreNames.contains('beans')) {
         db.createObjectStore('beans', { keyPath: 'id' });
@@ -43,6 +50,11 @@ export function openDB() {
       if (!db.objectStoreNames.contains('sync')) {
         db.createObjectStore('sync', { keyPath: 'brewId' });
       }
+      if (!brews.indexNames.contains('dripperId')) brews.createIndex('dripperId', 'dripperId');
+      if (!db.objectStoreNames.contains('drippers')) {
+        db.createObjectStore('drippers', { keyPath: 'id' });
+      }
+      if (event.oldVersion < 6) migrateDrippers(req.transaction);
     };
     req.onsuccess = () => {
       const db = req.result;
@@ -56,6 +68,27 @@ export function openDB() {
   });
   dbPromise.catch(() => { dbPromise = null; });
   return dbPromise;
+}
+
+/**
+ * 舊紀錄的濾杯文字 → drippers 與 brews.dripperId，在升級交易裡完成（任何一步失敗整個升級回滾，資料維持原狀）
+ * open 的 onsuccess 在升級交易結束後才觸發，所以畫面、同步都讀不到轉換到一半的資料
+ * meta 記著做過了就不再做（全新安裝也記下）
+ */
+function migrateDrippers(t) {
+  const meta = t.objectStore('meta');
+  meta.get(DRIPPER_MIGRATION_KEY).onsuccess = (e) => {
+    if (e.target.result) return;
+    t.objectStore('brews').getAll().onsuccess = (ev) => {
+      const brews = ev.target.result;
+      const { drippers, idByBrew } = mergeDripperNames(brews, { makeId: newId });
+      const store = t.objectStore('drippers');
+      for (const d of drippers) store.put(d);
+      const brewStore = t.objectStore('brews');
+      for (const b of brews) if (idByBrew.has(b.id)) brewStore.put({ ...b, dripperId: idByBrew.get(b.id) });
+      meta.put({ key: DRIPPER_MIGRATION_KEY, value: { at: new Date().toISOString(), count: drippers.length } });
+    };
+  };
 }
 
 function req2promise(request) {

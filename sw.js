@@ -1,7 +1,7 @@
 // Service Worker：安裝時預先快取所有檔案，之後一律從快取讀取（離線可用）
 // ⚠ 修改任何前端檔案後，APP_VERSION 至少第三碼 +1，使用者才會收到新版本（規則見 CLAUDE.md「版本號」）
 // 它也是 ☰ 選單顯示的版本號、意見回饋附的版本（app.js 用 'version' 訊息詢問）
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.8.0';
 const CACHE_NAME = `coffee-log-v${APP_VERSION}`;
 
 const ASSETS = [
@@ -21,6 +21,8 @@ const ASSETS = [
   'js/cloud.js',
   'js/sync.js',
   'js/stats.js',
+  'js/drippers.js',
+  'js/id.js',
   'js/vendor/supabase-js-2.117.3.js',
   'js/vendor/qrcode-generator-2.0.4.js',
   'js/views/ui.js',
@@ -33,6 +35,8 @@ const ASSETS = [
   'js/views/shareCard.js',
   'js/views/grinderList.js',
   'js/views/grinderForm.js',
+  'js/views/dripperList.js',
+  'js/views/dripperForm.js',
   'js/views/account.js',
   'js/views/friends.js',
   'js/views/feed.js',

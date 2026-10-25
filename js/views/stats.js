@@ -206,7 +206,7 @@ function equipmentHtml({ drippers, grinders }) {
   })).join('');
   return `
     <h3 class="stats-sub">濾杯</h3>
-    ${drippers.length ? `<div class="hbars">${rows(drippers, '濾杯')}${scoreAxis()}</div>` : notEnough('沒有填濾杯、或都沒有評分')}
+    ${drippers.length ? `<div class="hbars">${rows(drippers, '濾杯')}${scoreAxis()}</div>` : notEnough('沒有指定濾杯、或都沒有評分')}
     <h3 class="stats-sub">磨豆機</h3>
     ${grinders.length ? `<div class="hbars">${rows(grinders, '磨豆機')}${scoreAxis()}</div>` : notEnough('沒有指定磨豆機、或都沒有評分')}`;
 }

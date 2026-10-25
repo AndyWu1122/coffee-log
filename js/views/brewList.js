@@ -128,7 +128,7 @@ export async function render(container, { query = {}, isCurrent }) {
 function brewCard(b) {
   const stars = b.rating ? '★'.repeat(b.rating) + '☆'.repeat(5 - b.rating) : '';
   const details = [
-    b.dripper,
+    b.dripperName,
     [b.grinderName, b.grindSetting].filter(Boolean).join(' '), // 例：C40 24 格
     `${b.coffeeG}g → ${b.waterG}g`,
     formatRatio(b.ratio),

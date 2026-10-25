@@ -32,17 +32,18 @@ function fixtures() {
     { id: 'g-1', name: 'Comandante C40', notes: '', archived: true, createdAt: new Date(now - 200 * DAY).toISOString() },
     { id: 'g-2', name: 'Fellow Ode', notes: '', archived: false, createdAt: new Date(now - 200 * DAY).toISOString() },
   ];
+  const drippers = ['V60', 'Kalita Wave', 'Origami'].map((name, i) => ({ id: `d-${i}`, name, notes: '', archived: false, createdAt: new Date(now - 200 * DAY).toISOString() }));
   const brews = Array.from({ length: 45 }, (_, i) => {
     const beanId = ['bean-a', 'bean-a', 'bean-b', 'bean-c'][i % 4];
     return {
-      id: `brew-${i}`, beanId, grinderId: i % 3 ? 'g-2' : 'g-1',
+      id: `brew-${i}`, beanId, grinderId: i % 3 ? 'g-2' : 'g-1', dripperId: `d-${i % 3}`,
       brewedAt: new Date(now - (i * 2.6 + 0.2) * DAY).toISOString(),
       dripper: ['V60', 'Kalita Wave', 'Origami'][i % 3], grindSetting: '', coffeeG: 15, waterG: [240, 225, 250, 232][i % 4],
       tempC: [92, 93, 90, 92.5][i % 4], totalTimeS: 150, rating: i % 5 === 4 ? null : 2 + (i * 7) % 4,
       flavor: { acidity: null, sweetness: null, bitterness: null, body: null }, flavorNotes: [], notes: '', visibility: 'private',
     };
   });
-  return { beans, grinders, brews };
+  return { beans, grinders, drippers, brews };
 }
 
 /** 隔離的頁面（手機直向 390px），在任何頁面腳本執行前開始記錄 CSP 違規 */

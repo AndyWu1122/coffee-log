@@ -66,7 +66,7 @@ try {
   const brewedAt = new Date(Date.now() - 20 * DAY).toISOString();
   await db(`
     await db.put('beans', { id: 'bean-1', name: '測試豆', origin: '', process: 'washed', roastLevel: 'light', roastDate: '', bagWeightG: null, archived: false, createdAt: ${q(brewedAt)} });
-    await db.put('brews', { id: 'brew-1', beanId: 'bean-1', grinderId: '', brewedAt: ${q(brewedAt)}, dripper: 'V60', grindSetting: '', coffeeG: 15, waterG: 240, tempC: 92, totalTimeS: 150, rating: 4, flavor: { acidity: 3, sweetness: 3, bitterness: 3, body: 3 }, flavorNotes: [], notes: '', visibility: 'private' });
+    await db.put('brews', { id: 'brew-1', beanId: 'bean-1', grinderId: '', dripperId: '', brewedAt: ${q(brewedAt)}, dripper: 'V60', grindSetting: '', coffeeG: 15, waterG: 240, tempC: 92, totalTimeS: 150, rating: 4, flavor: { acidity: 3, sweetness: 3, bitterness: 3, body: 3 }, flavorNotes: [], notes: '', visibility: 'private' });
     return true;`);
   await recheck();
   await waitShown('[data-alert="backup"]', true, '「備份」的「!」');

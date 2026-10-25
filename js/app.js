@@ -27,6 +27,9 @@ const routes = [
   { pattern: /^\/grinders$/, tab: null, load: () => import('./views/grinderList.js') },
   { pattern: /^\/grinders\/new$/, tab: null, load: () => import('./views/grinderForm.js') },
   { pattern: /^\/grinders\/([\w-]+)$/, tab: null, load: () => import('./views/grinderForm.js') },
+  { pattern: /^\/drippers$/, tab: null, load: () => import('./views/dripperList.js') },
+  { pattern: /^\/drippers\/new$/, tab: null, load: () => import('./views/dripperForm.js') },
+  { pattern: /^\/drippers\/([\w-]+)$/, tab: null, load: () => import('./views/dripperForm.js') },
   // 咖啡社群（js/config.js 沒設定時選單不顯示；直接輸入網址會顯示「沒有開放」）
   { pattern: /^\/account$/, tab: null, load: () => import('./views/account.js') },
   { pattern: /^\/friends(?:\/add)?$/, tab: null, load: () => import('./views/friends.js') },

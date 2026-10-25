@@ -5,6 +5,8 @@ import { compressPhoto, compressAvatar, makeThumb, blobToBase64, base64ToBytes, 
 import { shareFileName } from './cardLayout.js';
 import { CHANGELOG, compareVersions } from './changelog.js';
 import { computeStats } from './stats.js';
+import { mergeDripperNames } from './drippers.js';
+import { newId } from './id.js';
 import * as cloud from './cloud.js';
 import * as sync from './sync.js';
 
@@ -14,10 +16,11 @@ export { CHANGELOG } from './changelog.js';
 export { decodeImage, photoForUpload } from './image.js';
 export { coverCrop, radarPoints, wrapText, layoutChips } from './cardLayout.js';
 export { cloudPhotoPath } from './sync.js';
+export { newId } from './id.js';
 
-// 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos。匯入時接受所有舊版
-export const SCHEMA_VERSION = 3;
-const IMPORTABLE_VERSIONS = [1, 2, 3];
+// 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos；v4 加入 drippers 與 brews.dripperId。匯入時接受所有舊版
+export const SCHEMA_VERSION = 4;
+const IMPORTABLE_VERSIONS = [1, 2, 3, 4];
 
 export const PROCESS = { washed: '水洗', natural: '日曬', honey: '蜜處理', other: '其他' };
 // 由淺到深排列
@@ -28,17 +31,7 @@ export const FLAVOR = { acidity: '酸度', sweetness: '甜度', bitterness: '苦
 // 紀錄的可見度：private 只存在這支手機（預設）；friends 同步到雲端給好友看
 export const VISIBILITY = { private: '只有我', friends: '好友' };
 
-/* ===== ID 與日期工具 ===== */
-
-/** crypto.randomUUID 只在 secure context 可用；區網 http 測試時改用 getRandomValues 產生 v4 UUID */
-export function newId() {
-  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-  const b = crypto.getRandomValues(new Uint8Array(16));
-  b[6] = (b[6] & 0x0f) | 0x40;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
-}
+/* ===== 日期工具（id 產生在 js/id.js） ===== */
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -150,7 +143,7 @@ export function validateBrew(b) {
 
 // 分享給好友的紀錄要符合雲端資料庫的限制（shared_brews 的 check 約束），否則同步時會被拒絕
 const SHARED_NOTES_MAX = 500;
-const SHARED_TEXT_MAX = 100;         // 濾杯、研磨度，以及跟著紀錄上傳的豆子名稱、產地、磨豆機名稱
+const SHARED_TEXT_MAX = 100;         // 研磨度，以及跟著紀錄上傳的豆子名稱、產地、磨豆機、濾杯名稱
 const SHARED_FLAVOR_NOTES_MAX = 30;
 const charLength = (s) => [...String(s ?? '')].length; // 和資料庫的 char_length 一樣以字元計
 function sharedLimitErrors(b) {
@@ -159,7 +152,6 @@ function sharedLimitErrors(b) {
   if (b.coffeeG > 100) errors.coffeeG = '分享給好友時粉量最多 100g';
   if (b.waterG > 2000) errors.waterG = '分享給好友時水量最多 2000g';
   if (b.totalTimeS > 3600) errors.totalTimeS = '分享給好友時總時間最多 60 分鐘';
-  if (charLength(b.dripper) > SHARED_TEXT_MAX) errors.dripper = `分享給好友時最多 ${SHARED_TEXT_MAX} 字`;
   if (charLength(b.grindSetting) > SHARED_TEXT_MAX) errors.grindSetting = `分享給好友時最多 ${SHARED_TEXT_MAX} 字`;
   if (b.flavorNotes?.length > SHARED_FLAVOR_NOTES_MAX) {
     errors.flavorNotes = `分享給好友時風味輪最多選 ${SHARED_FLAVOR_NOTES_MAX} 個（目前 ${b.flavorNotes.length} 個）`;
@@ -171,6 +163,12 @@ function sharedLimitErrors(b) {
 export function validateGrinder(g) {
   const errors = {};
   if (!g.name?.trim()) errors.name = '請輸入磨豆機名稱';
+  return { ok: Object.keys(errors).length === 0, errors };
+}
+
+export function validateDripper(d) {
+  const errors = {};
+  if (!d.name?.trim()) errors.name = '請輸入濾杯名稱';
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
@@ -200,8 +198,9 @@ function normalizeBrew(input) {
     id: input.id || newId(),
     beanId: input.beanId || '',
     grinderId: input.grinderId || '', // 空字串＝未指定；舊紀錄沒有這個欄位
+    dripperId: input.dripperId || '', // 空字串＝未指定；v6 以前的紀錄由 dripper 文字轉換而來
     brewedAt: toIso(input.brewedAt),
-    dripper: String(input.dripper ?? '').trim(),
+    dripper: String(input.dripper ?? '').trim(), // 舊版自由輸入的濾杯文字，轉換後保留作為保險；新紀錄是 ''
     grindSetting: String(input.grindSetting ?? '').trim(),
     coffeeG: toNum(input.coffeeG),
     waterG: toNum(input.waterG),
@@ -218,6 +217,7 @@ function normalizeBrew(input) {
   };
 }
 
+// 磨豆機、濾杯的欄位相同
 function normalizeGrinder(input) {
   return {
     id: input.id || newId(),
@@ -227,10 +227,11 @@ function normalizeGrinder(input) {
     createdAt: toIso(input.createdAt) ?? new Date().toISOString(),
   };
 }
+const normalizeDripper = normalizeGrinder;
 
 /**
- * 豆子、磨豆機的名稱會跟著分享的紀錄上傳，表單存檔時就限制在雲端的上限內
- * 不放進 validateBean／validateGrinder：匯入舊備份不擋（分享時 saveBrew 會再檢查）
+ * 豆子、磨豆機、濾杯的名稱會跟著分享的紀錄上傳，表單存檔時就限制在雲端的上限內
+ * 不放進 validateBean／validateGrinder／validateDripper：匯入舊備份不擋（分享時 saveBrew 會再檢查）
  */
 function nameLengthErrors(obj, keys) {
   const errors = {};
@@ -238,7 +239,7 @@ function nameLengthErrors(obj, keys) {
   return errors;
 }
 
-/** 未封存在前，再依建立時間新→舊（豆子、磨豆機共用） */
+/** 未封存在前，再依建立時間新→舊（豆子、磨豆機、濾杯共用） */
 const byArchivedThenNewest = (a, b) =>
   Number(a.archived) - Number(b.archived) || b.createdAt.localeCompare(a.createdAt);
 
@@ -391,26 +392,77 @@ export async function deleteGrinder(id) {
  */
 export async function defaultGrinderId() {
   const [brews, grinders] = await Promise.all([db.getAll('brews'), listGrinders()]);
+  return defaultEquipmentId(brews, grinders, 'grinderId');
+}
+
+/** 最近一筆紀錄用的器材（需在 active 裡），否則第一個；都沒有回傳 ''（磨豆機、濾杯共用） */
+function defaultEquipmentId(brews, active, field) {
   const latest = brews.reduce((cur, b) => (!cur || b.brewedAt > cur.brewedAt ? b : cur), null);
-  if (latest?.grinderId && grinders.some((g) => g.id === latest.grinderId)) return latest.grinderId;
-  return grinders[0]?.id ?? '';
+  if (latest?.[field] && active.some((x) => x.id === latest[field])) return latest[field];
+  return active[0]?.id ?? '';
+}
+
+/* ===== 濾杯（和磨豆機相同；v6 以前的紀錄由 db.js 升級時從濾杯文字轉換） ===== */
+
+export async function listDrippers({ includeArchived = false } = {}) {
+  const drippers = await db.getAll('drippers');
+  return drippers.filter((d) => includeArchived || !d.archived).sort(byArchivedThenNewest);
+}
+
+export const getDripper = (id) => db.get('drippers', id);
+
+/** 新增或更新濾杯；回傳 { ok, dripper } 或 { ok: false, errors } */
+export async function saveDripper(input) {
+  const existing = input.id ? await db.get('drippers', input.id) : null;
+  const dripper = normalizeDripper({
+    ...input, id: existing?.id, archived: existing?.archived, createdAt: existing?.createdAt,
+  });
+  const errors = { ...nameLengthErrors(dripper, ['name']), ...validateDripper(dripper).errors };
+  if (Object.keys(errors).length) return { ok: false, errors };
+  await db.put('drippers', dripper);
+  requestSync(); // 分享出去的紀錄帶著濾杯名稱
+  return { ok: true, dripper };
+}
+
+export async function setDripperArchived(id, archived) {
+  const dripper = await db.get('drippers', id);
+  if (!dripper) throw new Error('找不到這支濾杯');
+  await db.put('drippers', { ...dripper, archived: Boolean(archived) });
+}
+
+/** 有紀錄引用的濾杯不可刪除 */
+export async function deleteDripper(id) {
+  const count = await db.countByIndex('brews', 'dripperId', id);
+  if (count > 0) {
+    return { ok: false, message: `這支濾杯有 ${count} 筆沖煮紀錄，無法刪除，請改用「封存」` };
+  }
+  await db.remove('drippers', id);
+  return { ok: true };
+}
+
+/** 新紀錄預設的濾杯：最近一筆紀錄用的那支（需存在且未封存），否則第一支；都沒有回傳 '' */
+export async function defaultDripperId() {
+  const [brews, drippers] = await Promise.all([db.getAll('brews'), listDrippers()]);
+  return defaultEquipmentId(brews, drippers, 'dripperId');
 }
 
 /* ===== 沖煮紀錄 ===== */
 
 /**
- * 紀錄列表：依 brewedAt 新→舊，附上豆名、磨豆機名稱、粉水比、養豆天數
+ * 紀錄列表：依 brewedAt 新→舊，附上豆名、磨豆機與濾杯名稱、粉水比、養豆天數
  * 篩選：beanId 指定豆子；minRating 只列評分 ≥ 此值（未評分的不列）
  */
 export async function listBrews({ beanId = '', minRating = null } = {}) {
-  const [brews, beans, grinders, thumbs] = await Promise.all([
+  const [brews, beans, grinders, drippers, thumbs] = await Promise.all([
     beanId ? db.getAllByIndex('brews', 'beanId', beanId) : db.getAll('brews'),
     db.getAll('beans'),
     db.getAll('grinders'),
+    db.getAll('drippers'),
     db.getAll('thumbs'), // 列表只讀縮圖，不碰原圖
   ]);
   const beanById = new Map(beans.map((b) => [b.id, b]));
   const grinderById = new Map(grinders.map((g) => [g.id, g]));
+  const dripperById = new Map(drippers.map((d) => [d.id, d]));
   const thumbById = new Map(thumbs.map((t) => [t.brewId, t.blob]));
   return brews
     .filter((b) => !minRating || (b.rating ?? 0) >= minRating)
@@ -421,6 +473,7 @@ export async function listBrews({ beanId = '', minRating = null } = {}) {
         ...brew,
         beanName: bean?.name ?? '（已刪除的豆子）',
         grinderName: grinderById.get(brew.grinderId)?.name ?? '',
+        dripperName: dripperById.get(brew.dripperId)?.name ?? '',
         ratio: ratio(brew),
         restDays: restDays(brew.brewedAt, bean?.roastDate),
         thumb: thumbById.get(brew.id) ?? null,
@@ -452,19 +505,26 @@ export const getPhoto = (brewId) => db.get('photos', brewId);
  * 紀錄與照片在同一個交易寫入
  */
 export async function saveBrew(input, { photo } = {}) {
-  const brew = normalizeBrew(input);
+  // 表單不送舊版的濾杯文字：編輯時沿用資料庫裡的（轉換的保險，不能被清掉），新紀錄是 ''
+  const existing = input.id && input.dripper === undefined ? await db.get('brews', input.id) : null;
+  const brew = normalizeBrew({ ...input, dripper: input.dripper ?? existing?.dripper });
   const { ok, errors } = validateBrew(brew);
   const bean = ok ? await db.get('beans', brew.beanId) : null;
   if (ok && !bean) errors.beanId = '找不到這支豆子';
   const grinder = brew.grinderId ? await db.get('grinders', brew.grinderId) : null;
   if (brew.grinderId && !grinder) errors.grinderId = '找不到這台磨豆機';
+  const dripper = brew.dripperId ? await db.get('drippers', brew.dripperId) : null;
+  if (brew.dripperId && !dripper) errors.dripperId = '找不到這支濾杯';
   if (brew.visibility === 'friends') {
-    // 豆子、磨豆機的名稱跟著紀錄上傳，也要符合雲端的限制（舊資料或匯入的可能超過）
+    // 豆子、磨豆機、濾杯的名稱跟著紀錄上傳，也要符合雲端的限制（舊資料或匯入的可能超過）
     if (bean && (charLength(bean.name) > SHARED_TEXT_MAX || charLength(bean.origin) > SHARED_TEXT_MAX)) {
       errors.beanId ??= `分享給好友時，豆子的名稱和產地最多 ${SHARED_TEXT_MAX} 字，請先到豆子頁修改`;
     }
     if (grinder && charLength(grinder.name) > SHARED_TEXT_MAX) {
       errors.grinderId ??= `分享給好友時，磨豆機名稱最多 ${SHARED_TEXT_MAX} 字，請先到磨豆機頁修改`;
+    }
+    if (dripper && charLength(dripper.name) > SHARED_TEXT_MAX) {
+      errors.dripperId ??= `分享給好友時，濾杯名稱最多 ${SHARED_TEXT_MAX} 字，請先到濾杯頁修改`;
     }
   }
   if (photo && !(photo.blob instanceof Blob && photo.thumb instanceof Blob)) errors.photo = '照片資料錯誤，請重新選擇';
@@ -491,16 +551,18 @@ export const STATS_PERIODS = [
 ];
 
 /**
- * 統計頁的資料（只讀本機，已封存的豆子、磨豆機也算）：{ stats, beanOptions }
+ * 統計頁的資料（只讀本機，已封存的豆子、磨豆機、濾杯也算）：{ stats, beanOptions }
  * beanOptions：有紀錄的豆子（篩選用），未封存在前；period：STATS_PERIODS 的 value；beanId：'' 為全部
  */
 export async function getStats({ period = '30', beanId = '' } = {}) {
-  const [brews, beans, grinders] = await Promise.all([db.getAll('brews'), db.getAll('beans'), db.getAll('grinders')]);
+  const [brews, beans, grinders, drippers] = await Promise.all([
+    db.getAll('brews'), db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'),
+  ]);
   const used = new Set(brews.map((b) => b.beanId));
   const beanOptions = beans.filter((b) => used.has(b.id)).sort(byArchivedThenNewest)
     .map((b) => ({ id: b.id, name: b.name, archived: b.archived }));
   const known = beanOptions.some((b) => b.id === beanId);
-  return { stats: computeStats({ brews, beans, grinders, period, beanId: known ? beanId : '' }), beanOptions, beanId: known ? beanId : '' };
+  return { stats: computeStats({ brews, beans, grinders, drippers, period, beanId: known ? beanId : '' }), beanOptions, beanId: known ? beanId : '' };
 }
 
 /* ===== 分享卡片 ===== */
@@ -512,9 +574,10 @@ export async function getStats({ period = '30', beanId = '' } = {}) {
 export async function getShareCardData(id) {
   const brew = await db.get('brews', id);
   if (!brew) return null;
-  const [bean, grinder, photo] = await Promise.all([
+  const [bean, grinder, dripper, photo] = await Promise.all([
     db.get('beans', brew.beanId),
     brew.grinderId ? db.get('grinders', brew.grinderId) : null,
+    brew.dripperId ? db.get('drippers', brew.dripperId) : null,
     db.get('photos', id),
   ]);
   const date = toLocalDateStr(brew.brewedAt);
@@ -530,7 +593,7 @@ export async function getShareCardData(id) {
     ratio: ratio(brew),
     tempC: brew.tempC ?? null,
     totalTimeS: brew.totalTimeS ?? null,
-    dripper: brew.dripper ?? '',
+    dripper: dripper?.name ?? '',
     grinderName: grinder?.name ?? '',
     grindSetting: brew.grindSetting ?? '',
     rating: brew.rating ?? null,
@@ -639,14 +702,14 @@ const photoMeta = (p) => ({ brewId: p.brewId, width: p.width, height: p.height, 
  * （之後匯入「取代全部」時可以提醒這份備份不含照片）
  */
 export async function exportData({ includePhotos = true } = {}) {
-  const [beans, grinders, brews, photoRows] = await Promise.all([
-    db.getAll('beans'), db.getAll('grinders'), db.getAll('brews'), includePhotos ? db.getAll('photos') : [],
+  const [beans, grinders, drippers, brews, photoRows] = await Promise.all([
+    db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'), db.getAll('brews'), includePhotos ? db.getAll('photos') : [],
   ]);
   const photos = [];
   for (const p of photoRows) photos.push({ ...photoMeta(p), data: await blobToBase64(p.blob) });
   return {
     schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), photosIncluded: includePhotos,
-    beans, grinders, brews, photos,
+    beans, grinders, drippers, brews, photos,
   };
 }
 
@@ -655,16 +718,16 @@ export async function exportData({ includePhotos = true } = {}) {
  * 只讀照片的 Blob.size，不讀圖片內容
  */
 export async function getBackupSummary() {
-  const [beans, grinders, brews, photoRows] = await Promise.all([
-    db.getAll('beans'), db.getAll('grinders'), db.getAll('brews'), db.getAll('photos'),
+  const [beans, grinders, drippers, brews, photoRows] = await Promise.all([
+    db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'), db.getAll('brews'), db.getAll('photos'),
   ]);
-  const base = { schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), photosIncluded: true, beans, grinders, brews };
+  const base = { schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), photosIncluded: true, beans, grinders, drippers, brews };
   const bytes = (data) => new TextEncoder().encode(JSON.stringify(data, null, 2)).length; // 與 downloadJson 的格式一致
   const withoutPhotos = bytes({ ...base, photosIncluded: false, photos: [] });
   const withPhotos = bytes({ ...base, photos: photoRows.map((p) => ({ ...photoMeta(p), data: '' })) })
     + photoRows.reduce((s, p) => s + base64Length(p.blob.size), 0);
   return {
-    beans: beans.length, grinders: grinders.length, brews: brews.length, photos: photoRows.length,
+    beans: beans.length, grinders: grinders.length, drippers: drippers.length, brews: brews.length, photos: photoRows.length,
     sizeWithPhotos: withPhotos, sizeWithoutPhotos: withoutPhotos,
   };
 }
@@ -713,8 +776,10 @@ function parseImportPhotos(rawPhotos, knownBrewIds) {
  * 匯入備份 JSON 文字。整份檔案都通過驗證才寫入（單一交易），否則完全不動。
  * replace：true 先清空現有資料（含照片）；false 依 id 合併（同 id 以檔案為準）
  * v1 檔案沒有 grinders，視為空陣列；brews 沒有 grinderId 會補成 ''；v1、v2 沒有 photos，視為空陣列
+ * v1–v3 沒有 drippers：用和 DB 升級相同的規則（js/drippers.js）從紀錄的濾杯文字建立；
+ *   合併時名稱相同的沿用本機已有的濾杯，取代全部時全部新建
  * onProgress(n, total)：正在處理第 n 張照片（選填，給畫面顯示進度）
- * 回傳 { ok: true, beans, grinders, brews, photos }（筆數）或 { ok: false, errors: [訊息...] }
+ * 回傳 { ok: true, beans, grinders, drippers, brews, photos }（筆數）或 { ok: false, errors: [訊息...] }
  */
 export async function importData(text, { replace = false, onProgress } = {}) {
   let data;
@@ -732,6 +797,8 @@ export async function importData(text, { replace = false, onProgress } = {}) {
     return { ok: false, errors: ['檔案缺少 beans、grinders 或 brews 資料'] };
   }
   if (!Array.isArray(data.photos)) return { ok: false, errors: ['檔案的 photos 格式錯誤'] };
+  const legacyDrippers = data.schemaVersion < 4;
+  if (!legacyDrippers && !Array.isArray(data.drippers)) return { ok: false, errors: ['檔案缺少 drippers 資料'] };
 
   const errors = [];
   const describe = (errs) => Object.values(errs).join('、');
@@ -754,22 +821,42 @@ export async function importData(text, { replace = false, onProgress } = {}) {
     return grinder;
   });
 
-  // 紀錄引用的豆子、磨豆機必須在檔案裡；合併模式下也可以是資料庫裡已有的
+  const localDrippers = replace ? [] : await db.getAll('drippers');
+  let drippers;
+  let legacyDripperIds = new Map(); // 舊備份：第幾筆紀錄 → 由濾杯文字對應到的 dripperId
+  if (legacyDrippers) {
+    // 舊備份的紀錄沒有 dripperId，由文字對應（用索引當 key：缺 id 的紀錄等一下會被擋下）
+    const rawBrews = data.brews.map((b, i) => ({ id: i, dripper: b?.dripper, brewedAt: toIso(b?.brewedAt) }));
+    ({ drippers, idByBrew: legacyDripperIds } = mergeDripperNames(rawBrews, { existing: localDrippers, makeId: newId }));
+  } else {
+    drippers = data.drippers.map((input, i) => {
+      const dripper = normalizeDripper(input ?? {});
+      const label = `第 ${i + 1} 支濾杯「${dripper.name || '未命名'}」`;
+      if (!input?.id) errors.push(`${label}：缺少 id`);
+      const v = validateDripper(dripper);
+      if (!v.ok) errors.push(`${label}：${describe(v.errors)}`);
+      return dripper;
+    });
+  }
+
+  // 紀錄引用的豆子、磨豆機、濾杯必須在檔案裡；合併模式下也可以是資料庫裡已有的
   const knownBeanIds = new Set(beans.map((b) => b.id));
   const knownGrinderIds = new Set(grinders.map((g) => g.id));
+  const knownDripperIds = new Set([...drippers, ...localDrippers].map((d) => d.id));
   if (!replace) {
     for (const b of await db.getAll('beans')) knownBeanIds.add(b.id);
     for (const g of await db.getAll('grinders')) knownGrinderIds.add(g.id);
   }
 
   const brews = data.brews.map((input, i) => {
-    const brew = normalizeBrew(input ?? {});
+    const brew = normalizeBrew(legacyDrippers ? { ...input, dripperId: legacyDripperIds.get(i) } : input ?? {});
     const label = `第 ${i + 1} 筆紀錄`;
     if (!input?.id) errors.push(`${label}：缺少 id`);
     const v = validateBrew(brew);
     if (!v.ok) errors.push(`${label}：${describe(v.errors)}`);
     else if (!knownBeanIds.has(brew.beanId)) errors.push(`${label}：找不到對應的豆子`);
     else if (brew.grinderId && !knownGrinderIds.has(brew.grinderId)) errors.push(`${label}：找不到對應的磨豆機`);
+    else if (brew.dripperId && !knownDripperIds.has(brew.dripperId)) errors.push(`${label}：找不到對應的濾杯`);
     return brew;
   });
 
@@ -801,25 +888,15 @@ export async function importData(text, { replace = false, onProgress } = {}) {
   }
   if (errors.length) return fail();
 
-  await db.bulkPut({ beans, grinders, brews, photos, thumbs }, { clear: replace });
+  await db.bulkPut({ beans, grinders, drippers, brews, photos, thumbs }, { clear: replace });
   requestSync(); // 本機為準：取代全部後，雲端上這台裝置分享過、現在不在的紀錄會被刪除
-  return { ok: true, beans: beans.length, grinders: grinders.length, brews: brews.length, photos: photos.length };
+  return { ok: true, beans: beans.length, grinders: grinders.length, drippers: drippers.length, brews: brews.length, photos: photos.length };
 }
 
 /** 「再沖一杯」要複製的參數；評分、風味、筆記、總時間是每杯的結果，不複製；可見度一律回到預設（只有我） */
 export function brewTemplateFrom(brew) {
-  const { beanId, grinderId = '', dripper, grindSetting, coffeeG, waterG, tempC } = brew;
-  return { beanId, grinderId, dripper, grindSetting, coffeeG, waterG, tempC };
-}
-
-/** 最近用過的濾杯名稱（不重複），給表單的建議清單 */
-export async function listRecentDrippers(limit = 10) {
-  const brews = await db.getAll('brews');
-  const names = brews
-    .sort((a, b) => b.brewedAt.localeCompare(a.brewedAt))
-    .map((b) => b.dripper)
-    .filter(Boolean);
-  return [...new Set(names)].slice(0, limit);
+  const { beanId, grinderId = '', dripperId = '', grindSetting, coffeeG, waterG, tempC } = brew;
+  return { beanId, grinderId, dripperId, grindSetting, coffeeG, waterG, tempC };
 }
 
 /* ===== 咖啡社群（雲端；只透過 cloud.js 存取） ===== */

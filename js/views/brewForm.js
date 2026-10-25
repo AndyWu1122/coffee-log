@@ -1,7 +1,7 @@
 // #/brew/new、#/brew/<id> 新增 / 編輯沖煮紀錄
 import {
-  getBrew, saveBrew, deleteBrew, listBeans, listRecentDrippers, latestBrewByBean, brewTemplateFrom,
-  listGrinders, defaultGrinderId, formatStock, ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
+  getBrew, saveBrew, deleteBrew, listBeans, latestBrewByBean, brewTemplateFrom,
+  listGrinders, defaultGrinderId, listDrippers, defaultDripperId, formatStock, ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
   getPhoto, preparePhoto, PHOTO_ACCEPT, VISIBILITY, socialAvailable, getShareStatus,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors } from './ui.js';
@@ -14,15 +14,16 @@ const shortDate = new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'num
 
 export async function render(container, { id, query, isCurrent }) {
   const isNew = id === null;
-  const [brew, photo, beans, grinders, drippers, latestByBean, source, defaultGrinder, shareStatus] = await Promise.all([
+  const [brew, photo, beans, grinders, drippers, latestByBean, source, defaultGrinder, defaultDripper, shareStatus] = await Promise.all([
     isNew ? null : getBrew(id),
     isNew ? null : getPhoto(id),
     listBeans({ includeArchived: true }),
     listGrinders({ includeArchived: true }),
-    listRecentDrippers(),
+    listDrippers({ includeArchived: true }),
     isNew ? latestBrewByBean() : new Map(),
     isNew && query.from ? getBrew(query.from) : null,
     isNew ? defaultGrinderId() : '',
+    isNew ? defaultDripperId() : '',
     isNew || !socialAvailable ? null : getShareStatus(id),
   ]);
   if (!isCurrent()) return;
@@ -46,15 +47,17 @@ export async function render(container, { id, query, isCurrent }) {
   }
   setTitle(isNew ? '新增紀錄' : '編輯紀錄');
 
-  // 磨豆機同樣只列未封存的；編輯時原本那台即使已封存也列出
+  // 磨豆機、濾杯同樣只列未封存的；編輯時原本那台即使已封存也列出
   const grinderOptions = grinders.filter((g) => !g.archived || g.id === brew?.grinderId);
   const hasActiveGrinder = grinders.some((g) => !g.archived);
+  const dripperOptions = drippers.filter((d) => !d.archived || d.id === brew?.dripperId);
+  const hasActiveDripper = drippers.some((d) => !d.archived);
 
   const b = brew ?? {
     beanId: beanOptions[0].id,
     grinderId: defaultGrinder,
     brewedAt: new Date().toISOString(),
-    dripper: drippers[0] ?? '',
+    dripperId: defaultDripper,
     grindSetting: '', coffeeG: '', waterG: '', tempC: '',
     totalTimeS: null, rating: null, flavor: {}, flavorNotes: [], notes: '', visibility: 'private',
   };
@@ -71,6 +74,7 @@ export async function render(container, { id, query, isCurrent }) {
       }
       // 原紀錄沒有磨豆機、或那台已封存／刪除時，改用預設值
       if (!grinderOptions.some((g) => g.id === b.grinderId)) b.grinderId = defaultGrinder;
+      if (!dripperOptions.some((d) => d.id === b.dripperId)) b.dripperId = defaultDripper;
     } else {
       notice = '找不到要複製的紀錄';
     }
@@ -99,11 +103,17 @@ export async function render(container, { id, query, isCurrent }) {
         <div class="error"></div>
       </div>
 
-      <div class="field" data-field="dripper">
-        <label for="dripper">濾杯</label>
-        <input id="dripper" name="dripper" list="dripper-list" value="${esc(b.dripper)}" placeholder="V60" autocomplete="off">
-        <datalist id="dripper-list">${drippers.map((d) => `<option value="${esc(d)}">`).join('')}</datalist>
+      <div class="field" data-field="dripperId">
+        <label for="dripperId">濾杯</label>
+        <select id="dripperId" name="dripperId">
+          <option value="">未指定</option>
+          ${dripperOptions.map((d) => `
+            <option value="${esc(d.id)}" ${d.id === b.dripperId ? 'selected' : ''}>
+              ${esc(d.name)}${d.archived ? '（已封存）' : ''}
+            </option>`).join('')}
+        </select>
         <div class="error"></div>
+        ${hasActiveDripper ? '' : '<a class="field-link" href="#/drippers/new">＋ 新增濾杯</a>'}
       </div>
 
       <div class="field-row">
@@ -348,7 +358,7 @@ export async function render(container, { id, query, isCurrent }) {
       beanId: f.beanId.value,
       grinderId: f.grinderId.value,
       brewedAt: fromLocalInputValue(f.brewedAt.value),
-      dripper: f.dripper.value,
+      dripperId: f.dripperId.value,
       grindSetting: f.grindSetting.value,
       coffeeG: f.coffeeG.value,
       waterG: f.waterG.value,

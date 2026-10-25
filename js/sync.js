@@ -17,8 +17,8 @@ const SESSION_KEY = 'auth:supabase-auth';
  */
 export const cloudPhotoPath = (userId, brewId) => `${String(userId).toLowerCase()}/${String(brewId).toLowerCase()}.jpg`;
 
-/** 本機紀錄 → shared_brews 的一列（豆子、磨豆機轉成名稱；owner 由資料庫用 auth.uid() 決定） */
-export function toSharedRow(brew, bean, grinder, photoPath) {
+/** 本機紀錄 → shared_brews 的一列（豆子、磨豆機、濾杯轉成名稱；owner 由資料庫用 auth.uid() 決定） */
+export function toSharedRow(brew, bean, grinder, dripper, photoPath) {
   const f = brew.flavor ?? {};
   return {
     id: brew.id,
@@ -28,7 +28,7 @@ export function toSharedRow(brew, bean, grinder, photoPath) {
     roast_level: bean?.roastLevel ?? null,
     roast_date: bean?.roastDate || null,
     brewed_at: brew.brewedAt,
-    dripper: brew.dripper ?? '',
+    dripper: dripper?.name ?? '',
     grinder_name: grinder?.name ?? '',
     grind_setting: brew.grindSetting ?? '',
     coffee_g: brew.coffeeG,
@@ -48,12 +48,13 @@ export function toSharedRow(brew, bean, grinder, photoPath) {
 
 /** 這筆紀錄現在「應該」在雲端的樣子：{ row, json, photo, photoAt } */
 async function desired(brew, userId) {
-  const [bean, grinder, photo] = await Promise.all([
+  const [bean, grinder, dripper, photo] = await Promise.all([
     db.get('beans', brew.beanId),
     brew.grinderId ? db.get('grinders', brew.grinderId) : null,
+    brew.dripperId ? db.get('drippers', brew.dripperId) : null,
     db.get('photos', brew.id),
   ]);
-  const row = toSharedRow(brew, bean, grinder, photo ? cloudPhotoPath(userId, brew.id) : null);
+  const row = toSharedRow(brew, bean, grinder, dripper, photo ? cloudPhotoPath(userId, brew.id) : null);
   return { row, json: JSON.stringify(row), photo, photoAt: photo?.createdAt ?? null };
 }
 

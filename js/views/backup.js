@@ -36,7 +36,7 @@ export async function render(container, { isCurrent }) {
     <section class="section">
       <h2>匯出</h2>
       <p class="last-backup${status.remind ? ' is-overdue' : ''}" id="last-backup">${esc(lastBackupText(status))}</p>
-      <p class="hint">目前有 ${summary.beans} 支豆子、${summary.grinders} 台磨豆機、${summary.brews} 筆紀錄、${summary.photos} 張照片。資料只存在這支手機上，建議定期匯出，存到雲端硬碟。</p>
+      <p class="hint">目前有 ${summary.beans} 支豆子、${summary.grinders} 台磨豆機、${summary.drippers} 支濾杯、${summary.brews} 筆紀錄、${summary.photos} 張照片。資料只存在這支手機上，建議定期匯出，存到雲端硬碟。</p>
       <label class="toggle"><input type="checkbox" id="include-photos" checked>包含照片</label>
       <p class="hint" id="export-size"></p>
       <button class="btn btn-primary btn-block" type="button" id="export">匯出 JSON</button>
@@ -100,7 +100,7 @@ export async function render(container, { isCurrent }) {
     const replace = segmentedValue(container, 'mode') === 'replace';
     if (replace) {
       const current = await getBackupSummary();
-      const ok = confirm(`將刪除現有的 ${current.beans} 支豆子、${current.grinders} 台磨豆機、${current.brews} 筆紀錄、${current.photos} 張照片，改用備份檔內容。確定？`);
+      const ok = confirm(`將刪除現有的 ${current.beans} 支豆子、${current.grinders} 台磨豆機、${current.drippers} 支濾杯、${current.brews} 筆紀錄、${current.photos} 張照片，改用備份檔內容。確定？`);
       if (!ok) return;
     }
 
@@ -124,7 +124,7 @@ export async function render(container, { isCurrent }) {
         </div>`;
       return;
     }
-    toast(`已匯入 ${result.beans} 支豆子、${result.grinders} 台磨豆機、${result.brews} 筆紀錄、${result.photos} 張照片`);
+    toast(`已匯入 ${result.beans} 支豆子、${result.grinders} 台磨豆機、${result.drippers} 支濾杯、${result.brews} 筆紀錄、${result.photos} 張照片`);
     notifyBadgesChanged(); // 紀錄變了，該不該備份可能跟著變
     location.hash = '#/';
   });
