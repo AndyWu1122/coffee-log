@@ -192,6 +192,8 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
   - 雲端已有就 update、沒有才 insert（不用 upsert：欄位權限不能 update id、owner）
   - 改回只有我或刪除：先刪紀錄、再用 Storage API 刪照片；**只刪這台裝置認得的**（sync store 有、或本機有這筆），別台裝置上傳的不刪
   - 撞到每天 30 筆上限：記下台灣時間的日期，同一天不再重送；被 check 拒絕的內容沒改就不重送
+  - **同一支手機換帳號**：sync store 的 `userId` 就是這筆屬於哪個帳號；別的帳號的紀錄不上傳、不刪（狀態 `other-account`），換回那個帳號照常同步；從來沒同步過的算目前帳號的；刪除帳號只動自己帳號的紀錄
+  - 每日上限的計數（`private.count_today`）和 `send_friend_request` 先拿 advisory lock，同時送出的請求不能超過上限（`20261027100000_rate_limit_locks.sql`）
 - 動態牆依沖煮時間新→舊，每次 20 筆；照片沒有縮圖（每張約 200KB，`loading="lazy"`）；按讚先更新畫面、失敗改回來
 - 讀不到的紀錄（不是好友、封鎖、已刪除、改回只有我）一律顯示同一個「找不到」
 
@@ -207,6 +209,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
   - **`js/config.js` 新增或改網址時，CSP 要一起改**（social-safety-test 會檢查）；新增外部資源一律先改 CSP
   - index.html 只放正式專案的網址；本機 Supabase（config.js 的 `LOCAL`）由測試用的靜態伺服器（`chrome.mjs` 的 `localCsp`）送出時才加上，所以 `python -m http.server` 開的頁面連不到本機 Supabase（本來就無法真的登入，社群功能一律用測試腳本測）
 - Service Worker 只攔截同網域的 GET，不會快取 API 或 signed URL（social-safety-test 會檢查快取內容）
+- **防點擊劫持**：meta 的 CSP 不能設 `frame-ancestors`、GitHub Pages 也不送 `X-Frame-Options`，所以 `js/theme.js` 開頭發現被 iframe 嵌入就整頁不顯示並把最上層換成 App（menu-alerts-test 會檢查）；App 自己不要用 iframe 嵌入自己
 
 ### 留言與回覆
 - `comments`：id, brew_owner, brew_id, author, parent_id, reply_to_user, author_nickname, reply_to_nickname, body, created_at

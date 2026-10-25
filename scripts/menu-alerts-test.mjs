@@ -135,6 +135,25 @@ try {
   check('「有新版本可用」出現時不顯示「已更新」', !(await shown('#updated-banner')));
 
   check('頁面沒有 JavaScript 錯誤', page.errors.length === 0, page.errors.join(' / '));
+
+  /* ===== 防點擊劫持：被別的網頁用 iframe 嵌入 ===== */
+  // 用 tests/photo.html 當「別的網頁」：不能換掉最上層的 iframe（sandbox）整頁不顯示；一般的 iframe 會把最上層換成 App
+  const framer = await chrome.newPage(`${base}tests/photo.html`, { isolated: true });
+  const embed = (sandbox) => framer.eval(`(() => {
+    const f = Object.assign(document.createElement('iframe'), { src: ${q(`${base}#/`)}, id: 'embed' });
+    ${sandbox ? `f.setAttribute('sandbox', 'allow-scripts allow-same-origin');` : ''}
+    document.body.append(f);
+    return true;
+  })()`);
+  await embed(true);
+  await framer.waitFor(`document.getElementById('embed').contentDocument?.documentElement.dataset.theme`, { label: 'iframe 裡的 theme.js 執行完' });
+  check('被 sandbox 的 iframe 嵌入：整頁不顯示、最上層沒被換掉',
+    await framer.eval(`getComputedStyle(document.getElementById('embed').contentDocument.documentElement).display === 'none' && location.pathname === '/tests/photo.html'`));
+  await framer.eval(`document.getElementById('embed').remove(), true`);
+  await embed(false);
+  await framer.waitFor(`location.pathname === '/' && document.readyState === 'complete' && Boolean(document.querySelector('#app'))`, { label: '最上層被換成 App' });
+  check('被一般的 iframe 嵌入：最上層換成 App 本身，正常顯示',
+    await framer.eval(`window.top === window.self && getComputedStyle(document.documentElement).display !== 'none'`));
 } catch (err) {
   failures.push(`執行錯誤：${err.message}`);
   console.error(err);

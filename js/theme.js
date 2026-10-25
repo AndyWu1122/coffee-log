@@ -3,6 +3,15 @@
 // 不寫成 inline script：CSP 只允許 'self' 的 script
 // 偏好（auto/light/dark）存 localStorage：只是這支手機的顯示偏好，需要同步讀取（見 CLAUDE.md）
 // 切換邏輯在 js/app.js 的 setupTheme()，兩邊的判斷要一致
+//
+// 也在這裡防點擊劫持（clickjacking）：被別的網頁用 iframe 嵌入時整頁不顯示，並把最上層換成 App 本身
+// （meta 的 CSP 不能設 frame-ancestors，GitHub Pages 也不送 X-Frame-Options；放在這裡是因為它在畫面畫出前執行）
+(function () {
+  if (window.top === window.self) return;
+  document.documentElement.style.display = 'none';
+  try { window.top.location = window.location.href; } catch (e) { /* sandbox 的 iframe 不能換頁：維持不顯示 */ }
+})();
+
 (function () {
   var pref = 'auto';
   try { pref = localStorage.getItem('theme') || 'auto'; } catch (e) {}
