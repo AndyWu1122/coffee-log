@@ -277,7 +277,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - **`config.toml` 不要設定 `[edge_runtime.secrets]`**：`supabase secrets set` 會把它一起上傳到正式專案、蓋掉真的金鑰（曾經發生過）
 - 正式專案要另外部署：`npx supabase@2.120.0 functions deploy feedback`（步驟見 `docs/supabase-setup.md` 5-2）
 
-### 推播通知（1.9.0 留言／回覆，已部署；1.11.0 加按讚、好友新貼文，分支 feature/push-more，還沒部署）
+### 推播通知（1.9.0 留言／回覆；1.11.0 加按讚、好友新貼文；都已部署，步驟見 `docs/supabase-setup.md` 5-6、5-7）
 有人留言我的貼文、回覆我的留言、按讚我的貼文，或好友發新貼文時，手機跳出通知。標準 Web Push（VAPID），不用 Firebase 等第三方服務。
 - 流程：comments／likes／shared_brews 新增 → trigger `private.comments_push`／`private.likes_push`／`private.shared_brews_push`（通知誰、合併都在這裡判斷）→ pg_net → Edge Function `send-push`（service_role 讀訂閱、加密、送出）→ Apple／Google 的推播服務
   - 1.11.0 的兩個 trigger 共用 `private.push_ready()`、`private.push_send(payload)`（簽章＋`net.http_post`）、`private.push_window()`；已部署的 `comments_push` 不改
