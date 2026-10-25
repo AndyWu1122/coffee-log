@@ -141,6 +141,48 @@ try {
   await click(pa, `.comment[data-id="${cTop.id}"] [data-action="reply"]`);
   check('按「回覆」不會跳到個人檔案', (await pa.eval('location.hash')) === detail && !(await pa.eval(`document.querySelector('#comment-target').hidden`)));
 
+  /* ===== 個人檔案的貼文：好友看得到、和社群動態一樣的卡片、每次 20 筆 ===== */
+  for (let i = 0; i < 21; i++) await insertBrew(A, { withPhoto: false }); // A 共 22 筆
+  const cards = (page) => page.eval(`[...document.querySelectorAll('#profile-feed .feed-card')].map((c) => c.dataset.key)`);
+  await visit(pb, base, `#/user/${A.id}`);
+  await pb.waitFor(`document.querySelectorAll('#profile-feed .feed-card').length === 20`, { label: 'B 看到 A 的前 20 筆貼文' });
+  const newest = rows(await rest(`shared_brews?select=id&owner=eq.${A.id}&order=brewed_at.desc,id.desc&limit=1`, { token: B.token }))[0].id;
+  const firstPage = await cards(pb);
+  check('好友 B 在 A 的檔案看到 A 的貼文（只有 A 的、新的在前）',
+    firstPage.every((k) => k.startsWith(`${A.id}/`)) && firstPage[0] === `${A.id}/${newest}`, firstPage[0]);
+  check('和社群動態一樣的卡片（豆子、參數、讚、留言數）',
+    await pb.eval(`(() => { const c = document.querySelector('#profile-feed .feed-card'); return Boolean(c.querySelector('.card-title') && c.querySelector('[data-action="like"]') && c.querySelector('.comment-link')); })()`));
+  check('卡片的頭像、暱稱不再連到同一個檔案', !(await pb.eval(`document.querySelector('#profile-feed .feed-head').matches('a')`)));
+  check('超過 20 筆：有「載入更多」', !(await pb.eval(`document.querySelector('.profile-posts [data-action="more"]').hidden`)));
+  await click(pb, '.profile-posts [data-action="more"]');
+  await pb.waitFor(`document.querySelectorAll('#profile-feed .feed-card').length === 22`, { label: '載入更多' });
+  check('按「載入更多」：載入剩下的 2 筆、沒有重複、按鈕隱藏',
+    new Set(await cards(pb)).size === 22 && await pb.eval(`document.querySelector('.profile-posts [data-action="more"]').hidden`));
+  check('檔案頁的貼文：XSS 沒有變成 HTML', await noInjection(pb));
+
+  const firstKey = firstPage[0];
+  await click(pb, `#profile-feed .feed-card[data-key="${firstKey}"] [data-action="like"]`);
+  await pb.waitFor(`document.querySelector('#profile-feed .feed-card[data-key="${firstKey}"] [data-action="like"]').getAttribute('aria-pressed') === 'true'`, { label: '按讚' });
+  const liked = async () => rows(await rest(`likes?select=user_id&brew_id=eq.${newest}`, { token: A.token }))?.length;
+  for (let i = 0; i < 25 && (await liked()) !== 1; i++) await new Promise((r) => setTimeout(r, 200));
+  check('在檔案頁按讚：雲端有這個讚', (await liked()) === 1);
+  await click(pb, `#profile-feed .feed-card[data-key="${firstKey}"] a.feed-body`);
+  await pb.waitFor(`location.hash === ${q(`#/social/${A.id}/${newest}`)}`, { label: '點卡片進詳細頁' });
+  check('點卡片：進到原本的詳細頁', true);
+
+  for (const [name, page] of [['非好友 C', pc], ['被封鎖的好友 D', pd]]) {
+    await visit(page, base, `#/user/${A.id}`);
+    await profileLoaded(page);
+    await new Promise((r) => setTimeout(r, 800)); // 確認不會晚一點才冒出貼文
+    check(`${name}：看不到 A 的任何貼文`, !(await page.eval(`document.querySelector('#profile-feed, .feed-card')`)));
+  }
+  await visit(pa, base, `#/user/${A.id}`);
+  await pa.waitFor(`document.querySelectorAll('#profile-feed .feed-card').length === 20`, { label: 'A 看到自己的貼文' });
+  check('自己的檔案：看得到自己分享的紀錄（標題「我分享的紀錄」）', (await text(pa, '#profile-posts-title')) === '我分享的紀錄');
+  await visit(pc, base, `#/user/${C.id}`);
+  await pc.waitFor(`document.querySelector('#posts-status:not([hidden])')`, { label: 'C 自己沒有貼文' });
+  check('沒有貼文：顯示提示', (await text(pc, '#posts-status')).includes('還沒有分享給好友的紀錄'));
+
   /* ===== 自己的檔案：帳號頁的入口、編輯 ===== */
   await visit(pa, base, '#/account');
   await click(pa, `a[href="#/user/${A.id}"]`);

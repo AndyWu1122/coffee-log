@@ -1204,7 +1204,7 @@ export async function listFeed(myId, { offset = 0, mine = false } = {}) {
         .then(([p, r]) => cloud.commentActivity(p, r)),
     ]);
   }
-  const rows = await cloud.listFeed(myId, { offset, limit: FEED_PAGE_SIZE + 1, mine }); // 多拿一筆判斷還有沒有
+  const rows = await cloud.listFeed({ offset, limit: FEED_PAGE_SIZE + 1, owner: mine ? myId : null }); // 多拿一筆判斷還有沒有
   const items = await toFeedItems(myId, rows.slice(0, FEED_PAGE_SIZE), { newCommentKeys: new Set(activity?.posts ?? []) });
   const seen = (key, at) => (at ? db.setMeta(key, { userId: myId, at }) : null);
   await Promise.all([
@@ -1213,6 +1213,16 @@ export async function listFeed(myId, { offset = 0, mine = false } = {}) {
     seen(REPLIES_SEEN_KEY, activity?.latest_reply_at),
   ]);
   return { items, hasMore: rows.length > FEED_PAGE_SIZE };
+}
+
+/**
+ * 個人檔案頁的貼文（依沖煮時間新→舊，每次 20 筆）：{ items, hasMore }；offset 是已載入的筆數
+ * 讀得到的才會回來（RLS：本人、已接受且沒有封鎖的好友），不是好友、有封鎖時是空的
+ * 不記「看過了」：社群分頁的數字只在社群頁歸零
+ */
+export async function listUserPosts(myId, userId, { offset = 0 } = {}) {
+  const rows = await cloud.listFeed({ offset, limit: FEED_PAGE_SIZE + 1, owner: userId });
+  return { items: await toFeedItems(myId, rows.slice(0, FEED_PAGE_SIZE)), hasMore: rows.length > FEED_PAGE_SIZE };
 }
 
 /* ----- 提示：☰ 按鈕（收到好友邀請）、底部「社群」分頁（新通知的數字） ----- */

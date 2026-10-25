@@ -295,12 +295,12 @@ const BREW_COLUMNS = [
 ].join(', ');
 
 /**
- * 動態牆的紀錄，依沖煮時間新→舊；mine 為 true 時只有自己的，否則是自己＋好友的
- * （RLS 只回傳自己、已接受且沒有封鎖的好友）
+ * 動態牆的紀錄，依沖煮時間新→舊；指定 owner 時只有那個人的（「我的」、個人檔案），否則是自己＋好友的
+ * （RLS 只回傳自己、已接受且沒有封鎖的好友：不是好友的人的 owner 一律是空的）
  */
-export const listFeed = (myId, { offset, limit, mine = false }) => run(async (sb) => {
+export const listFeed = ({ offset, limit, owner = null }) => run(async (sb) => {
   let query = sb.from('shared_brews').select(BREW_COLUMNS);
-  if (mine) query = query.eq('owner', uuid(myId));
+  if (owner) query = query.eq('owner', uuid(owner));
   return unwrap(await query
     .order('brewed_at', { ascending: false }).order('id', { ascending: false })
     .range(offset, offset + limit - 1));

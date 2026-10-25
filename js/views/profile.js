@@ -1,13 +1,14 @@
 // #/user/<id> 個人檔案：頭像、暱稱、貼文數、加入日期、常用器材、喜歡的豆子、自我介紹
-// - 本人、沒有封鎖的好友：全部顯示；自己的檔案有「編輯個人檔案」
+// - 本人、沒有封鎖的好友：全部顯示，下面是他分享的貼文（和社群動態一樣的卡片，每次 20 筆）；自己的檔案有「編輯個人檔案」
 // - 還不是好友：只顯示暱稱（留言當下的快照或邀請中的對方）和預設頭像
 // - 有封鎖、帳號不存在：一律「找不到這個用戶」
 // 暱稱、自我介紹、器材、豆子都來自使用者：一律經過 esc() 才放進 innerHTML；自我介紹的換行交給 CSS（white-space: pre-line）
 import {
   getSocialState, socialErrorMessage, getUserProfile, saveProfile, prepareAvatar, saveAvatar, removeAvatar, PHOTO_ACCEPT,
-  NICKNAME_MAX, BIO_MAX, BIO_LINES, FAVORITE_GEAR_MAX, FAVORITE_BEANS_MAX,
+  NICKNAME_MAX, BIO_MAX, BIO_LINES, FAVORITE_GEAR_MAX, FAVORITE_BEANS_MAX, listUserPosts,
 } from '../models.js';
 import { esc, setTitle, toast, showMessage, showErrors, avatarHtml } from './ui.js';
+import { feedCardHtml, bindLikes } from './feed.js';
 
 const dateFmt = new Intl.DateTimeFormat('zh-TW', { year: 'numeric', month: 'numeric', day: 'numeric' });
 const NOT_FOUND = `<div class="empty"><p>找不到這個用戶</p><a class="btn" href="#/social">回社群</a></div>`;
@@ -52,13 +53,13 @@ export async function render(container, { params: [userId], isCurrent }) {
     </div>`;
     return;
   }
-  renderFull(container, result.profile, { user: state.user, rerender });
+  renderFull(container, result.profile, { user: state.user, rerender, isCurrent });
 }
 
 /** 一個欄位：有填才顯示 */
 const infoRow = (label, value) => (value ? `<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>` : '');
 
-function renderFull(container, p, { user, rerender }) {
+function renderFull(container, p, { user, rerender, isCurrent }) {
   setTitle(p.mine ? '我的個人檔案' : p.nickname);
   const info = infoRow('常用器材', p.favoriteGear) + infoRow('喜歡的豆子', p.favoriteBeans);
   const empty = !info && !p.bio;
@@ -77,9 +78,54 @@ function renderFull(container, p, { user, rerender }) {
       ${p.mine ? '<button type="button" class="btn btn-block" data-action="edit">編輯個人檔案</button>' : ''}
     </section>
     ${p.mine ? editFormHtml(p) : ''}
+    <section class="section profile-posts" aria-labelledby="profile-posts-title">
+      <h2 id="profile-posts-title">${p.mine ? '我分享的紀錄' : '分享的紀錄'}</h2>
+      <p class="hint" id="posts-status">載入中…</p>
+      <ul class="list feed" id="profile-feed"></ul>
+      <button type="button" class="btn btn-block" data-action="more" hidden>載入更多</button>
+    </section>
     <a class="btn btn-block" href="#/social">回社群</a>
   </div>`;
-  if (p.mine) bindEdit(container.querySelector('#profile-page'), p, { user, rerender });
+  const page = container.querySelector('#profile-page');
+  if (p.mine) bindEdit(page, p, { user, rerender });
+  renderPosts(page.querySelector('.profile-posts'), { myId: user.id, userId: p.id, mine: p.mine, isCurrent });
+}
+
+/**
+ * 他分享的貼文：和社群動態一樣的卡片（點進詳細頁、可以按讚），每次 20 筆，「載入更多」再載
+ * 監聽器掛在這個區塊自己的元素上（#app 換頁不會被替換）
+ */
+async function renderPosts(root, { myId, userId, mine, isCurrent }) {
+  const list = root.querySelector('#profile-feed');
+  const status = root.querySelector('#posts-status');
+  const more = root.querySelector('[data-action="more"]');
+  const items = new Map(); // 'owner/id' → item（按讚用）
+  const show = (page) => {
+    const fresh = page.items.filter((item) => !items.has(`${item.owner}/${item.id}`)); // 載入期間有新增時跳過重複的
+    for (const item of fresh) items.set(`${item.owner}/${item.id}`, item);
+    list.insertAdjacentHTML('beforeend', fresh.map((item) => feedCardHtml(item, { linkPerson: false })).join(''));
+    more.hidden = !page.hasMore;
+    status.hidden = items.size > 0;
+    status.textContent = mine ? '還沒有分享給好友的紀錄。在紀錄的「誰看得到」選「👥 好友」，就會出現在這裡。' : '還沒有分享給好友的紀錄';
+  };
+  bindLikes(root, myId, items);
+  more.addEventListener('click', async () => {
+    more.disabled = true;
+    try {
+      const page = await listUserPosts(myId, userId, { offset: items.size });
+      if (isCurrent()) show(page);
+    } catch (err) {
+      toast(socialErrorMessage(err));
+    } finally {
+      more.disabled = false;
+    }
+  });
+  try {
+    const page = await listUserPosts(myId, userId);
+    if (isCurrent()) show(page);
+  } catch (err) {
+    if (isCurrent()) status.textContent = socialErrorMessage(err);
+  }
 }
 
 /** 輸入框（含字數提示「n／上限」） */

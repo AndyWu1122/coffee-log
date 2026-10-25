@@ -252,6 +252,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
   - 完整檔案只能走 `public.profile_detail(target)`（security definer）：本人或 `private.can_view`（已接受、雙方沒有封鎖）才回傳，含貼文數、加入日期；其他一律 null
   - 新增要給別人看的 profile 欄位時：不要 grant select，放進 `profile_detail`
 - 頁面的判斷（`models.getUserProfile`）：完整檔案 → 全部；我封鎖了他、或好友卻拿不到（有封鎖）→「找不到這個用戶」；待處理邀請、或在讀得到的留言裡有他的暱稱快照 →「你們還不是好友」＋暱稱＋首字頭像；其他（含帳號已刪除）→ 找不到
+- 完整檔案下面是他分享的貼文（`models.listUserPosts` → `cloud.listFeed({ owner })`，沿用 `toFeedItems`、`feedCardHtml(item, { linkPerson: false })`、`bindLikes`）：每次 20 筆、「載入更多」；權限就是 shared_brews 的 RLS，不另外判斷；不記「看過了」
 - 自我介紹用 `esc()`＋CSS `white-space: pre-line`，不要把 
  換成 `<br>`
 - 頭像、暱稱點過去（`ui.profileHref`）：社群卡片與詳細頁（`feedCardHtml` 的 `.person-link`）、留言的頭像／暱稱／@暱稱（`.comment-avatar`、`.hit-area`）、好友管理名單（封鎖名單不連）；點擊範圍 ≥ 44px，不和按讚、回覆、刪除重疊（social-profile-test 會量）

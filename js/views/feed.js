@@ -98,8 +98,11 @@ export async function render(container, { query = {}, isCurrent }) {
   });
 }
 
-/** 一筆紀錄的卡片；detail 為 true 時（詳細頁）不再連到自己、不顯示留言數（下面就是留言） */
-export function feedCardHtml(item, { detail = false } = {}) {
+/**
+ * 一筆紀錄的卡片；detail 為 true 時（詳細頁）不再連到自己、不顯示留言數（下面就是留言）
+ * linkPerson 為 false 時（個人檔案頁）頭像和暱稱不連結：就是這個人的頁面
+ */
+export function feedCardHtml(item, { detail = false, linkPerson = true } = {}) {
   const params = [
     item.dripper,
     [item.grinderName, item.grindSetting].filter(Boolean).join(' '),
@@ -118,17 +121,20 @@ export function feedCardHtml(item, { detail = false } = {}) {
     ${item.photoUrl ? `<img class="feed-photo" src="${esc(item.photoUrl)}" alt="這杯咖啡的照片" loading="lazy" decoding="async">` : ''}`;
   return `
     <li class="feed-card" data-key="${esc(keyOf(item))}">
-      <a class="feed-head person-link" href="${esc(profileHref(item.owner))}">
-        ${avatarHtml(item)}
-        <div class="person-text">
-          <div class="person-name">${esc(item.nickname)}${item.mine ? ' <span class="me-tag">我</span>' : ''}</div>
-          <div class="hint">${esc(formatDate(item.brewedAt))}</div>
-        </div>
-      </a>
+      ${linkPerson ? `<a class="feed-head person-link" href="${esc(profileHref(item.owner))}">${headHtml(item)}</a>`
+    : `<div class="feed-head">${headHtml(item)}</div>`}
       ${detail ? `<div class="feed-body">${body}</div>` : `<a class="feed-body" href="${esc(detailHref(item))}">${body}</a>`}
       <div class="feed-foot">${likeHtml(item)}${detail ? '' : commentLinkHtml(item)}</div>
     </li>`;
 }
+
+/** 卡片上方：頭像、暱稱（自己的標「我」）、沖煮時間 */
+const headHtml = (item) => `
+        ${avatarHtml(item)}
+        <div class="person-text">
+          <div class="person-name">${esc(item.nickname)}${item.mine ? ' <span class="me-tag">我</span>' : ''}</div>
+          <div class="hint">${esc(formatDate(item.brewedAt))}</div>
+        </div>`;
 
 /** 卡片上的留言數：連到詳細頁的留言區；有新留言時標示 */
 function commentLinkHtml(item) {
