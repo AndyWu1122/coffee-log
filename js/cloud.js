@@ -149,6 +149,48 @@ export const avatarUrls = (paths) => run(async (sb) => {
   return Object.fromEntries(rows.filter((r) => r.signedUrl && !r.error).map((r) => [r.path, r.signedUrl]));
 });
 
+/* ===== 個人檔案 ===== */
+
+/**
+ * 完整的個人檔案（自我介紹、器材、豆子、加入日期、貼文數）：本人或沒有封鎖的好友才拿得到，其他一律 null
+ * （新欄位不能直接讀 profiles，只能透過資料庫函式 profile_detail）
+ */
+export const getProfileDetail = (target) => run(async (sb) =>
+  unwrap(await sb.rpc('profile_detail', { target: uuid(target) })));
+
+/** 修改自己的暱稱、自我介紹、器材、豆子（RLS：只能改自己的） */
+export const updateProfile = (userId, fields) => run(async (sb) => {
+  const rows = unwrap(await sb.from('profiles').update(fields).eq('id', uuid(userId)).select('id'));
+  if (rows.length !== 1) throw new CloudError('找不到你的個人檔案', 'gone');
+});
+
+/** 我和對方之間的好友關係（'pending'、'accepted'，沒有關係是 null）；只讀得到自己相關的 */
+export const friendshipStatus = (myId, otherId) => run(async (sb) => {
+  const me = uuid(myId);
+  const other = uuid(otherId);
+  const rows = unwrap(await sb.from('friendships').select('status')
+    .or(`and(requester.eq.${me},addressee.eq.${other}),and(requester.eq.${other},addressee.eq.${me})`).limit(1));
+  return rows[0]?.status ?? null;
+});
+
+/** 我有沒有封鎖對方（被封鎖的人讀不到 blocks，所以只能知道自己封鎖了誰） */
+export const iBlocked = (otherId) => run(async (sb) =>
+  unwrap(await sb.from('blocks').select('blocked').eq('blocked', uuid(otherId)).limit(1)).length > 0);
+
+/**
+ * 我讀得到的留言裡，這個人留言（或被 @）當下記下的暱稱；都沒有回傳 null
+ * （留言的讀取政策照常生效：讀得到那篇貼文、和留言者沒有封鎖）
+ */
+export const nicknameSnapshot = (userId) => run(async (sb) => {
+  const id = uuid(userId);
+  const authored = unwrap(await sb.from('comments').select('author_nickname')
+    .eq('author', id).order('created_at', { ascending: false }).limit(1));
+  if (authored[0]?.author_nickname) return authored[0].author_nickname;
+  const mentioned = unwrap(await sb.from('comments').select('reply_to_nickname')
+    .eq('reply_to_user', id).not('reply_to_nickname', 'is', null).order('created_at', { ascending: false }).limit(1));
+  return mentioned[0]?.reply_to_nickname ?? null;
+});
+
 /* ===== 好友 ===== */
 
 /** 用好友代碼送邀請，回傳資料庫的結果代碼（sent、accepted、not_found…） */

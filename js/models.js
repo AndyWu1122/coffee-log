@@ -908,6 +908,85 @@ export const prepareAvatar = (file) => compressAvatar(file);
 export const saveAvatar = (userId, blob) => cloud.saveAvatar(userId, blob);
 export const removeAvatar = (userId) => cloud.removeAvatar(userId);
 
+/* ----- 個人檔案（#/user/<id>） ----- */
+
+// 和資料庫的 check 一致（20261028100000_profile_fields.sql）
+export const BIO_MAX = 150;
+export const BIO_LINES = 5;
+export const FAVORITE_GEAR_MAX = 50;
+export const FAVORITE_BEANS_MAX = 50;
+
+/** 表單值 → 要存的值：去掉前後空白；自我介紹的 \r\n 統一成 \n（資料庫只允許 \n） */
+const normalizeProfile = ({ nickname, bio, favoriteGear, favoriteBeans }) => ({
+  nickname: String(nickname ?? '').trim(),
+  bio: String(bio ?? '').replace(/\r\n?/g, '\n').trim(),
+  favoriteGear: String(favoriteGear ?? '').trim(),
+  favoriteBeans: String(favoriteBeans ?? '').trim(),
+});
+
+/** 個人檔案驗證（資料庫也有同樣的 check）；回傳 { 欄位: 訊息 }，沒有錯誤是 {} */
+export function validateProfile(input) {
+  const p = normalizeProfile(input);
+  const errors = {};
+  const nickname = validateNickname(p.nickname);
+  if (nickname) errors.nickname = nickname;
+  if (charLength(p.bio) > BIO_MAX) errors.bio = `最多 ${BIO_MAX} 字（目前 ${charLength(p.bio)} 字）`;
+  else if (p.bio.split('\n').length > BIO_LINES) errors.bio = `最多 ${BIO_LINES} 行`;
+  else if (/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/.test(p.bio)) errors.bio = '不能有特殊字元';
+  const line = (s, max) => {
+    if (charLength(s) > max) return `最多 ${max} 字（目前 ${charLength(s)} 字）`;
+    return /[\u0000-\u001f\u007f-\u009f]/.test(s) ? '不能有換行或特殊字元' : '';
+  };
+  if (line(p.favoriteGear, FAVORITE_GEAR_MAX)) errors.favoriteGear = line(p.favoriteGear, FAVORITE_GEAR_MAX);
+  if (line(p.favoriteBeans, FAVORITE_BEANS_MAX)) errors.favoriteBeans = line(p.favoriteBeans, FAVORITE_BEANS_MAX);
+  return errors;
+}
+
+/** 存自己的暱稱、自我介紹、器材、豆子；回傳 { ok, errors } */
+export async function saveProfile(userId, input) {
+  const errors = validateProfile(input);
+  if (Object.keys(errors).length) return { ok: false, errors };
+  const p = normalizeProfile(input);
+  await cloud.updateProfile(userId, {
+    nickname: p.nickname, bio: p.bio, favorite_gear: p.favoriteGear, favorite_beans: p.favoriteBeans,
+  });
+  return { ok: true };
+}
+
+/**
+ * 個人檔案頁要顯示什麼（他人的文字顯示時一律要跳脫）：
+ *   { status: 'full', profile }   本人，或已接受、雙方沒有封鎖的好友：全部欄位、貼文數、加入日期
+ *   { status: 'not-friend', nickname } 還不是好友（有待處理的邀請、或在讀得到的留言裡出現過）：只有暱稱
+ *   { status: 'not-found' }       有封鎖（好友之間也是）、帳號不存在、或從來沒有交集
+ */
+export async function getUserProfile(myId, userId) {
+  let detail;
+  try {
+    detail = await cloud.getProfileDetail(userId);
+  } catch (err) {
+    if (err instanceof cloud.CloudError && err.code === 'invalid') return { status: 'not-found' }; // 網址的 id 格式不對
+    throw err;
+  }
+  if (detail) {
+    const urls = detail.avatar_path ? await cloud.avatarUrls([detail.avatar_path]) : {};
+    return {
+      status: 'full',
+      profile: {
+        id: detail.id, nickname: detail.nickname, avatarUrl: urls[detail.avatar_path] ?? null, hasAvatar: Boolean(detail.avatar_path),
+        bio: detail.bio, favoriteGear: detail.favorite_gear, favoriteBeans: detail.favorite_beans,
+        joinedAt: detail.created_at, posts: detail.posts, mine: detail.id === myId,
+      },
+    };
+  }
+  // 好友卻拿不到完整檔案＝雙方有封鎖；我封鎖了對方：都顯示找不到
+  const [status, blocked] = await Promise.all([cloud.friendshipStatus(myId, userId), cloud.iBlocked(userId)]);
+  if (blocked || status === 'accepted') return { status: 'not-found' };
+  let nickname = null;
+  if (status === 'pending') nickname = (await cloud.listProfiles([userId]))[0]?.nickname ?? null;
+  nickname ??= await cloud.nicknameSnapshot(userId);
+  return nickname ? { status: 'not-friend', nickname } : { status: 'not-found' };
+}
+
 /* ----- 好友代碼 ----- */
 
 // 10 碼，不含易混淆的 0 O 1 I L（和資料庫的 friend_code_format 一致）

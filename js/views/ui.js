@@ -95,6 +95,9 @@ export function avatarHtml({ nickname, avatarUrl }, { large = false } = {}) {
   return `<span class="${cls} avatar-initial" aria-hidden="true">${esc(initial)}</span>`;
 }
 
+/** 個人檔案頁的網址（頭像、暱稱點過去）；id 由 encodeURIComponent 處理，放進 href 前仍要 esc() */
+export const profileHref = (userId) => `#/user/${encodeURIComponent(userId)}`;
+
 /**
  * 提示（☰ 選單的「!」：好友邀請、該備份了、更新內容；「社群」分頁的數字）可能改變了：app.js 收到後重新檢查
  * 用事件通知，views 不直接呼叫 app.js

@@ -4,7 +4,9 @@
 import {
   getSocialState, socialErrorMessage, listFeed, setLike, formatRatio, formatSeconds, flavorNote,
 } from '../models.js';
-import { esc, setTitle, toast, avatarHtml, showMessage, notifyBadgesChanged, segmentedHtml, bindSegmented } from './ui.js';
+import {
+  esc, setTitle, toast, avatarHtml, showMessage, notifyBadgesChanged, segmentedHtml, bindSegmented, profileHref,
+} from './ui.js';
 
 const dateFmt = new Intl.DateTimeFormat('zh-TW', {
   month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
@@ -116,13 +118,13 @@ export function feedCardHtml(item, { detail = false } = {}) {
     ${item.photoUrl ? `<img class="feed-photo" src="${esc(item.photoUrl)}" alt="這杯咖啡的照片" loading="lazy" decoding="async">` : ''}`;
   return `
     <li class="feed-card" data-key="${esc(keyOf(item))}">
-      <div class="feed-head">
+      <a class="feed-head person-link" href="${esc(profileHref(item.owner))}">
         ${avatarHtml(item)}
         <div class="person-text">
           <div class="person-name">${esc(item.nickname)}${item.mine ? ' <span class="me-tag">我</span>' : ''}</div>
           <div class="hint">${esc(formatDate(item.brewedAt))}</div>
         </div>
-      </div>
+      </a>
       ${detail ? `<div class="feed-body">${body}</div>` : `<a class="feed-body" href="${esc(detailHref(item))}">${body}</a>`}
       <div class="feed-foot">${likeHtml(item)}${detail ? '' : commentLinkHtml(item)}</div>
     </li>`;

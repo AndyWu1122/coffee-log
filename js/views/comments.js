@@ -7,7 +7,7 @@ import {
   listComments, addComment, deleteComment, validateComment, commentErrorMessage, socialErrorMessage,
   formatRelative, COMMENT_MAX,
 } from '../models.js';
-import { esc, toast, avatarHtml } from './ui.js';
+import { esc, toast, avatarHtml, profileHref } from './ui.js';
 
 const REPLIES_SHOWN = 3;   // 每則主留言先顯示幾則回覆
 const NEAR_LIMIT = 270;    // 剩不到 30 字時字數變色提示
@@ -230,17 +230,26 @@ function threadHtml(t) {
     </li>`;
 }
 
+/** 「@暱稱 」：知道對象是誰就連到他的個人檔案（送出中的回覆還沒有對象 id，只顯示文字） */
+function mentionHtml(c) {
+  if (!c.replyToNickname) return '';
+  const text = `@${esc(c.replyToNickname)}`;
+  return c.replyToUser
+    ? `<a class="mention hit-area" href="${esc(profileHref(c.replyToUser))}">${text}</a> `
+    : `<span class="mention">${text}</span> `;
+}
+
 /** 一則留言：頭像、暱稱、相對時間、（@暱稱）內容、回覆／刪除 */
 function commentHtml(c, { tag, hidden = false }) {
   return `
     <${tag} class="comment${c.pending ? ' pending' : ''}" data-id="${esc(c.id)}"${hidden ? ' hidden' : ''}>
-      ${avatarHtml(c)}
+      <a class="comment-avatar" href="${esc(profileHref(c.author))}" aria-label="${esc(c.nickname)} 的個人檔案">${avatarHtml(c)}</a>
       <div class="comment-main">
         <div class="comment-meta">
-          <span class="person-name">${esc(c.nickname)}</span>
+          <a class="person-name hit-area" href="${esc(profileHref(c.author))}">${esc(c.nickname)}</a>
           <span class="hint">${c.pending ? '傳送中…' : esc(formatRelative(c.createdAt))}</span>
         </div>
-        <p class="comment-body">${c.replyToNickname ? `<span class="mention">@${esc(c.replyToNickname)}</span> ` : ''}${esc(c.body)}</p>
+        <p class="comment-body">${mentionHtml(c)}${esc(c.body)}</p>
         ${c.pending ? '' : `
         <div class="comment-actions">
           <button type="button" class="link-btn" data-action="reply">回覆</button>

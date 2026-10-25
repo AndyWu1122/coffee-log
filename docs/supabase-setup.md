@@ -12,7 +12,7 @@
 > **目前的正式專案**：ref `rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），2026-10-24 建立；migration、`delete-account`、前端設定都已完成，Google 登入已實際測試成功。
 > 2026-10-25：意見回饋的 migration 與 `feedback` 已部署，`RESEND_API_KEY`、`FEEDBACK_TO` 已設定（見 5-2）；Email 一開始沒收到，原因是 `RESEND_API_KEY` 無效（Resend 回 401），2026-10-26 換新 key 後已正常（排查步驟見 5-2 的「沒收到 Email」）
 > 2026-10-26：新版 `feedback`（log 會寫出沒寄信的原因）已先部署；`feature/comments` 的 migration 與前端**尚未部署**，步驟見 5-3
-> 2026-10-25：留言、封鎖不解除好友（1.2.0）、更新內容（1.3.0）都已部署上線；`feature/admin`（開發者後台，1.4.0）與 1.4.1 的修正**尚未部署**，步驟見 5-4
+> 2026-10-25：留言、封鎖不解除好友（1.2.0）、更新內容（1.3.0）、開發者後台（1.4.0）與 1.4.1 的修正都已部署上線；`feature/profile`（個人檔案，1.5.0）**尚未部署**，步驟見 5-5
 
 ## 1. 建立 Supabase 專案（你）
 
@@ -192,6 +192,21 @@ from private.admins a join auth.users u on u.id = a.user_id;
 - 操作紀錄 `public.admin_audit_log` 連 SQL Editor 都不能修改或刪除（trigger 擋下）
 
 最後才把分支合併到 main 並 push（前端 1.4.0）。手機按「更新」後，開發者的 ☰ 會出現「🛠️ 開發者後台」。
+
+## 5-5. 部署 feature/profile（個人檔案，1.5.0）
+
+一樣**後端先上、前端最後**。舊版 App 讀 profiles 只用 `id, nickname, friend_code, avatar_path`，改成欄位層級權限後照常運作：
+
+```sh
+npx supabase@2.120.0 link --project-ref rygsjrzddhhhdqpoayoa
+npx supabase@2.120.0 db push --dry-run      # 應該只列出 20261028100000_profile_fields.sql
+npx supabase@2.120.0 db push                # 套用（確認後輸入 Y）
+git push                                    # 合併到 main 之後；GitHub Pages 部署成 1.5.0
+```
+
+- migration：profiles 新增 `bio`、`favorite_gear`、`favorite_beans`（check 限制長度、行數、控制字元）；profiles 改成欄位層級的讀取權限；新函式 `public.profile_detail`
+- 沒有新的 Edge Function、沒有新的 secret
+- ⚠ Supabase 後台的 Table Editor 用的是管理者權限，照樣看得到全部欄位；SQL Editor 也是
 
 ## 6. 實際登入一次（你）
 

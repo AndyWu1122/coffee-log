@@ -17,6 +17,8 @@ const routes = [
   // 社群：動態牆與紀錄的詳細頁（底部分頁，js/config.js 沒設定時不顯示）；#/social?mine=1 只看自己的
   { pattern: /^\/social$/, tab: 'social', load: () => import('./views/feed.js') },
   { pattern: /^\/social\/([\w-]+)\/([\w-]+)$/, tab: 'social', load: () => import('./views/feedDetail.js') },
+  // 個人檔案（頭像、暱稱點過來；自己的從 ☰ →「帳號」進來）
+  { pattern: /^\/user\/([\w-]+)$/, tab: 'social', load: () => import('./views/profile.js') },
   // ☰ 選單裡的頁面：不屬於任何底部分頁（tab: null）
   { pattern: /^\/backup$/, tab: null, load: () => import('./views/backup.js') },
   { pattern: /^\/privacy$/, tab: null, load: () => import('./views/privacy.js') },

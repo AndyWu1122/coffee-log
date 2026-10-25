@@ -5,7 +5,7 @@ import {
   getSocialState, socialErrorMessage, listFriends, sendFriendRequest, normalizeFriendCode, formatFriendCode,
   acceptFriend, removeFriendship, blockUser, unblockUser, toLocalDateStr,
 } from '../models.js';
-import { esc, setTitle, toast, showErrors, avatarHtml, showMessage, copyText, notifyBadgesChanged } from './ui.js';
+import { esc, setTitle, toast, showErrors, avatarHtml, showMessage, copyText, notifyBadgesChanged, profileHref } from './ui.js';
 
 export async function render(container, { query, isCurrent }) {
   setTitle('好友管理');
@@ -58,16 +58,17 @@ function renderNotReady(container, state, code) {
 
 const dateOf = (iso) => (iso ? toLocalDateStr(new Date(iso)) : '');
 
-function personHtml(p, meta, buttons) {
-  return `
-    <li class="person" data-id="${esc(p.id)}" data-name="${esc(p.nickname)}">
-      <div class="person-head">
+/** link：頭像和暱稱連到個人檔案（封鎖名單不連：打開也只會是「找不到這個用戶」） */
+function personHtml(p, meta, buttons, { link = true } = {}) {
+  const head = `
         ${avatarHtml(p)}
         <div class="person-text">
           <div class="person-name">${esc(p.nickname)}</div>
           ${meta ? `<div class="hint">${esc(meta)}</div>` : ''}
-        </div>
-      </div>
+        </div>`;
+  return `
+    <li class="person" data-id="${esc(p.id)}" data-name="${esc(p.nickname)}">
+      ${link ? `<a class="person-head person-link" href="${esc(profileHref(p.id))}">${head}</a>` : `<div class="person-head">${head}</div>`}
       <div class="person-actions">${buttons}</div>
     </li>`;
 }
@@ -104,7 +105,7 @@ function renderReady(container, { user }, lists, { code, rerender }) {
     ${sectionHtml('outgoing', '送出的邀請', outgoing, '', (p) => personHtml(p, `${dateOf(p.since)} 送出，等對方接受`,
       btn('cancel', '取消邀請')))}
     ${sectionHtml('blocked', '封鎖名單', blocked, '', (p) => personHtml(p, `${dateOf(p.since)} 封鎖`,
-      btn('unblock', '解除封鎖')))}
+      btn('unblock', '解除封鎖'), { link: false }))}
   </div>`;
 
   const form = container.querySelector('#add-form');

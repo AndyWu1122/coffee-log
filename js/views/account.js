@@ -4,7 +4,7 @@ import {
   createProfile, updateNickname, prepareAvatar, saveAvatar, removeAvatar, PHOTO_ACCEPT,
   formatFriendCode, friendInviteUrl, qrSvg, regenerateFriendCode, deleteAccount,
 } from '../models.js';
-import { esc, setTitle, toast, showErrors, avatarHtml, showMessage, copyText, notifyBadgesChanged } from './ui.js';
+import { esc, setTitle, toast, showErrors, avatarHtml, showMessage, copyText, notifyBadgesChanged, profileHref } from './ui.js';
 
 export async function render(container, { isCurrent }) {
   setTitle('帳號');
@@ -132,6 +132,7 @@ function renderReady(container, { user, profile }, { isCurrent, rerender }) {
       <button type="button" class="link-btn" data-action="regenerate">重新產生代碼（舊代碼會失效）</button>
     </section>
 
+    <a class="btn btn-block" href="${esc(profileHref(user.id))}">我的個人檔案</a>
     <a class="btn btn-block" href="#/friends">好友與邀請</a>
 
     <section class="section account-signout">

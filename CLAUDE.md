@@ -31,11 +31,11 @@ js/config.js       # Supabase 連線設定（依網址：localhost → 本機、
 js/cloud.js        # 唯一存取 Supabase 的地方（角色和 db.js 一樣）；supabase-js 用到才載入
 js/sync.js         # 好友紀錄的同步（本機 friends 紀錄 → shared_brews），只由 models.js 使用
 js/vendor/         # 第三方檔案原封不動（supabase-js UMD、qrcode-generator），來源與 SRI 見 js/vendor/README.md
-js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, changelog（更新內容）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, privacy（隱私說明）, feedback（意見回饋）, admin（開發者後台）, ui（共用 DOM 工具）
+js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, changelog（更新內容）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, profile（個人檔案）, privacy（隱私說明）, feedback（意見回饋）, admin（開發者後台）, ui（共用 DOM 工具）
 icons/
 docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟、部署指令）、overnight-report.md（2026-10-26 通宵工作的報告）
 supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）、functions/admin-delete-user（開發者刪別人的帳號）、functions/_shared/account.ts（兩者共用的刪除流程）、functions/feedback（意見回饋：存檔＋寄 Email 給站長；mail.ts 是設定檢查與錯誤說明的純函式）
-scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs（後兩個不需要 Supabase）
+scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs（後兩個不需要 Supabase）
 tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mjs 用 headless Chrome 開；不屬於 App、不放進 ASSETS）
 ```
 
@@ -63,7 +63,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - id 用 crypto.randomUUID()
 
 ## 路由（hash）
-`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/account` 帳號｜`#/friends` 好友管理｜`#/social` 社群（全部）｜`#/social?mine=1` 社群（我的）｜`#/social/<owner>/<id>` 紀錄詳細（`?comments=1` 捲到留言區）｜`#/privacy` 隱私說明｜`#/changelog` 更新內容｜`#/feedback` 意見回饋｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）｜`#/admin?tab=reports|posts|users|feedback|log` 開發者後台｜`#/admin/user/<id>`｜`#/admin/post/<owner>/<id>`
+`#/` 紀錄列表｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/account` 帳號｜`#/friends` 好友管理｜`#/social` 社群（全部）｜`#/social?mine=1` 社群（我的）｜`#/social/<owner>/<id>` 紀錄詳細（`?comments=1` 捲到留言區）｜`#/user/<id>` 個人檔案｜`#/privacy` 隱私說明｜`#/changelog` 更新內容｜`#/feedback` 意見回饋｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）｜`#/admin?tab=reports|posts|users|feedback|log` 開發者後台｜`#/admin/user/<id>`｜`#/admin/post/<owner>/<id>`
 - 1.1.0 以前的 `#/feed`、`#/feed/<owner>/<id>` 由 app.js 轉址到 `#/social…`
 
 ## 介面配置
@@ -139,7 +139,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 
 ## 咖啡社群（後端：Supabase）
 規格見 `docs/social-spec.md`（分 5 階段，每階段通過測試、使用者確認後才進下一階段）；待決事項與決定見 `docs/social-open-questions.md`。
-目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）、階段 3（帳號與好友）、階段 4（動態牆與同步）、階段 5（安全與隱私收尾），之後加上留言與回覆、封鎖不解除好友（都已部署），開發者後台（`feature/admin`，正式專案尚未部署，步驟見 `docs/supabase-setup.md` 5-4）。正式專案：`rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），migration 與 `delete-account` 已部署；建立與設定步驟見 `docs/supabase-setup.md`。
+目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）、階段 3（帳號與好友）、階段 4（動態牆與同步）、階段 5（安全與隱私收尾），之後加上留言與回覆、封鎖不解除好友（都已部署），開發者後台（已部署）；個人檔案（`feature/profile`，正式專案尚未部署，步驟見 `docs/supabase-setup.md` 5-5）。正式專案：`rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），migration 與 `delete-account` 已部署；建立與設定步驟見 `docs/supabase-setup.md`。
 
 ### 資安規則（每個階段都必須遵守）
 - 每張表和 Storage bucket 都必須開 RLS，預設拒絕
@@ -233,6 +233,18 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - `admin_audit_log`：只有開發者可讀；trigger 擋下 update、delete、truncate（連 service_role、資料庫擁有者都不行）；沒有外鍵（對象刪除帳號後紀錄仍在）；不存被刪的內容本身。本機測試留下的紀錄刪不掉，`db reset` 才會清空
 - 這次不做停權：刪掉的帳號可以用同一個 Google 帳號重新註冊
 
+### 個人檔案（`#/user/<id>`，`js/views/profile.js`）
+- profiles 的 `bio`（≤ 150 字、≤ 5 行，除了 
+ 不可有控制字元）、`favorite_gear`、`favorite_beans`（≤ 50 字、單行），都是 `not null default ''`，check 強制（`20261028100000_profile_fields.sql`）
+- **profiles 是欄位層級的讀取權限**：只開放 `id, nickname, friend_code, avatar_path`；新欄位和 `created_at` 不能直接讀（`select *` 也會 42501），**PostgREST 讀 profiles 一律列出欄位**（`return=representation` 要加 `select=`）
+  - 完整檔案只能走 `public.profile_detail(target)`（security definer）：本人或 `private.can_view`（已接受、雙方沒有封鎖）才回傳，含貼文數、加入日期；其他一律 null
+  - 新增要給別人看的 profile 欄位時：不要 grant select，放進 `profile_detail`
+- 頁面的判斷（`models.getUserProfile`）：完整檔案 → 全部；我封鎖了他、或好友卻拿不到（有封鎖）→「找不到這個用戶」；待處理邀請、或在讀得到的留言裡有他的暱稱快照 →「你們還不是好友」＋暱稱＋首字頭像；其他（含帳號已刪除）→ 找不到
+- 自我介紹用 `esc()`＋CSS `white-space: pre-line`，不要把 
+ 換成 `<br>`
+- 頭像、暱稱點過去（`ui.profileHref`）：社群卡片與詳細頁（`feedCardHtml` 的 `.person-link`）、留言的頭像／暱稱／@暱稱（`.comment-avatar`、`.hit-area`）、好友管理名單（封鎖名單不連）；點擊範圍 ≥ 44px，不和按讚、回覆、刪除重疊（social-profile-test 會量）
+- 編輯：自己的檔案頁「編輯個人檔案」（頭像、暱稱、自我介紹、器材、豆子，輸入框顯示「n／上限」）；☰ →「帳號」有「我的個人檔案」入口
+
 ### 意見回饋
 - ☰ →「意見回饋」（`#/feedback`），要登入才能送（防灌送）；類型（bug/idea/other）、內容 ≤ 1000 字，附暱稱（author）與 App 版本號（`feedback.app_version` 是文字：`x.y.z` 或舊版的整數字串），不附 email
 - `feedback` 表和檢舉一樣：只能以自己的名義新增，誰都讀不到（連作者自己），站長在 Supabase 後台看；刪除帳號時 cascade 刪除
@@ -258,6 +270,8 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - `node scripts/supabase-comments-test.mjs`：留言的權限從 API 層測（A、B 好友，C 非好友，D 被封鎖）：兩層、回覆對象、內容、每日上限、封鎖、解除好友、改回只有我、刪除帳號（delete-account）
 - `node scripts/social-comments-test.mjs`：三個 headless Chrome（A、B、D）測留言畫面：回覆位置、@暱稱、收起、刪除權限與確認、送出失敗改回、300 字、數字徽章與 99+、全部／我的、封鎖、XSS、CSP
 - `node scripts/admin-api-test.mjs`：開發者後台的權限從 API 層測（一般使用者改 user_metadata、把自己加進 admins 都拿不到權限；開發者刪留言、貼文、帳號；操作紀錄連 service_role 都改不了）；用 `docker exec supabase_db_coffee-log psql` 加測試用的開發者
+- `node scripts/supabase-profile-test.mjs`：個人檔案的權限從 API 層測（A、B 好友，C 非好友，D 被封鎖的好友，E 邀請中）：新欄位誰都不能直接讀、`profile_detail` 只給本人和沒有封鎖的好友、不能改別人的、長度與控制字元被拒絕
+- `node scripts/social-profile-test.mjs`：headless Chrome 測個人檔案頁（好友看到全部、非好友只有暱稱快照、封鎖找不到、XSS、從卡片／詳細頁／留言／@暱稱／好友名單跳轉、點擊範圍 44px、編輯）
 - `node scripts/admin-ui-test.mjs`：headless Chrome 測後台畫面（入口只有開發者看得到、原因必填與確認、刪完畫面更新、作者看到「已被移除」、XSS、CSP）
 - 新增 Edge Function 後本機要 `npx supabase@2.120.0 stop` 再 `start` 才會載入（只改程式的話 `docker restart supabase_edge_runtime_coffee-log` 就好）
 - `node scripts/social-ui-test.mjs`：兩個隔離的 headless Chrome 環境（A、B）操作真的畫面：加好友、封鎖、XSS、頭像 EXIF、登出；登入用 admin API 拿真的 session（Google 登入無法自動化）
