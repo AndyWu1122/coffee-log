@@ -237,6 +237,29 @@ try {
   check('封鎖不解除好友（B 讀得到和 A 的好友關係）',
     (await rest(`friendships?status=eq.accepted&or=(requester.eq.${A.id},addressee.eq.${A.id})`, { token: B.token })).json?.length === 1);
 
+  /* ===== 同一支手機換帳號：前一個帳號分享的不會傳到新帳號，也不會被刪 ===== */
+  const ownRow = async (user, id) => rows(await rest(`shared_brews?owner=eq.${user.id}&id=eq.${id}`, { token: user.token }));
+  const aBrew = await m(pa, `(await m.saveBrew(${q({ ...offlineBrew, notes: 'A 帳號分享的' })})).brew.id`);
+  await m(pa, 'm.syncNow()');
+  check('（A 分享的紀錄在 A 的雲端）', (await ownRow(A, aBrew))?.length === 1);
+  await signIn(pa, await realSession(C));
+  const asC = await m(pa, 'm.syncNow()');
+  check('換成 C 登入後同步：A 的紀錄沒有傳到 C', asC.status === 'done' && (await ownRow(C, aBrew))?.length === 0, JSON.stringify(asC));
+  check('換成 C 登入後同步：A 雲端的那筆沒被刪', (await ownRow(A, aBrew))?.length === 1);
+  check('換成 C 登入：那筆顯示「用另一個帳號分享的」', (await m(pa, `m.getShareStatus(${q(aBrew)})`))?.text.includes('另一個帳號'));
+  const cBrew = await m(pa, `(await m.saveBrew(${q({ ...offlineBrew, notes: 'C 帳號分享的' })})).brew.id`);
+  await m(pa, 'm.syncNow()');
+  check('C 新分享的紀錄傳到 C 的雲端', (await ownRow(C, cBrew))?.length === 1);
+  await signIn(pa, await realSession(A));
+  await m(pa, 'm.syncNow()');
+  check('換回 A：A 的那筆還在、C 的沒有傳到 A', (await ownRow(A, aBrew))?.length === 1 && (await ownRow(A, cBrew))?.length === 0);
+  check('換回 A：A 的那筆是「已分享」，C 的是「另一個帳號」',
+    (await m(pa, `m.getShareStatus(${q(aBrew)})`))?.text === '已分享給好友'
+      && (await m(pa, `m.getShareStatus(${q(cBrew)})`))?.text.includes('另一個帳號'));
+  await m(pa, `Promise.all([${q(aBrew)}, ${q(cBrew)}].map((id) => m.deleteBrew(id)))`);
+  await m(pa, 'm.syncNow()');
+  check('刪掉後：A 的雲端跟著刪除，C 的那筆（A 刪不到）留在 C 的雲端', (await ownRow(A, aBrew))?.length === 0 && (await ownRow(C, cBrew))?.length === 1);
+
   check('A 的頁面沒有 JavaScript 錯誤', pa.errors.length === 0, pa.errors.join(' / '));
   pa.errors.length = 0;
 

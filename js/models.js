@@ -1020,6 +1020,7 @@ const SHARE_STATUS = {
   invalid: { tone: 'warn', text: '內容不符合雲端的限制，無法分享，請修改內容' },
   failed: { tone: 'warn', text: '上傳失敗，稍後會自動再試' },
   removed: { tone: 'warn', text: '這筆紀錄已被開發者移除，無法再分享' },
+  'other-account': { tone: 'warn', text: '這筆是用另一個帳號分享的，登入那個帳號才會同步' },
 };
 
 /** 紀錄的分享狀態 { tone, text }（只讀本機）；只有我的紀錄回傳 null */
@@ -1309,14 +1310,18 @@ export async function sendFeedback({ category, message, appVersion = null }) {
 
 /**
  * 刪除我的帳號：雲端的 profile、分享的紀錄、照片、頭像、讚、好友關係、意見回饋全部刪除，立即生效
- * 本機資料保留；分享給好友的紀錄全部改回「只有我」（之後用新帳號登入也不會自動上傳），清掉同步狀態
+ * 本機資料保留；這個帳號分享的紀錄改回「只有我」（之後用新帳號登入也不會自動上傳），清掉這個帳號的同步狀態
+ * 同一支手機上用另一個帳號分享的紀錄不動（那個帳號的貼文還在）
  */
 export async function deleteAccount() {
+  const userId = await sync.sessionUserId();
   await cloud.deleteAccount();
-  const shared = (await db.getAll('brews')).filter((b) => b.visibility === 'friends');
+  const [brews, states] = await Promise.all([db.getAll('brews'), db.getAll('sync')]);
+  const otherAccount = new Set(states.filter((st) => st.userId !== userId).map((st) => st.brewId));
+  const shared = brews.filter((b) => b.visibility === 'friends' && !otherAccount.has(b.id));
   await db.transact(['brews', 'sync'], (s) => {
     for (const b of shared) s.brews.put({ ...b, visibility: 'private' });
-    s.sync.clear();
+    for (const st of states) if (!otherAccount.has(st.brewId)) s.sync.delete(st.brewId);
   });
   return { privatized: shared.length };
 }

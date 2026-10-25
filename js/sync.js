@@ -2,6 +2,8 @@
 // 不記「要做哪些動作」，而是每次比對「本機現在應該長怎樣」和 sync store 記的「上次同步的內容」，有差異就補送：
 // 離線、沒登入、匯入備份、改了豆子名稱，下次同步時都會自動補上；衝突一律以本機為準（直接覆蓋雲端）
 // 只刪這台裝置認得的雲端紀錄（sync store 有、或本機有這筆），別台裝置上傳的不會被誤刪
+// 同一支手機換帳號：sync store 的 userId 記著這筆是用哪個帳號分享的，別的帳號的紀錄不上傳、不刪，
+// 換回原本的帳號時照常同步；從來沒同步過的紀錄算目前登入的帳號
 import * as db from './db.js';
 import * as cloud from './cloud.js';
 import { photoForUpload } from './image.js';
@@ -95,11 +97,12 @@ async function syncOnce() {
     if (!user) return { ...result, status: 'signed-out' };
     if (!(await cloud.getMyProfile(user.id))) return { ...result, status: 'no-profile' };
 
-    // 換了帳號登入：上一個帳號的同步紀錄不再有效（那些雲端紀錄這個帳號也刪不到）
+    // 用別的帳號分享過的紀錄：不屬於現在這個帳號，不上傳、不刪（同步紀錄留著，換回那個帳號時繼續用）
     const known = new Map();
+    const foreign = new Set();
     for (const s of states) {
       if (s.userId === user.id) known.set(s.brewId, s);
-      else await db.remove('sync', s.brewId);
+      else foreign.add(s.brewId);
     }
     const remote = new Map((await cloud.listMySharedBrews(user.id)).map((r) => [r.id, r]));
     const localIds = new Set(brews.map((b) => b.id));
@@ -108,7 +111,7 @@ async function syncOnce() {
     // 1. 改回 private 或已刪除的：先刪紀錄（好友立刻讀不到），再用 Storage API 刪照片
     const toDelete = new Set([...remote.keys(), ...known.keys()]);
     for (const id of toDelete) {
-      if (friendIds.has(id) || !(known.has(id) || localIds.has(id))) continue;
+      if (friendIds.has(id) || foreign.has(id) || !(known.has(id) || localIds.has(id))) continue;
       const st = known.get(id);
       try {
         if (remote.has(id)) await cloud.deleteSharedBrew(user.id, id);
@@ -126,6 +129,7 @@ async function syncOnce() {
     // 2. 新增或修改：新的先送（遇到每天的上限時，最近的紀錄先分享出去）
     let insertBlocked = false;
     for (const brew of [...friends].sort((a, b) => b.brewedAt.localeCompare(a.brewedAt))) {
+      if (foreign.has(brew.id)) continue;                                                     // 另一個帳號的
       const st = known.get(brew.id);
       const d = await desired(brew, user.id);
       const exists = remote.has(brew.id);
@@ -202,14 +206,15 @@ export function request() {
  * 一筆紀錄的分享狀態（只讀本機，不連網路）：
  * off（只有我）、signed-out（沒登入）、synced（已分享）、pending（等待上傳）、
  * rate_limited（今天的額度用完）、invalid（內容不符合雲端的限制）、failed（上傳失敗，會再試）、
- * removed（被開發者移除，不會再上傳）
+ * removed（被開發者移除，不會再上傳）、other-account（用另一個帳號分享的，登入那個帳號才會同步）
  */
 export async function brewStatus(brew) {
   if (brew?.visibility !== 'friends') return 'off';
   const userId = await sessionUserId();
   if (!userId) return 'signed-out';
   const st = await db.get('sync', brew.id);
-  if (!st || st.userId !== userId) return 'pending';
+  if (!st) return 'pending';
+  if (st.userId !== userId) return 'other-account';
   if (st.error === 'removed') return 'removed';
   const d = await desired(brew, userId);
   if (st.error && st.failedRow === d.json) return st.error;
