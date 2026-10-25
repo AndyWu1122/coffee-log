@@ -96,7 +96,7 @@ export function avatarHtml({ nickname, avatarUrl }, { large = false } = {}) {
 }
 
 /**
- * 社群提示（☰ 的好友邀請、「好友」分頁的新貼文）可能改變了：app.js 收到後重新檢查
+ * 提示（☰ 選單的「!」：好友邀請、該備份了、更新內容；「社群」分頁的數字）可能改變了：app.js 收到後重新檢查
  * 用事件通知，views 不直接呼叫 app.js
  */
 export const BADGES_EVENT = 'social-badges-changed';

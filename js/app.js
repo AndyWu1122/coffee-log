@@ -1,6 +1,9 @@
 // 進入點 + hash 路由
 import { esc, toast, appVersion, BADGES_EVENT } from './views/ui.js';
-import { socialAvailable, completeSignIn, requestSync, getSocialBadges, badgeText } from './models.js';
+import {
+  socialAvailable, completeSignIn, requestSync, getSocialBadges, badgeText,
+  getBackupStatus, getChangelogStatus, markChangelogSeen,
+} from './models.js';
 
 // 各 view 用動態 import 延遲載入；每個 view 匯出 render(container, params)
 const routes = [
@@ -17,6 +20,7 @@ const routes = [
   // ☰ 選單裡的頁面：不屬於任何底部分頁（tab: null）
   { pattern: /^\/backup$/, tab: null, load: () => import('./views/backup.js') },
   { pattern: /^\/privacy$/, tab: null, load: () => import('./views/privacy.js') },
+  { pattern: /^\/changelog$/, tab: null, load: () => import('./views/changelog.js') },
   { pattern: /^\/grinders$/, tab: null, load: () => import('./views/grinderList.js') },
   { pattern: /^\/grinders\/new$/, tab: null, load: () => import('./views/grinderForm.js') },
   { pattern: /^\/grinders\/([\w-]+)$/, tab: null, load: () => import('./views/grinderForm.js') },
@@ -150,12 +154,12 @@ function setupServiceWorker() {
   let waitingWorker = null;
   let updateRequested = false;
 
-  // ☰ 選單的版本號（sw.js 的 APP_VERSION）；問不到（更舊的 Service Worker 不會回覆）就維持隱藏
+  // ☰ 選單的版本號（sw.js 的 APP_VERSION，點了到更新內容）；問不到（更舊的 Service Worker 不會回覆）就維持隱藏
   const showVersion = async () => {
     const version = await appVersion();
     if (version == null) return;
     const el = document.getElementById('app-version');
-    el.textContent = `版本 ${version}`;
+    el.firstElementChild.textContent = `版本 ${version}`;
     el.hidden = false;
   };
   showVersion();
@@ -207,36 +211,82 @@ async function start() {
   setupBadges();
 }
 
-/* ===== 咖啡社群的提示 ===== */
-// ☰ 按鈕的「!」：收到好友邀請（強調色）
+/* ===== 提示：☰ 選單的「!」、底部「社群」分頁的數字 ===== */
+// ☰ 選單裡需要注意的那一項後面有「!」（強調色）：好友管理＝收到好友邀請、備份＝超過 14 天沒備份、更新內容＝還沒看過這一版的說明
+// ☰ 按鈕上的「!」＝其中任何一項；備份、更新內容只看本機，沒有社群功能也會顯示
 // 底部「社群」分頁的數字（--badge-new）：好友新貼文＋我貼文的新留言＋回覆我的，超過 99 顯示 99+，0 不顯示
 // 時機和同步一樣（啟動、恢復網路、切回前景），另外 views 操作完會發出 BADGES_EVENT；不做即時推播
 
+const MENU_ALERTS = {
+  friends: { name: '好友管理', reason: '有新的好友邀請' },
+  backup: { name: '備份', reason: '該備份了' },
+  changelog: { name: '更新內容', reason: '有新版的更新內容' },
+};
+
 function setupBadges() {
-  if (!socialAvailable) return;
   const menuBtn = document.getElementById('menu-btn');
+  const menuBadge = document.getElementById('menu-badge');
   const socialTab = document.querySelector('.tabbar [data-tab="social"]');
-  const requestBadge = document.getElementById('request-badge');
   const socialBadge = document.getElementById('social-badge');
+  const updatedBanner = document.getElementById('updated-banner');
+  const alerts = { friends: false, backup: false, changelog: false };
+  let version = null;
+
+  const show = () => {
+    for (const [key, { name, reason }] of Object.entries(MENU_ALERTS)) {
+      const el = document.querySelector(`[data-alert="${key}"]`);
+      el.hidden = !alerts[key];
+      const item = el.closest('[role="menuitem"]');
+      if (alerts[key]) item.setAttribute('aria-label', `${name}（${reason}）`);
+      else item.removeAttribute('aria-label');
+    }
+    const reasons = Object.keys(MENU_ALERTS).filter((key) => alerts[key]).map((key) => MENU_ALERTS[key].reason);
+    menuBadge.hidden = !reasons.length;
+    menuBtn.setAttribute('aria-label', reasons.length ? `選單（${reasons.join('、')}）` : '選單');
+    // 「已更新」的提示：在更新內容頁上就不用了
+    updatedBanner.hidden = !alerts.changelog || parseHash().path === '/changelog';
+    if (version) document.getElementById('updated-text').textContent = `已更新到 ${version}`;
+  };
+
   let token = 0;
   const update = async () => {
     const t = ++token; // 連續觸發時只採用最後一次的結果
     try {
-      const { requests, count } = await getSocialBadges();
+      version ??= await appVersion(); // 第一次安裝時 Service Worker 還沒接管，之後再問
+      const [backup, changelog] = await Promise.all([getBackupStatus(), getChangelogStatus(version)]);
       if (t !== token) return;
-      requestBadge.hidden = !requests;
-      menuBtn.setAttribute('aria-label', requests ? '選單（有新的好友邀請）' : '選單');
-      const text = badgeText(count);
-      socialBadge.textContent = text;
-      socialBadge.hidden = !text;
-      socialTab.setAttribute('aria-label', text ? `社群（${text} 則新通知）` : '社群');
+      alerts.backup = backup.overdue;
+      alerts.changelog = changelog.unseen;
     } catch (err) {
-      console.warn('提示檢查失敗', err); // 離線等：維持原本的顯示
+      console.warn('本機提示檢查失敗', err);
     }
+    if (socialAvailable) {
+      try {
+        const { requests, count } = await getSocialBadges();
+        if (t !== token) return;
+        alerts.friends = requests;
+        const text = badgeText(count);
+        socialBadge.textContent = text;
+        socialBadge.hidden = !text;
+        socialTab.setAttribute('aria-label', text ? `社群（${text} 則新通知）` : '社群');
+      } catch (err) {
+        console.warn('社群提示檢查失敗', err); // 離線等：維持原本的顯示
+      }
+    }
+    if (t === token) show();
   };
+
+  document.getElementById('updated-close').addEventListener('click', async () => {
+    updatedBanner.hidden = true;
+    if (version) await markChangelogSeen(version);
+    update();
+  });
+  window.addEventListener('hashchange', show);
+
   update();
   window.addEventListener(BADGES_EVENT, update);
   window.addEventListener('online', update);
+  navigator.serviceWorker?.addEventListener('controllerchange', update);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') update();
   });

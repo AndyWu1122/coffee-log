@@ -122,6 +122,20 @@ a { color: var(--accent); }
 .notify-badge[hidden] { display: none; }
 .tab-icon .notify-badge { top: -2px; right: -10px; }
 .notify-badge-new { background: var(--badge-new); color: var(--badge-new-text); }
+/* ☰ 選單裡需要注意的那一項（和 ☰ 上的「!」同一個顏色），靠右 */
+.menu-alert {
+  margin-left: auto;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+.menu-alert[hidden] { display: none; }
 .menu-list {
   position: absolute;
   top: calc(100% + 4px);
@@ -150,17 +164,19 @@ a { color: var(--accent); }
 .menu-theme { padding: 4px 6px 6px; }
 .menu-label { display: flex; align-items: center; gap: 10px; padding: 6px 6px 8px; color: var(--text-dim); font-size: 0.9rem; }
 .menu-version {
-  padding: 0 12px 4px;
+  padding: 0 4px 4px;
   color: var(--text-dim);
   font-size: 0.8rem;
   text-align: center;
 }
+/* 版本號是到更新內容頁的連結，但看起來和原本一樣是小字 */
+.menu-list .menu-version a { justify-content: center; min-height: 40px; color: var(--text-dim); }
 /* 上方的分隔線和 .menu-sep 一樣（只在顯示版本號時出現） */
 .menu-version::before {
   content: '';
   display: block;
   height: 1px;
-  margin: 6px -8px 10px;
+  margin: 6px 0 6px;
   background: var(--border);
   opacity: 0.6;
 }
@@ -548,6 +564,9 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 4px 16px var(--shadow);
 }
 .update-banner .btn { min-height: 44px; }
+.update-actions { display: flex; flex: none; gap: 8px; }
+/* 「有新版本可用」出現時，「已更新」先讓它（同一個位置） */
+.update-banner:not([hidden]) ~ #updated-banner { display: none; }
 /* 提示出現時，把 FAB 與 toast 往上移，避免被蓋住 */
 body:has(.update-banner:not([hidden])) .fab { bottom: calc(var(--tabbar-h) + 100px + var(--safe-bottom)); }
 body:has(.update-banner:not([hidden])) .toast { bottom: calc(var(--tabbar-h) + 180px + var(--safe-bottom)); }
@@ -724,3 +743,15 @@ a.feed-body:active { background: var(--surface-2); }
 .danger-zone .plain-list { gap: 8px; }
 .privacy .section ul { gap: 8px; }
 .privacy p { margin: 0; }
+.changelog .section ul { gap: 8px; }
+.changelog > .hint { margin: 0 0 16px; }
+.changelog-new {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 0.8rem;
+  vertical-align: middle;
+}

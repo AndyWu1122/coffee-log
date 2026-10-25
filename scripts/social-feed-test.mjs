@@ -128,9 +128,9 @@ try {
   await pb.waitFor(feedBadge, { label: 'B 的「社群」分頁出現數字' });
   check('好友有新貼文：「社群」分頁顯示 1', (await text(pb, '#social-badge')) === '1');
   check('「社群」分頁的 aria-label 提示有新通知', (await pb.eval(`document.querySelector('.tabbar [data-tab="social"]').getAttribute('aria-label')`)) === '社群（1 則新通知）');
-  const badgeColors = await pb.eval(`['#request-badge', '#social-badge'].map((s) => getComputedStyle(document.querySelector(s)).backgroundColor)`);
+  const badgeColors = await pb.eval(`['#menu-badge', '#social-badge'].map((s) => getComputedStyle(document.querySelector(s)).backgroundColor)`);
   check('新通知的數字和好友邀請的「!」顏色不同', badgeColors[0] !== badgeColors[1], badgeColors.join(' / '));
-  check('沒有好友邀請時 ☰ 沒有「!」', !(await pb.eval(shown('#request-badge'))));
+  check('沒有好友邀請時 ☰ 沒有「!」', !(await pb.eval(shown('[data-alert="friends"]'))));
   await visit(pb, base, '#/social');
   await pb.waitFor(`document.querySelector('.feed-card')`, { label: '動態牆的卡片' });
   await pb.waitFor(`!(${feedBadge})`, { label: '看過社群頁後數字消失' });

@@ -47,7 +47,7 @@ try {
   check('本機：☰ 選單有帳號、好友', await pa.eval(`[...document.querySelectorAll('[data-social]')].every((e) => !e.hidden)`));
   check('開 App 時不會載入 supabase-js（用到社群功能才載入）', await pa.eval('!window.supabase'));
   check('沒登入：☰ 沒有「!」、「社群」分頁沒有數字',
-    await pa.eval(`['#request-badge', '#social-badge'].every((s) => getComputedStyle(document.querySelector(s)).display === 'none')`));
+    await pa.eval(`['#menu-badge', '#social-badge'].every((s) => getComputedStyle(document.querySelector(s)).display === 'none')`));
   await visit(pa, base, '#/account');
   await pa.waitFor(`document.querySelector('[data-action="google"]')`, { label: '「用 Google 登入」按鈕' });
   check('沒登入：顯示「用 Google 登入」', true);
@@ -140,7 +140,7 @@ try {
 
   /* ===== ☰ 的「!」：收到邀請的 A 有，送出邀請的 B 沒有 ===== */
   // 檢查實際有沒有畫出來（不只看 hidden 屬性：CSS 的 display 會蓋掉它）
-  const badgeShown = `getComputedStyle(document.querySelector('#request-badge')).display !== 'none'`;
+  const badgeShown = `getComputedStyle(document.querySelector('[data-alert="friends"]')).display !== 'none'`;
   const requestBadge = (page) => page.eval(badgeShown);
   await pa.eval(`document.dispatchEvent(new Event('visibilitychange')); true`); // 切回前景時重新檢查
   await pa.waitFor(badgeShown, { label: 'A 的 ☰ 出現「!」' });

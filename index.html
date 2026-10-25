@@ -23,19 +23,24 @@
 <body>
   <header class="app-header">
     <h1 id="page-title">手沖紀錄</h1>
-    <!-- 不常調整的設定放在這個選單，不加到底部分頁列；☰ 上的「!」＝收到好友邀請（app.js 的 setupBadges） -->
+    <!-- 不常調整的設定放在這個選單，不加到底部分頁列
+         ☰ 上的「!」＝選單裡有任何一項有「!」（.menu-alert：好友邀請、該備份了、還沒看過的更新內容；app.js 的 setupBadges） -->
     <div class="menu">
       <button type="button" class="menu-btn" id="menu-btn" aria-label="選單"
         aria-haspopup="menu" aria-expanded="false" aria-controls="app-menu">☰<span class="notify-badge"
-        id="request-badge" aria-hidden="true" hidden>!</span></button>
+        id="menu-badge" aria-hidden="true" hidden>!</span></button>
       <div class="menu-list" id="app-menu" role="menu" hidden>
         <!-- 咖啡社群：js/config.js 有設定才顯示（app.js 的 setupMenu） -->
         <a role="menuitem" href="#/account" data-social hidden><span aria-hidden="true">👤</span>帳號</a>
-        <a role="menuitem" href="#/friends" data-social hidden><span aria-hidden="true">🤝</span>好友管理</a>
+        <a role="menuitem" href="#/friends" data-social hidden><span aria-hidden="true">🤝</span>好友管理<span
+          class="menu-alert" data-alert="friends" aria-hidden="true" hidden>!</span></a>
         <div class="menu-sep" role="separator" data-social hidden></div>
         <a role="menuitem" href="#/grinders"><span aria-hidden="true">⚙️</span>磨豆機</a>
-        <a role="menuitem" href="#/backup"><span aria-hidden="true">💾</span>備份</a>
+        <a role="menuitem" href="#/backup"><span aria-hidden="true">💾</span>備份<span
+          class="menu-alert" data-alert="backup" aria-hidden="true" hidden>!</span></a>
         <a role="menuitem" href="#/privacy"><span aria-hidden="true">🔒</span>隱私說明</a>
+        <a role="menuitem" href="#/changelog"><span aria-hidden="true">✨</span>更新內容<span
+          class="menu-alert" data-alert="changelog" aria-hidden="true" hidden>!</span></a>
         <!-- 意見回饋：要登入才能送（防灌送），js/config.js 沒設定時不顯示 -->
         <a role="menuitem" href="#/feedback" data-social hidden><span aria-hidden="true">💬</span>意見回饋</a>
         <div class="menu-sep" role="separator"></div>
@@ -47,8 +52,8 @@
             <button type="button" role="menuitemradio" data-theme-pref="dark" aria-checked="false">深色</button>
           </div>
         </div>
-        <!-- 版本號＝sw.js 的 APP_VERSION（app.js 向 Service Worker 詢問）；沒有 Service Worker 時不顯示 -->
-        <div class="menu-version" id="app-version" hidden></div>
+        <!-- 版本號＝sw.js 的 APP_VERSION（app.js 向 Service Worker 詢問）；沒有 Service Worker 時不顯示；點了到更新內容 -->
+        <div class="menu-version" id="app-version" hidden><a role="menuitem" href="#/changelog"></a></div>
       </div>
     </div>
   </header>
@@ -73,6 +78,15 @@
   <div id="update-banner" class="update-banner" role="alert" hidden>
     <span>有新版本可用</span>
     <button type="button" class="btn btn-primary" id="update-btn">更新</button>
+  </div>
+
+  <!-- 更新完、還沒看過這一版的更新內容時顯示（app.js 的 setupBadges）；「有新版本可用」出現時先讓它 -->
+  <div id="updated-banner" class="update-banner" role="status" hidden>
+    <span id="updated-text">已更新到新版本</span>
+    <span class="update-actions">
+      <a class="btn btn-primary" href="#/changelog" id="updated-link">看看改了什麼</a>
+      <button type="button" class="btn" id="updated-close" aria-label="關閉，不用看">✕</button>
+    </span>
   </div>
 </body>
 </html>

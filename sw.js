@@ -1,7 +1,7 @@
 // Service Worker：安裝時預先快取所有檔案，之後一律從快取讀取（離線可用）
 // ⚠ 修改任何前端檔案後，APP_VERSION 至少第三碼 +1，使用者才會收到新版本（規則見 CLAUDE.md「版本號」）
 // 它也是 ☰ 選單顯示的版本號、意見回饋附的版本（app.js 用 'version' 訊息詢問）
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const CACHE_NAME = `coffee-log-v${APP_VERSION}`;
 
 const ASSETS = [
@@ -14,6 +14,7 @@ const ASSETS = [
   'js/db.js',
   'js/models.js',
   'js/flavorWheel.js',
+  'js/changelog.js',
   'js/image.js',
   'js/cardLayout.js',
   'js/config.js',
@@ -37,6 +38,7 @@ const ASSETS = [
   'js/views/feedDetail.js',
   'js/views/comments.js',
   'js/views/privacy.js',
+  'js/views/changelog.js',
   'js/views/feedback.js',
   'icons/icon.svg',
   'icons/icon-192.png',

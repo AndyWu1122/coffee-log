@@ -3,11 +3,13 @@ import * as db from './db.js';
 import { isFlavorNote, sortFlavorNotes, flavorNote } from './flavorWheel.js';
 import { compressPhoto, compressAvatar, makeThumb, blobToBase64, base64ToBytes, base64Length, jpegSize, PHOTO_TYPES } from './image.js';
 import { shareFileName } from './cardLayout.js';
+import { CHANGELOG, compareVersions } from './changelog.js';
 import * as cloud from './cloud.js';
 import * as sync from './sync.js';
 
 // views 只依賴 models，風味輪資料、圖片解碼、分享卡片的計算由這裡轉出
 export { FLAVOR_WHEEL, flavorNote, sortFlavorNotes } from './flavorWheel.js';
+export { CHANGELOG } from './changelog.js';
 export { decodeImage, photoForUpload } from './image.js';
 export { coverCrop, radarPoints, wrapText, layoutChips } from './cardLayout.js';
 export { cloudPhotoPath } from './sync.js';
@@ -545,8 +547,9 @@ const BACKUP_REMIND_DAYS = 14; // 超過幾天沒備份就在首頁提醒
 const BACKUP_SNOOZE_DAYS = 3;  // 按「稍後」後幾天內不再提醒
 
 /**
- * 備份狀態：{ lastBackupAt, daysSince, remind }
- * remind：有紀錄，且距上次備份（沒備份過則從最早一筆紀錄起算）≥ 14 天，且不在「稍後」期間
+ * 備份狀態：{ lastBackupAt, daysSince, overdue, remind }
+ * overdue：有紀錄，且距上次備份（沒備份過則從最早一筆紀錄起算）≥ 14 天（☰ 和「備份」的「!」，按「稍後」也照樣顯示）
+ * remind：overdue 且不在「稍後」期間（首頁的提醒卡片）
  */
 export async function getBackupStatus() {
   const [lastBackupAt, snoozeUntil, brews] = await Promise.all([
@@ -557,7 +560,7 @@ export async function getBackupStatus() {
   const since = lastBackupAt ?? brews.reduce((min, b) => (!min || b.brewedAt < min ? b.brewedAt : min), null);
   const overdue = brews.length > 0 && since != null && daysBetween(toLocalDateStr(since), today) >= BACKUP_REMIND_DAYS;
   const snoozed = snoozeUntil != null && new Date() < new Date(snoozeUntil);
-  return { lastBackupAt, daysSince, remind: overdue && !snoozed };
+  return { lastBackupAt, daysSince, overdue, remind: overdue && !snoozed };
 }
 
 /** 匯出後呼叫：記下備份時間 */
@@ -569,6 +572,36 @@ export async function recordBackup() {
 /** 首頁提醒按「稍後」：3 天內不再提醒 */
 export const snoozeBackupReminder = () =>
   db.setMeta('backupSnoozeUntil', new Date(Date.now() + BACKUP_SNOOZE_DAYS * 86400000).toISOString());
+
+/* ===== 更新內容（js/changelog.js） ===== */
+
+const CHANGELOG_SEEN_KEY = 'changelogSeen'; // 看過哪一版的更新內容（版本號字串）
+
+/**
+ * 更新內容的狀態：{ unseen: 有沒有還沒看過的新版說明, seen: 上次看過的版本（沒有＝null） }
+ * version：目前在跑的版本（ui.appVersion；沒有 Service Worker 時是 null，一律不提示）
+ * 還沒記過的話：全新安裝（沒有任何豆子、紀錄）直接記成目前版本、不提示；已經在用的人算「剛更新」
+ */
+export async function getChangelogStatus(version) {
+  if (!version) return { unseen: false, seen: null };
+  const seen = await db.getMeta(CHANGELOG_SEEN_KEY);
+  if (seen == null) {
+    const [brews, beans] = await Promise.all([db.getAll('brews'), db.getAll('beans')]);
+    if (!brews.length && !beans.length) {
+      await db.setMeta(CHANGELOG_SEEN_KEY, version);
+      return { unseen: false, seen: version };
+    }
+  }
+  // 目前版本要有寫更新內容才提示（只看得到舊版說明的話不提示）
+  const hasEntry = CHANGELOG.some((e) => e.version === version);
+  return { unseen: hasEntry && compareVersions(version, seen) > 0, seen };
+}
+
+/** 看過了（打開更新內容頁、或關掉「已更新」的提示） */
+export const markChangelogSeen = (version) => db.setMeta(CHANGELOG_SEEN_KEY, version);
+
+/** 這一段比上次看過的版本新（更新內容頁標「新」） */
+export const isNewerThan = (version, seen) => compareVersions(version, seen) > 0;
 
 /** 「今天」「昨天」「N 天前」 */
 export const formatDaysAgo = (n) => (n === 0 ? '今天' : n === 1 ? '昨天' : `${n} 天前`);

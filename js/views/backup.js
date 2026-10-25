@@ -2,7 +2,7 @@
 import {
   exportData, exportFileName, importData, getBackupStatus, getBackupSummary, recordBackup, formatDaysAgo, formatBytes,
 } from '../models.js';
-import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, downloadJson } from './ui.js';
+import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, downloadJson, notifyBadgesChanged } from './ui.js';
 
 const IMPORT_MODES = [
   { value: 'merge', label: '合併' },
@@ -11,10 +11,11 @@ const IMPORT_MODES = [
 
 const shortDate = new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric' });
 
-/** 下載備份檔並記下備份時間（首頁的備份提醒也用這個，預設包含照片） */
+/** 下載備份檔並記下備份時間（首頁的備份提醒也用這個，預設包含照片）；☰ 和「備份」的「!」跟著消失 */
 export async function exportBackup({ includePhotos = true } = {}) {
   downloadJson(exportFileName(), await exportData({ includePhotos }));
   await recordBackup();
+  notifyBadgesChanged();
 }
 
 /** 匯出、匯入失敗的原因（可直接顯示） */
@@ -124,6 +125,7 @@ export async function render(container, { isCurrent }) {
       return;
     }
     toast(`已匯入 ${result.beans} 支豆子、${result.grinders} 台磨豆機、${result.brews} 筆紀錄、${result.photos} 張照片`);
+    notifyBadgesChanged(); // 紀錄變了，該不該備份可能跟著變
     location.hash = '#/';
   });
 }
