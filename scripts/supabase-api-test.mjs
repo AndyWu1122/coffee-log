@@ -20,7 +20,7 @@ try {
 
   /* ----- 建立 profile、成為好友、A 上傳一筆紀錄 ----- */
   for (const [name, u] of Object.entries(users)) {
-    const r = await rest('profiles', { method: 'POST', token: u.token, body: { nickname: name }, headers: representation });
+    const r = await rest('profiles?select=id,nickname', { method: 'POST', token: u.token, body: { nickname: name }, headers: representation });
     check(`${name} 建立自己的 profile`, r.status === 201, `HTTP ${r.status}`);
   }
   const aCode = rows(await rest('profiles?select=friend_code', { token: A.token }))[0].friend_code;
@@ -48,7 +48,7 @@ try {
 
   /* ----- C（不是好友） ----- */
   check('C 讀不到 A 的紀錄', rows(await rest('shared_brews?select=*', { token: C.token }))?.length === 0);
-  check('C 讀不到 A 的 profile', rows(await rest(`profiles?id=eq.${A.id}`, { token: C.token }))?.length === 0);
+  check('C 讀不到 A 的 profile', rows(await rest(`profiles?select=id&id=eq.${A.id}`, { token: C.token }))?.length === 0);
   check('C 只看得到自己的 profile（不能列出所有使用者）', rows(await rest('profiles?select=id', { token: C.token }))?.length === 1);
   const cAccept = await rest(`friendships?requester=eq.${B.id}`, {
     method: 'PATCH', token: C.token, body: { status: 'pending' }, headers: representation,
@@ -113,7 +113,7 @@ try {
   check('A 封鎖 B', block.status === 201, `HTTP ${block.status} ${block.text}`);
   check('封鎖後 B 讀不到 A 的紀錄', rows(await rest('shared_brews?select=*', { token: B.token }))?.length === 0);
   check('封鎖後 A 也讀不到 B 的紀錄', rows(await rest(`shared_brews?owner=eq.${B.id}`, { token: A.token }))?.length === 0);
-  check('封鎖不解除好友：B 仍讀得到 A 的 profile', rows(await rest(`profiles?id=eq.${A.id}`, { token: B.token }))?.length === 1);
+  check('封鎖不解除好友：B 仍讀得到 A 的 profile', rows(await rest(`profiles?select=id&id=eq.${A.id}`, { token: B.token }))?.length === 1);
   check('封鎖不解除好友：好友關係還在',
     rows(await rest(`friendships?status=eq.accepted&or=(requester.eq.${A.id},addressee.eq.${A.id})`, { token: B.token }))?.length === 1);
   check('B 看不到自己被封鎖', rows(await rest('blocks?select=*', { token: B.token }))?.length === 0);
