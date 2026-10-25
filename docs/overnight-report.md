@@ -1,5 +1,7 @@
 # 通宵報告：feature/comments（2026-10-26）
 
+> **後續（早上）**：Email 的真正原因是 `RESEND_API_KEY` 無效（新版 log 顯示 Resend 回 401 `API key is invalid`）；secrets 不是假值。已換新 key、收得到信。新版 `feedback` function 已部署，migration 與前端還沒。
+
 分支 `feature/comments`，5 個 commit，**沒有 push、沒有合併、沒有碰正式 Supabase 和金鑰**。
 
 ## 1. 完成了什麼

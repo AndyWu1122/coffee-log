@@ -10,8 +10,8 @@
 ---
 
 > **目前的正式專案**：ref `rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），2026-10-24 建立；migration、`delete-account`、前端設定都已完成，Google 登入已實際測試成功。
-> 2026-10-25：意見回饋的 migration 與 `feedback` 已部署，`RESEND_API_KEY`、`FEEDBACK_TO` 已設定（見 5-2）；但 Email 沒收到，排查見 5-2 的「沒收到 Email」
-> 2026-10-26：`feature/comments` 分支（版本號 x.y.z、留言與回覆）**尚未部署**，步驟見 5-3
+> 2026-10-25：意見回饋的 migration 與 `feedback` 已部署，`RESEND_API_KEY`、`FEEDBACK_TO` 已設定（見 5-2）；Email 一開始沒收到，原因是 `RESEND_API_KEY` 無效（Resend 回 401），2026-10-26 換新 key 後已正常（排查步驟見 5-2 的「沒收到 Email」）
+> 2026-10-26：新版 `feedback`（log 會寫出沒寄信的原因）已先部署；`feature/comments` 的 migration 與前端**尚未部署**，步驟見 5-3
 
 ## 1. 建立 Supabase 專案（你）
 
