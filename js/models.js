@@ -19,9 +19,9 @@ export { coverCrop, radarPoints, wrapText, layoutChips } from './cardLayout.js';
 export { cloudPhotoPath } from './sync.js';
 export { newId } from './id.js';
 
-// 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos；v4 加入 drippers 與 brews.dripperId。匯入時接受所有舊版
-export const SCHEMA_VERSION = 4;
-const IMPORTABLE_VERSIONS = [1, 2, 3, 4];
+// 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos；v4 加入 drippers 與 brews.dripperId；v5 加入 beanPhotos。匯入時接受所有舊版
+export const SCHEMA_VERSION = 5;
+const IMPORTABLE_VERSIONS = [1, 2, 3, 4, 5];
 
 export const PROCESS = { washed: '水洗', natural: '日曬', honey: '蜜處理', other: '其他' };
 // 由淺到深排列
@@ -292,9 +292,12 @@ export function formatStock(stock, { short = false } = {}) {
   return stock.cupsLeft === 0 ? `${grams}，不到 1 杯` : `${grams}，約 ${stock.cupsLeft} 杯`;
 }
 
-/** 豆子列表：未封存在前，再依建立時間新→舊；附上「烘焙至今天數」與剩餘量 stock */
+/** 豆子列表：未封存在前，再依建立時間新→舊；附上「烘焙至今天數」、剩餘量 stock、照片縮圖 thumb（Blob 或 null） */
 export async function listBeans({ includeArchived = false } = {}) {
-  const [beans, brews] = await Promise.all([db.getAll('beans'), db.getAll('brews')]);
+  const [beans, brews, thumbs] = await Promise.all([
+    db.getAll('beans'), db.getAll('brews'), db.getAll('beanThumbs'), // 列表只讀縮圖，不碰原圖
+  ]);
+  const thumbById = new Map(thumbs.map((t) => [t.beanId, t.blob]));
   const brewsByBean = new Map(); // 不用 Map.groupBy：較舊的 iOS Safari 不支援
   for (const b of brews) {
     if (!brewsByBean.has(b.beanId)) brewsByBean.set(b.beanId, []);
@@ -307,6 +310,7 @@ export async function listBeans({ includeArchived = false } = {}) {
       ...b,
       daysSinceRoast: restDays(new Date(), b.roastDate),
       stock: beanStock(b, brewsByBean.get(b.id) ?? [], brews),
+      thumb: thumbById.get(b.id) ?? null,
     }));
 }
 
@@ -320,16 +324,36 @@ export async function getBeanStock(id) {
 
 export const getBean = (id) => db.get('beans', id);
 
-/** 新增或更新豆子；回傳 { ok, bean } 或 { ok: false, errors } */
-export async function saveBean(input) {
+const BEAN_PHOTO_STORES = ['beans', 'beanPhotos', 'beanThumbs'];
+
+/** 豆子的照片 { beanId, blob, width, height, createdAt } 或 undefined */
+export const getBeanPhoto = (beanId) => db.get('beanPhotos', beanId);
+
+/**
+ * 新增或更新豆子；回傳 { ok, bean } 或 { ok: false, errors }
+ * photo：和 saveBrew 一樣（undefined 不動；null 刪除；preparePhoto 的結果則存成這支豆子的照片），豆子與照片在同一個交易寫入
+ * 豆子照片只存在這支手機，不會上傳到社群
+ */
+export async function saveBean(input, { photo } = {}) {
   const existing = input.id ? await db.get('beans', input.id) : null;
   // id、封存狀態、建立時間沿用既有資料，不由表單決定
   const bean = normalizeBean({
     ...input, id: existing?.id, archived: existing?.archived, createdAt: existing?.createdAt,
   });
   const errors = { ...nameLengthErrors(bean, ['name', 'origin']), ...validateBean(bean).errors };
+  if (photo && !(photo.blob instanceof Blob && photo.thumb instanceof Blob)) errors.photo = '照片資料錯誤，請重新選擇';
   if (Object.keys(errors).length) return { ok: false, errors };
-  await db.put('beans', bean);
+  await db.transact(BEAN_PHOTO_STORES, (s) => {
+    s.beans.put(bean);
+    if (photo === null) {
+      s.beanPhotos.delete(bean.id);
+      s.beanThumbs.delete(bean.id);
+    } else if (photo) {
+      const { blob, thumb, width, height } = photo;
+      s.beanPhotos.put({ beanId: bean.id, blob, width, height, createdAt: new Date().toISOString() });
+      s.beanThumbs.put({ beanId: bean.id, blob: thumb });
+    }
+  });
   requestSync(); // 分享出去的紀錄帶著豆子名稱等資訊
   return { ok: true, bean };
 }
@@ -340,13 +364,15 @@ export async function setBeanArchived(id, archived) {
   await db.put('beans', { ...bean, archived: Boolean(archived) });
 }
 
-/** 有紀錄引用的豆子不可刪除 */
+/** 有紀錄引用的豆子不可刪除；照片、縮圖一起刪（同一個交易） */
 export async function deleteBean(id) {
   const count = await db.countByIndex('brews', 'beanId', id);
   if (count > 0) {
     return { ok: false, message: `這支豆子有 ${count} 筆沖煮紀錄，無法刪除，請改用「封存」` };
   }
-  await db.remove('beans', id);
+  await db.transact(BEAN_PHOTO_STORES, (s) => {
+    for (const store of Object.values(s)) store.delete(id);
+  });
   return { ok: true };
 }
 
@@ -713,38 +739,46 @@ const MAX_PHOTO_SIDE = 4096;             // 匯入時照片長寬上限（App �
 
 /** 備份檔的照片欄位（data 為 base64 JPEG）；縮圖不匯出，匯入時重新產生 */
 const photoMeta = (p) => ({ brewId: p.brewId, width: p.width, height: p.height, createdAt: p.createdAt });
+const beanPhotoMeta = (p) => ({ beanId: p.beanId, width: p.width, height: p.height, createdAt: p.createdAt });
 
 /**
- * 匯出用的資料。includePhotos：false 時 photos 為空陣列，photosIncluded 標記為 false
+ * 匯出用的資料。includePhotos：false 時 photos、beanPhotos 為空陣列，photosIncluded 標記為 false
  * （之後匯入「取代全部」時可以提醒這份備份不含照片）
  */
 export async function exportData({ includePhotos = true } = {}) {
-  const [beans, grinders, drippers, brews, photoRows] = await Promise.all([
-    db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'), db.getAll('brews'), includePhotos ? db.getAll('photos') : [],
+  const [beans, grinders, drippers, brews, photoRows, beanPhotoRows] = await Promise.all([
+    db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'), db.getAll('brews'),
+    includePhotos ? db.getAll('photos') : [], includePhotos ? db.getAll('beanPhotos') : [],
   ]);
   const photos = [];
   for (const p of photoRows) photos.push({ ...photoMeta(p), data: await blobToBase64(p.blob) });
+  const beanPhotos = [];
+  for (const p of beanPhotoRows) beanPhotos.push({ ...beanPhotoMeta(p), data: await blobToBase64(p.blob) });
   return {
     schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), photosIncluded: includePhotos,
-    beans, grinders, drippers, brews, photos,
+    beans, grinders, drippers, brews, photos, beanPhotos,
   };
 }
 
 /**
  * 備份頁用的摘要：各類筆數，以及含照片／不含照片時的預估檔案大小（位元組）
- * 只讀照片的 Blob.size，不讀圖片內容
+ * photos 是紀錄和豆子的照片合計（beanPhotos 是其中豆子的）；只讀照片的 Blob.size，不讀圖片內容
  */
 export async function getBackupSummary() {
-  const [beans, grinders, drippers, brews, photoRows] = await Promise.all([
-    db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'), db.getAll('brews'), db.getAll('photos'),
+  const [beans, grinders, drippers, brews, photoRows, beanPhotoRows] = await Promise.all([
+    db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'), db.getAll('brews'), db.getAll('photos'), db.getAll('beanPhotos'),
   ]);
   const base = { schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), photosIncluded: true, beans, grinders, drippers, brews };
   const bytes = (data) => new TextEncoder().encode(JSON.stringify(data, null, 2)).length; // 與 downloadJson 的格式一致
-  const withoutPhotos = bytes({ ...base, photosIncluded: false, photos: [] });
-  const withPhotos = bytes({ ...base, photos: photoRows.map((p) => ({ ...photoMeta(p), data: '' })) })
-    + photoRows.reduce((s, p) => s + base64Length(p.blob.size), 0);
+  const withoutPhotos = bytes({ ...base, photosIncluded: false, photos: [], beanPhotos: [] });
+  const withPhotos = bytes({
+    ...base,
+    photos: photoRows.map((p) => ({ ...photoMeta(p), data: '' })),
+    beanPhotos: beanPhotoRows.map((p) => ({ ...beanPhotoMeta(p), data: '' })),
+  }) + [...photoRows, ...beanPhotoRows].reduce((s, p) => s + base64Length(p.blob.size), 0);
   return {
-    beans: beans.length, grinders: grinders.length, drippers: drippers.length, brews: brews.length, photos: photoRows.length,
+    beans: beans.length, grinders: grinders.length, drippers: drippers.length, brews: brews.length,
+    photos: photoRows.length + beanPhotoRows.length, beanPhotos: beanPhotoRows.length,
     sizeWithPhotos: withPhotos, sizeWithoutPhotos: withoutPhotos,
   };
 }
@@ -757,21 +791,28 @@ export function formatBytes(n) {
 
 export const exportFileName = () => `coffee-log-${todayLocal()}.json`;
 
+// 備份檔裡兩種照片的差別：對應的 key 與錯誤訊息的用詞
+const IMPORT_PHOTO_KINDS = {
+  brew: { key: 'brewId', noun: '張照片', owner: '筆紀錄', ownerName: '紀錄' },
+  bean: { key: 'beanId', noun: '張豆子照片', owner: '支豆子', ownerName: '豆子' },
+};
+
 /**
- * 驗證備份檔裡的照片，回傳 { photos: [{ brewId, blob, width, height, createdAt }], errors }
- * 檢查：brewId 對得到紀錄且不重複、base64 正確、≤ 2MB、是合法 JPEG（檔頭解析得出尺寸）
+ * 驗證備份檔裡的照片，回傳 { photos: [{ brewId 或 beanId, blob, width, height, createdAt }], errors }
+ * 檢查：key 對得到紀錄（豆子）且不重複、base64 正確、≤ 2MB、是合法 JPEG（檔頭解析得出尺寸）
  */
-function parseImportPhotos(rawPhotos, knownBrewIds) {
+function parseImportPhotos(rawPhotos, knownIds, kind = 'brew') {
+  const { key, noun, owner, ownerName } = IMPORT_PHOTO_KINDS[kind];
   const errors = [];
   const photos = [];
   const seen = new Set();
   rawPhotos.forEach((input, i) => {
-    const label = `第 ${i + 1} 張照片`;
-    const brewId = input?.brewId;
-    if (typeof brewId !== 'string' || !brewId) return errors.push(`${label}：缺少 brewId`);
-    if (seen.has(brewId)) return errors.push(`${label}：同一筆紀錄有多張照片`);
-    seen.add(brewId);
-    if (!knownBrewIds.has(brewId)) return errors.push(`${label}：找不到對應的紀錄`);
+    const label = `第 ${i + 1} ${noun}`;
+    const id = input?.[key];
+    if (typeof id !== 'string' || !id) return errors.push(`${label}：缺少 ${key}`);
+    if (seen.has(id)) return errors.push(`${label}：同一${owner}有多張照片`);
+    seen.add(id);
+    if (!knownIds.has(id)) return errors.push(`${label}：找不到對應的${ownerName}`);
     if (typeof input.data !== 'string') return errors.push(`${label}：缺少照片資料`);
     if (input.data.length > base64Length(MAX_PHOTO_BYTES)) return errors.push(`${label}：超過 2 MB 上限`);
     const bytes = base64ToBytes(input.data);
@@ -780,7 +821,7 @@ function parseImportPhotos(rawPhotos, knownBrewIds) {
     if (!size) return errors.push(`${label}：不是合法的 JPEG 圖片`);
     if (size.width > MAX_PHOTO_SIDE || size.height > MAX_PHOTO_SIDE) return errors.push(`${label}：尺寸過大`);
     photos.push({
-      brewId,
+      [key]: id,
       blob: new Blob([bytes], { type: 'image/jpeg' }),
       ...size,
       createdAt: toIso(input.createdAt) ?? new Date().toISOString(),
@@ -793,10 +834,11 @@ function parseImportPhotos(rawPhotos, knownBrewIds) {
  * 匯入備份 JSON 文字。整份檔案都通過驗證才寫入（單一交易），否則完全不動。
  * replace：true 先清空現有資料（含照片）；false 依 id 合併（同 id 以檔案為準）
  * v1 檔案沒有 grinders，視為空陣列；brews 沒有 grinderId 會補成 ''；v1、v2 沒有 photos，視為空陣列
+ * v1–v4 沒有 beanPhotos，視為空陣列
  * v1–v3 沒有 drippers：用和 DB 升級相同的規則（js/drippers.js）從紀錄的濾杯文字建立；
  *   合併時名稱相同的沿用本機已有的濾杯，取代全部時全部新建
  * onProgress(n, total)：正在處理第 n 張照片（選填，給畫面顯示進度）
- * 回傳 { ok: true, beans, grinders, drippers, brews, photos }（筆數）或 { ok: false, errors: [訊息...] }
+ * 回傳 { ok: true, beans, grinders, drippers, brews, photos（紀錄和豆子的照片合計）, beanPhotos }（筆數）或 { ok: false, errors: [訊息...] }
  */
 export async function importData(text, { replace = false, onProgress } = {}) {
   let data;
@@ -813,7 +855,9 @@ export async function importData(text, { replace = false, onProgress } = {}) {
   if (!Array.isArray(data.beans) || !Array.isArray(data.brews) || !Array.isArray(data.grinders)) {
     return { ok: false, errors: ['檔案缺少 beans、grinders 或 brews 資料'] };
   }
+  if (data.beanPhotos === undefined) data.beanPhotos = []; // v1–v4
   if (!Array.isArray(data.photos)) return { ok: false, errors: ['檔案的 photos 格式錯誤'] };
+  if (!Array.isArray(data.beanPhotos)) return { ok: false, errors: ['檔案的 beanPhotos 格式錯誤'] };
   const legacyDrippers = data.schemaVersion < 4;
   if (!legacyDrippers && !Array.isArray(data.drippers)) return { ok: false, errors: ['檔案缺少 drippers 資料'] };
 
@@ -882,6 +926,9 @@ export async function importData(text, { replace = false, onProgress } = {}) {
   if (!replace) for (const id of await db.getAllKeys('brews')) knownBrewIds.add(id);
   const parsed = parseImportPhotos(data.photos, knownBrewIds);
   errors.push(...parsed.errors);
+  // 豆子照片引用的豆子：同上（合併模式下 knownBeanIds 已含資料庫裡的）
+  const parsedBeans = parseImportPhotos(data.beanPhotos, knownBeanIds, 'bean');
+  errors.push(...parsedBeans.errors);
 
   const fail = () => {
     const MAX = 5;
@@ -894,20 +941,34 @@ export async function importData(text, { replace = false, onProgress } = {}) {
   // 實際解碼每張照片並產生縮圖：解碼失敗代表檔案壞掉。全部完成才開始寫入
   // （IndexedDB 交易在 await 其他工作時會自動結束，所以不能邊解碼邊寫）
   const photos = parsed.photos;
+  const beanPhotos = parsedBeans.photos;
+  const total = photos.length + beanPhotos.length;
   const thumbs = [];
+  const beanThumbs = [];
   for (const [i, p] of photos.entries()) {
-    onProgress?.(i + 1, photos.length);
+    onProgress?.(i + 1, total);
     try {
       thumbs.push({ brewId: p.brewId, blob: await makeThumb(p.blob) });
     } catch {
       errors.push(`第 ${i + 1} 張照片：無法解碼`);
     }
   }
+  for (const [i, p] of beanPhotos.entries()) {
+    onProgress?.(photos.length + i + 1, total);
+    try {
+      beanThumbs.push({ beanId: p.beanId, blob: await makeThumb(p.blob) });
+    } catch {
+      errors.push(`第 ${i + 1} 張豆子照片：無法解碼`);
+    }
+  }
   if (errors.length) return fail();
 
-  await db.bulkPut({ beans, grinders, drippers, brews, photos, thumbs }, { clear: replace });
+  await db.bulkPut({ beans, grinders, drippers, brews, photos, thumbs, beanPhotos, beanThumbs }, { clear: replace });
   requestSync(); // 本機為準：取代全部後，雲端上這台裝置分享過、現在不在的紀錄會被刪除
-  return { ok: true, beans: beans.length, grinders: grinders.length, drippers: drippers.length, brews: brews.length, photos: photos.length };
+  return {
+    ok: true, beans: beans.length, grinders: grinders.length, drippers: drippers.length, brews: brews.length,
+    photos: total, beanPhotos: beanPhotos.length,
+  };
 }
 
 /** 「再沖一杯」要複製的參數；評分、風味、筆記、總時間是每杯的結果，不複製；可見度一律回到預設（只有我） */

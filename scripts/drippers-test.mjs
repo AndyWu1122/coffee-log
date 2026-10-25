@@ -117,7 +117,7 @@ try {
   check('其他欄位不變', s1.brews.every((b) => { const o = OLD.brews.find((x) => x.id === b.id); const { dripperId, ...rest } = b; return q(rest) === q(o); }));
   check('meta 記下轉換過（2 支）', s1.migration?.count === 2 && Boolean(s1.migration.at), q(s1.migration));
   const version = await dbq(`return (await db.openDB()).version;`);
-  check('DB 升到 v6', version === 6, String(version));
+  check('DB 升到 v6 以上（濾杯轉換在 v6）', version >= 6, String(version));
 
   const cardText = await page.eval(`document.querySelector('#app').textContent`);
   check('紀錄卡片顯示濾杯清單的名稱', cardText.includes('Kalita 155') && cardText.includes('V60') && !cardText.includes('kalita155') && !cardText.includes('v60'));
@@ -208,7 +208,7 @@ try {
 
   /* ===== 備份 ===== */
   const exported = await m(`return m.exportData({ includePhotos: false });`);
-  check('匯出 schemaVersion 4、含 drippers', exported.schemaVersion === 4 && exported.drippers.length === 2 && exported.brews.every((b) => 'dripperId' in b));
+  check('匯出 schemaVersion 5（≥ 4 才有 drippers）、含 drippers', exported.schemaVersion === 5 && exported.drippers.length === 2 && exported.brews.every((b) => 'dripperId' in b));
   const reimport = await m(`return m.importData(${q(JSON.stringify(exported))}, { replace: true });`);
   check('v4 備份「取代全部」匯入成功', reimport.ok && reimport.drippers === 2 && reimport.brews === 9, q(reimport));
   const after = await snapshot();

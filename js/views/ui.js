@@ -177,3 +177,94 @@ export function setThemePref(pref) {
   try { localStorage.setItem('theme', pref); } catch { /* 只在這次有效 */ }
   applyTheme(pref);
 }
+
+/* ===== 表單的照片欄位（紀錄、豆子共用） ===== */
+
+/** 照片欄位的 HTML；accept 用 models.PHOTO_ACCEPT（一頁只會有一個照片欄位） */
+export const photoFieldHtml = (accept) => `
+  <div class="field" data-field="photo">
+    <span class="label">照片</span>
+    <div class="photo-field" id="photo-field"></div>
+    <input type="file" id="photo-input" accept="${esc(accept)}" hidden>
+    <div class="error"></div>
+  </div>`;
+
+/**
+ * 照片欄位的行為：選完就交給 prepare（models.preparePhoto：重新編碼成 JPEG、移除 EXIF）並預覽，存檔時才寫入
+ * form：含 photoFieldHtml 的表單；photo：目前存著的照片（{ blob }）或 null；alt：預覽圖的替代文字
+ * 回傳 { change()：undefined 不動／null 移除／新照片（交給 saveBrew、saveBean）, busy()：處理中, cleanup()：離開頁面時呼叫 }
+ */
+export function bindPhotoField(form, { photo, prepare, alt }) {
+  const urls = new Set(); // 這個欄位建立的 objectURL，換照片或離開頁面時 revoke
+  const objectUrl = (blob) => { const u = URL.createObjectURL(blob); urls.add(u); return u; };
+  const revoke = (u) => { if (u) { URL.revokeObjectURL(u); urls.delete(u); } };
+  let change;
+  let previewUrl = photo ? objectUrl(photo.blob) : null;
+  let busy = false;
+  let token = 0;
+  const field = form.querySelector('[data-field="photo"]');
+  const box = field.querySelector('#photo-field');
+  const input = field.querySelector('#photo-input');
+  const setError = (msg) => {
+    field.classList.toggle('invalid', Boolean(msg));
+    field.querySelector('.error').textContent = msg;
+  };
+  const render = () => {
+    if (busy) {
+      box.innerHTML = '<p class="hint">處理照片中…</p>';
+    } else if (previewUrl) {
+      box.innerHTML = `
+        <img class="photo-preview" src="${previewUrl}" alt="${esc(alt)}">
+        <div class="photo-actions">
+          <label class="btn" for="photo-input">換一張</label>
+          <button type="button" class="btn" data-action="remove-photo">移除</button>
+        </div>`;
+    } else {
+      box.innerHTML = '<label class="btn btn-block" for="photo-input">📷 拍照／選照片</label>';
+    }
+  };
+  render();
+
+  input.addEventListener('change', async () => {
+    const file = input.files[0];
+    input.value = ''; // 讓同一張照片可以再選一次
+    if (!file) return;
+    const t = ++token;
+    busy = true;
+    setError('');
+    render();
+    try {
+      const prepared = await prepare(file);
+      if (t !== token) return; // 處理期間又選了另一張
+      revoke(previewUrl);
+      change = prepared;
+      previewUrl = objectUrl(prepared.blob);
+    } catch (err) {
+      if (t !== token) return;
+      setError(err.message);
+    } finally {
+      if (t === token) {
+        busy = false;
+        render();
+      }
+    }
+  });
+  box.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-action="remove-photo"]')) return;
+    revoke(previewUrl);
+    previewUrl = null;
+    change = null;
+    setError('');
+    render();
+  });
+
+  return {
+    change: () => change,
+    busy: () => busy,
+    cleanup() {
+      token++;
+      for (const u of urls) URL.revokeObjectURL(u);
+      urls.clear();
+    },
+  };
+}

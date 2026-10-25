@@ -4,7 +4,7 @@ import {
   listGrinders, defaultGrinderId, listDrippers, defaultDripperId, formatStock, ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
   getPhoto, preparePhoto, PHOTO_ACCEPT, VISIBILITY, socialAvailable, getShareStatus,
 } from '../models.js';
-import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors } from './ui.js';
+import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors, photoFieldHtml, bindPhotoField } from './ui.js';
 import { createFlavorPicker } from './flavorPicker.js';
 
 const SCORE_OPTIONS = [1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n) }));
@@ -190,12 +190,7 @@ export async function render(container, { id, query, isCurrent }) {
         <div class="error"></div>
       </div>
 
-      <div class="field" data-field="photo">
-        <span class="label">照片</span>
-        <div class="photo-field" id="photo-field"></div>
-        <input type="file" id="photo-input" accept="${PHOTO_ACCEPT}" hidden>
-        <div class="error"></div>
-      </div>
+      ${photoFieldHtml(PHOTO_ACCEPT)}
 
       ${socialAvailable ? `
         <div class="field" data-field="visibility">
@@ -259,73 +254,12 @@ export async function render(container, { id, query, isCurrent }) {
   }
 
   // 照片：選完就壓縮（重新編碼成 JPEG、移除 EXIF）並預覽，按「儲存」才和紀錄一起寫入
-  const urls = new Set(); // 這頁建立的 objectURL，換照片或離開頁面時 revoke
-  const objectUrl = (blob) => { const u = URL.createObjectURL(blob); urls.add(u); return u; };
-  const revoke = (u) => { if (u) { URL.revokeObjectURL(u); urls.delete(u); } };
-  let photoChange;   // undefined 不動；null 移除；preparePhoto 的結果則是新照片
-  let previewUrl = photo ? objectUrl(photo.blob) : null;
-  let photoBusy = false;
-  let photoToken = 0;
-  const photoField = form.querySelector('[data-field="photo"]');
-  const photoBox = form.querySelector('#photo-field');
-  const photoInput = form.querySelector('#photo-input');
-  const setPhotoError = (msg) => {
-    photoField.classList.toggle('invalid', Boolean(msg));
-    photoField.querySelector('.error').textContent = msg;
-  };
-  const renderPhoto = () => {
-    if (photoBusy) {
-      photoBox.innerHTML = '<p class="hint">處理照片中…</p>';
-    } else if (previewUrl) {
-      photoBox.innerHTML = `
-        <img class="photo-preview" src="${previewUrl}" alt="這杯咖啡的照片">
-        <div class="photo-actions">
-          <label class="btn" for="photo-input">換一張</label>
-          <button type="button" class="btn" data-action="remove-photo">移除</button>
-        </div>`;
-    } else {
-      photoBox.innerHTML = '<label class="btn btn-block" for="photo-input">📷 拍照／選照片</label>';
-    }
-  };
-  renderPhoto();
-
-  photoInput.addEventListener('change', async () => {
-    const file = photoInput.files[0];
-    photoInput.value = ''; // 讓同一張照片可以再選一次
-    if (!file) return;
-    const token = ++photoToken;
-    photoBusy = true;
-    setPhotoError('');
-    renderPhoto();
-    try {
-      const prepared = await preparePhoto(file);
-      if (token !== photoToken) return; // 處理期間又選了另一張
-      revoke(previewUrl);
-      photoChange = prepared;
-      previewUrl = objectUrl(prepared.blob);
-    } catch (err) {
-      if (token !== photoToken) return;
-      setPhotoError(err.message);
-    } finally {
-      if (token === photoToken) {
-        photoBusy = false;
-        renderPhoto();
-      }
-    }
-  });
-  photoBox.addEventListener('click', (e) => {
-    if (!e.target.closest('[data-action="remove-photo"]')) return;
-    revoke(previewUrl);
-    previewUrl = null;
-    photoChange = null;
-    setPhotoError('');
-    renderPhoto();
-  });
+  const photoField = bindPhotoField(form, { photo, prepare: preparePhoto, alt: '這杯咖啡的照片' });
 
   /** 存檔（含照片）；成功回傳存好的紀錄，驗證失敗顯示錯誤並回傳 null */
   let saving = false;
   const save = async () => {
-    if (photoBusy) { toast('照片處理中，請稍候'); return null; }
+    if (photoField.busy()) { toast('照片處理中，請稍候'); return null; }
     if (saving) return null; // 避免連按存成兩筆
     saving = true;
     try {
@@ -369,7 +303,7 @@ export async function render(container, { id, query, isCurrent }) {
       flavorNotes: flavorPicker.value(),
       notes: f.notes.value,
       visibility: socialAvailable ? segmentedValue(form, 'visibility') : (brew?.visibility ?? 'private'),
-    }, { photo: photoChange });
+    }, { photo: photoField.change() });
   }
 
   form.querySelector('[data-action="delete"]')?.addEventListener('click', async () => {
@@ -381,9 +315,5 @@ export async function render(container, { id, query, isCurrent }) {
   });
 
   // 離開頁面時釋放照片的 objectURL
-  return () => {
-    photoToken++;
-    for (const u of urls) URL.revokeObjectURL(u);
-    urls.clear();
-  };
+  return photoField.cleanup;
 }

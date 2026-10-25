@@ -4,10 +4,23 @@ import { esc, setTitle } from './ui.js';
 
 let showArchived = false; // 切頁後保留勾選狀態
 
+// 卡片縮圖的 objectURL：每次重繪（含切換「顯示已封存」）與離開頁面時 revoke
+let thumbUrls = [];
+const revokeThumbs = () => {
+  for (const u of thumbUrls) URL.revokeObjectURL(u);
+  thumbUrls = [];
+};
+const thumbUrl = (blob) => {
+  const u = URL.createObjectURL(blob);
+  thumbUrls.push(u);
+  return u;
+};
+
 export async function render(container, { isCurrent }) {
   setTitle('豆子');
   const beans = await listBeans({ includeArchived: showArchived });
   if (!isCurrent()) return;
+  revokeThumbs();
 
   container.innerHTML = `
     <div class="toolbar">
@@ -25,6 +38,7 @@ export async function render(container, { isCurrent }) {
     showArchived = e.target.checked;
     render(container, { isCurrent });
   });
+  return revokeThumbs;
 }
 
 function beanCard(b) {
@@ -32,19 +46,22 @@ function beanCard(b) {
     ? `烘焙 ${esc(b.roastDate)}${b.daysSinceRoast != null ? `（第 ${b.daysSinceRoast} 天）` : ''}`
     : '未填烘焙日';
   return `
-    <li><a class="card" href="#/beans/${esc(b.id)}">
-      <div class="card-head">
-        <span class="card-title">${esc(b.name)}</span>
-        ${b.archived ? '<span class="badge">已封存</span>' : stockBadge(b.stock)}
+    <li><a class="card${b.thumb ? ' has-thumb' : ''}" href="#/beans/${esc(b.id)}">
+      <div class="card-body">
+        <div class="card-head">
+          <span class="card-title">${esc(b.name)}</span>
+          ${b.archived ? '<span class="badge">已封存</span>' : stockBadge(b.stock)}
+        </div>
+        <div class="card-row">
+          ${b.origin ? `<span>${esc(b.origin)}</span>` : ''}
+          <span>${esc(PROCESS[b.process] ?? '')}</span>
+          <span>${esc(ROAST_LEVEL[b.roastLevel] ?? '')}</span>
+        </div>
+        <div class="card-row"><span>${roast}</span></div>
+        ${b.stock && b.stock.remainingG !== 0 /* 剛好用完時標籤已寫「已用完」，不重複 */
+          ? `<div class="card-row stock-row"><span>${esc(formatStock(b.stock))}</span></div>` : ''}
       </div>
-      <div class="card-row">
-        ${b.origin ? `<span>${esc(b.origin)}</span>` : ''}
-        <span>${esc(PROCESS[b.process] ?? '')}</span>
-        <span>${esc(ROAST_LEVEL[b.roastLevel] ?? '')}</span>
-      </div>
-      <div class="card-row"><span>${roast}</span></div>
-      ${b.stock && b.stock.remainingG !== 0 /* 剛好用完時標籤已寫「已用完」，不重複 */
-        ? `<div class="card-row stock-row"><span>${esc(formatStock(b.stock))}</span></div>` : ''}
+      ${b.thumb ? `<img class="card-thumb" src="${thumbUrl(b.thumb)}" alt="" loading="lazy" decoding="async">` : ''}
     </a></li>`;
 }
 

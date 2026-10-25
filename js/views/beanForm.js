@@ -1,14 +1,15 @@
 // #/beans/new、#/beans/<id> 新增 / 編輯豆子
 import {
-  getBean, getBeanStock, saveBean, setBeanArchived, deleteBean, todayLocal, formatGrams, formatStock, PROCESS, ROAST_LEVEL,
+  getBean, getBeanStock, getBeanPhoto, saveBean, setBeanArchived, deleteBean, todayLocal, formatGrams, formatStock, PROCESS, ROAST_LEVEL,
+  preparePhoto, PHOTO_ACCEPT,
 } from '../models.js';
-import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors } from './ui.js';
+import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors, photoFieldHtml, bindPhotoField } from './ui.js';
 
 const toOptions = (labels) => Object.entries(labels).map(([value, label]) => ({ value, label }));
 
 export async function render(container, { id, isCurrent }) {
   const isNew = id === null;
-  const [bean, stock] = isNew ? [null, null] : await Promise.all([getBean(id), getBeanStock(id)]);
+  const [bean, stock, photo] = isNew ? [null, null, null] : await Promise.all([getBean(id), getBeanStock(id), getBeanPhoto(id)]);
   if (!isCurrent()) return;
 
   if (!isNew && !bean) {
@@ -54,6 +55,7 @@ export async function render(container, { id, isCurrent }) {
         <div class="error"></div>
         ${stock ? `<p class="hint stock-hint">已用 ${formatGrams(stock.usedG)}（${stock.usedCups} 杯）・${esc(formatStock(stock))}</p>` : ''}
       </div>
+      ${photoFieldHtml(PHOTO_ACCEPT)}
 
       <div class="actions">
         <button class="btn btn-primary btn-block" type="submit">儲存</button>
@@ -66,9 +68,15 @@ export async function render(container, { id, isCurrent }) {
 
   const form = container.querySelector('form');
   bindSegmented(form);
+  // 照片（例如豆袋）：和紀錄一樣，選完就重新編碼成 JPEG、移除 EXIF 並預覽，按「儲存」才寫入；只存在這支手機
+  const photoField = bindPhotoField(form, { photo, prepare: preparePhoto, alt: '這支豆子的照片' });
+  let saving = false;
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (photoField.busy()) return toast('照片處理中，請稍候');
+    if (saving) return; // 避免連按存成兩支
+    saving = true;
     const f = form.elements; // 注意 form.name 是表單自己的屬性，要從 elements 取
     const result = await saveBean({
       id,
@@ -78,7 +86,7 @@ export async function render(container, { id, isCurrent }) {
       roastLevel: segmentedValue(form, 'roastLevel'),
       roastDate: f.roastDate.value,
       bagWeightG: f.bagWeightG.value,
-    });
+    }, { photo: photoField.change() }).finally(() => { saving = false; });
     if (!result.ok) return showErrors(form, result.errors);
     toast('已儲存');
     location.hash = '#/beans';
@@ -91,11 +99,14 @@ export async function render(container, { id, isCurrent }) {
       toast(bean.archived ? '已取消封存' : '已封存');
       location.hash = '#/beans';
     } else if (action === 'delete') {
-      if (!confirm(`確定刪除「${bean.name}」？`)) return;
+      if (!confirm(`確定刪除「${bean.name}」？${photo ? '照片也會一起刪除。' : ''}`)) return;
       const result = await deleteBean(id);
       if (!result.ok) return alert(result.message);
       toast('已刪除');
       location.hash = '#/beans';
     }
   });
+
+  // 離開頁面時釋放照片的 objectURL
+  return photoField.cleanup;
 }
