@@ -32,7 +32,7 @@ select is((select public from storage.buckets where id = 'avatars'), false, 'ava
 select is((select file_size_limit from storage.buckets where id = 'avatars'), 102400::bigint, '頭像上限 100KB');
 select is((select allowed_mime_types from storage.buckets where id = 'avatars'), array['image/jpeg'], '頭像只允許 image/jpeg');
 select is((select count(*) from pg_policy where polrelid = 'storage.objects'::regclass
-  and polname like 'avatars:%'), 4::bigint, 'avatars 有 4 條政策');
+  and polname like 'avatars:%'), 5::bigint, 'avatars 有 5 條政策（含開發者讀）');
 select is((select count(*) from pg_policy where polrelid = 'storage.objects'::regclass
   and polname like 'avatars:%' and polroles <> array['authenticated'::regrole]::oid[]), 0::bigint,
   'avatars 政策只給 authenticated');

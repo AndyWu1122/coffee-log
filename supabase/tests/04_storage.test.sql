@@ -37,7 +37,7 @@ select is((select allowed_mime_types from storage.buckets where id = 'brew-photo
   '只允許 image/jpeg');
 select ok((select relrowsecurity from pg_class where oid = 'storage.objects'::regclass), 'storage.objects 開了 RLS');
 select is((select count(*) from pg_policy where polrelid = 'storage.objects'::regclass
-  and polname like 'brew-photos:%'), 4::bigint, 'brew-photos 有 4 條政策（讀、傳、覆蓋、刪）');
+  and polname like 'brew-photos:%'), 6::bigint, 'brew-photos 有 6 條政策（讀、傳、覆蓋、刪，開發者讀、刪）');
 select is((select count(*) from pg_policy where polrelid = 'storage.objects'::regclass
   and polname like 'brew-photos:%' and polroles <> array['authenticated'::regrole]::oid[]), 0::bigint,
   '政策只給 authenticated（anon 什麼都不能做）');

@@ -43,6 +43,7 @@ select is(
   array[
     'private.blocked_with(uuid)',
     'private.can_view(uuid)',
+    'private.is_admin()',
     'private.profile_visible(uuid)',
     'private.single_line(text)',
     'private.valid_flavor_notes(text[])'
