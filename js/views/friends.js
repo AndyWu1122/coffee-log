@@ -99,7 +99,8 @@ function renderReady(container, { user }, lists, { code, rerender }) {
     ${sectionHtml('incoming', '收到的邀請', incoming, '', (p) => personHtml(p, `${dateOf(p.since)} 邀請你`,
       btn('accept', '接受', 'btn-primary') + btn('reject', '拒絕') + btn('block', '封鎖', 'btn-danger')))}
     ${sectionHtml('friends', '好友', friends, '還沒有好友。把你的好友代碼給朋友，或輸入朋友的代碼。', (p) =>
-      personHtml(p, p.since ? `${dateOf(p.since)} 成為好友` : '', btn('unfriend', '解除好友') + btn('block', '封鎖', 'btn-danger')))}
+      personHtml(p, [p.since ? `${dateOf(p.since)} 成為好友` : '', p.blocked ? '已封鎖' : ''].filter(Boolean).join('・'),
+        btn('unfriend', '解除好友') + (p.blocked ? btn('unblock', '解除封鎖') : btn('block', '封鎖', 'btn-danger'))))}
     ${sectionHtml('outgoing', '送出的邀請', outgoing, '', (p) => personHtml(p, `${dateOf(p.since)} 送出，等對方接受`,
       btn('cancel', '取消邀請')))}
     ${sectionHtml('blocked', '封鎖名單', blocked, '', (p) => personHtml(p, `${dateOf(p.since)} 封鎖`,
@@ -134,10 +135,11 @@ function renderReady(container, { user }, lists, { code, rerender }) {
       run: (id) => removeFriendship(user.id, id), done: '已解除好友',
     },
     block: {
-      ask: (name) => `確定封鎖「${name}」？會同時解除好友和邀請，對方不會收到通知，也無法再邀請你。`,
+      ask: (name) => `確定封鎖「${name}」？
+不會解除好友，但你們會互相看不到對方的貼文、留言和讚。對方不會收到通知；還沒成為好友的話，對方也無法再邀請你。`,
       run: (id) => blockUser(id), done: '已封鎖',
     },
-    unblock: { run: (id) => unblockUser(id), done: '已解除封鎖（不會自動恢復好友）' },
+    unblock: { run: (id) => unblockUser(id), done: '已解除封鎖' },
   };
   // 監聽頁面自己的元素（#app 換頁時不會被換掉，掛在上面會一直累積）
   container.querySelector('#friends-page').addEventListener('click', async (e) => {

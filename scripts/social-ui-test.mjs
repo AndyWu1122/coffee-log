@@ -1,6 +1,6 @@
 // 帳號與好友的前端端對端測試（docs/social-spec.md 階段 3）
 // 用 headless Chrome 開兩個互相隔離的瀏覽器環境（像兩支手機），各自登入 A、B，連本機 Supabase 操作真的畫面：
-// 設定暱稱與頭像 → 用 QR code 網址加好友 → 接受 → 解除 → 重新加 → 封鎖 → 解除封鎖 → 重新產生代碼 → 登出
+// 設定暱稱與頭像 → 用 QR code 網址加好友 → 接受 → 解除 → 重新加 → 封鎖（仍是好友）→ 解除封鎖 → 重新產生代碼 → 登出
 // 也確認：暱稱裡的 HTML 只顯示成文字、頭像沒有 EXIF、備份檔沒有 token、沒設定 Supabase 的網址沒有社群功能
 //
 // 登入：Google 登入無法自動化，改用本機 admin API 拿真的 session 放進 App 的儲存空間（只在這支測試裡做）
@@ -194,21 +194,28 @@ try {
   await toast(pa, '已封鎖');
   await pa.waitFor(`document.querySelector('#blocked .person-name')`, { label: '封鎖名單' });
   check('封鎖名單顯示 B 的暱稱（照原樣）', (await text(pa, '#blocked .person-name')) === B_NICK);
-  check('封鎖後 A 的好友名單沒有 B', !(await pa.eval(`document.querySelector('#friends .person')`)));
+  check('封鎖不解除好友：A 的好友名單還有 B', (await text(pa, '#friends .person-name')) === B_NICK);
+  check('好友名單上的 B 標「已封鎖」，按鈕換成「解除封鎖」',
+    (await text(pa, '#friends .person .hint')).includes('已封鎖')
+    && !!(await pa.eval(`document.querySelector('#friends [data-action="unblock"]')`))
+    && !(await pa.eval(`document.querySelector('#friends [data-action="block"]')`)));
   check('封鎖名單上 B 的暱稱沒有變成 HTML', await noInjection(pa));
 
   await visit(pb, base, '#/friends');
-  await pb.waitFor(`document.querySelector('#add-form')`);
-  check('被封鎖的 B：好友、邀請名單都看不到 A', !(await pb.eval(`document.querySelector('.person')`)));
+  await pb.waitFor(`document.querySelector('#friends .person')`, { label: 'B 的好友名單' });
+  check('被封鎖的 B：好友名單照樣有 A（不透露封鎖）', (await text(pb, '#friends .person-name')) === A_NICK
+    && !(await text(pb, '#friends .person .hint')).includes('封鎖'));
   await fill(pb, '#code', aCode);
   await submit(pb, '#add-form');
-  check('被封鎖的 B 用 A 的代碼只會得到「找不到」（不透露封鎖）',
-    (await fieldError(pb, '[data-field="code"]')).includes('找不到這個好友代碼'));
+  await toast(pb, '已經是好友');
+  check('被封鎖的 B 用 A 的代碼得到「已經是好友」（和沒封鎖時一樣）', true);
 
-  await click(pa, '#blocked [data-action="unblock"]');
+  await click(pa, '#friends [data-action="unblock"]');
   await toast(pa, '已解除封鎖');
   await pa.waitFor(`!document.querySelector('#blocked')`);
-  check('解除封鎖後名單消失，也不會自動恢復好友', !(await pa.eval(`document.querySelector('#friends .person')`)));
+  check('從好友名單解除封鎖：封鎖名單消失，B 仍是好友、沒有「已封鎖」',
+    (await text(pa, '#friends .person-name')) === B_NICK && !(await text(pa, '#friends .person .hint')).includes('封鎖')
+    && !!(await pa.eval(`document.querySelector('#friends [data-action="block"]')`)));
 
   /* ===== 代碼格式、重新產生代碼 ===== */
   await fill(pb, '#code', 'ABC');

@@ -108,7 +108,8 @@ try {
   check('（封鎖前的留言都成功）', [aOnB, bOnB, dOnB, dOnA].every(ok));
   const block = await rest('blocks', { method: 'POST', token: A.token, body: { blocked: D.id } });
   check('A 封鎖 D', block.status === 201, block.text);
-  check('D 在 A 貼文的留言刪除', !(await exists(dOnA.id)));
+  check('封鎖不解除好友：D 在 A 貼文的留言沒有刪除', await exists(dOnA.id));
+  check('A 看不到 D 在自己貼文的留言', (await visible(A, `id=eq.${dOnA.id}`)).length === 0);
   check('A 看不到 D 在共同好友貼文的留言', (await visible(A, `id=eq.${dOnB.id}`)).length === 0);
   check('D 看不到 A 在共同好友貼文的留言', (await visible(D, `id=eq.${aOnB.id}`)).length === 0);
   check('B 照樣看得到兩人的留言', (await visible(B, `brew_id=eq.${b1}`)).length === 3);
@@ -120,6 +121,11 @@ try {
   check('（不存在的留言也是 23503）', ghost.code === dReplyA.code);
   const dAtA = await comment(D, B, b1, 'x', { parent_id: bOnB.id, reply_to_user: A.id });
   check('D 不能 @A', dAtA.code === '23514', dAtA.text);
+  // 解除封鎖：留言全部恢復；再封鎖回去，後面維持 D 被 A 封鎖
+  await rest(`blocks?blocked=eq.${D.id}`, { method: 'DELETE', token: A.token });
+  check('解除封鎖後 A 又看得到 D 的留言', (await visible(A, `id=in.(${dOnA.id},${dOnB.id})`)).length === 2);
+  check('解除封鎖後 D 又看得到 A 的留言', (await visible(D, `id=eq.${aOnB.id}`)).length === 1);
+  await rest('blocks', { method: 'POST', token: A.token, body: { blocked: D.id } });
 
   /* ===== 解除好友 ===== */
   const bOnA = await comment(B, A, a1, 'B 再留一則');

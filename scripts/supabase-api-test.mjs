@@ -112,9 +112,16 @@ try {
   const block = await rest('blocks', { method: 'POST', token: A.token, body: { blocked: B.id } });
   check('A 封鎖 B', block.status === 201, `HTTP ${block.status} ${block.text}`);
   check('封鎖後 B 讀不到 A 的紀錄', rows(await rest('shared_brews?select=*', { token: B.token }))?.length === 0);
-  check('封鎖後 B 讀不到 A 的 profile', rows(await rest(`profiles?id=eq.${A.id}`, { token: B.token }))?.length === 0);
+  check('封鎖後 A 也讀不到 B 的紀錄', rows(await rest(`shared_brews?owner=eq.${B.id}`, { token: A.token }))?.length === 0);
+  check('封鎖不解除好友：B 仍讀得到 A 的 profile', rows(await rest(`profiles?id=eq.${A.id}`, { token: B.token }))?.length === 1);
+  check('封鎖不解除好友：好友關係還在',
+    rows(await rest(`friendships?status=eq.accepted&or=(requester.eq.${A.id},addressee.eq.${A.id})`, { token: B.token }))?.length === 1);
   check('B 看不到自己被封鎖', rows(await rest('blocks?select=*', { token: B.token }))?.length === 0);
-  check('被封鎖的 B 再邀請只會得到 not_found', (await rpc('send_friend_request', { code: aCode }, B.token)).json === 'not_found');
+  check('被封鎖的好友 B 用 A 的代碼：already_friends（不透露封鎖）',
+    (await rpc('send_friend_request', { code: aCode }, B.token)).json === 'already_friends');
+  const unblock = await rest(`blocks?blocked=eq.${B.id}`, { method: 'DELETE', token: A.token });
+  check('A 解除封鎖', unblock.status < 300, `HTTP ${unblock.status}`);
+  check('解除封鎖後 B 又讀得到 A 的紀錄', rows(await rest(`shared_brews?owner=eq.${A.id}`, { token: B.token }))?.length > 0);
 } catch (err) {
   failures.push(`執行錯誤：${err.message}`);
   console.error(err);

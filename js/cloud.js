@@ -178,7 +178,7 @@ export const deleteFriendship = (myId, otherId) => run(async (sb) => {
     .or(`and(requester.eq.${me},addressee.eq.${other}),and(requester.eq.${other},addressee.eq.${me})`));
 });
 
-/** 封鎖（資料庫會同時解除好友、刪掉邀請與讚，並記下對方當下的暱稱） */
+/** 封鎖（資料庫會刪掉待處理的邀請、記下對方當下的暱稱；好友關係、讚、留言都保留，只是互相看不到） */
 export const block = (otherId) => run(async (sb) => {
   unwrap(await sb.from('blocks').insert({ blocked: uuid(otherId) }));
 });

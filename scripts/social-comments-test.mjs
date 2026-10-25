@@ -242,6 +242,7 @@ try {
   /* ===== 封鎖：A 封鎖 D 後，在 B 的紀錄上互相看不到對方的留言 ===== */
   await rest('comments', { method: 'POST', token: A.token, body: { brew_owner: B.id, brew_id: b1, body: 'A 在 B 的紀錄留言' } });
   await rest('comments', { method: 'POST', token: D.token, body: { brew_owner: B.id, brew_id: b1, body: 'D 在 B 的紀錄留言' } });
+  await rest('comments', { method: 'POST', token: D.token, body: { brew_owner: A.id, brew_id: a1, body: 'D 在 A 的紀錄留言' } });
   await rest('blocks', { method: 'POST', token: A.token, body: { blocked: D.id } });
   await go(pa, base, `#/social/${B.id}/${b1}`);
   await waitComments(pa);
@@ -251,7 +252,10 @@ try {
   check('D 看不到 A 的留言', Boolean(await pd.eval(findComment('D 在 B 的紀錄留言'))) && !(await pd.eval(findComment('A 在 B 的紀錄留言'))));
   await go(pd, base, `#/social/${A.id}/${a1}`);
   check('D 打不開 A 的紀錄（和不是好友一樣：找不到）', (await pd.waitFor(`document.querySelector('.empty p')?.textContent`)).includes('找不到這筆紀錄'));
-  check('D 在 A 紀錄的留言已刪除（封鎖時解除好友）', !(await commentId('D 回覆 A 的回覆')) && !(await commentId('第 3 則回覆')));
+  check('封鎖不解除好友：D 在 A 紀錄的留言沒有刪除', Boolean(await commentId('D 在 A 的紀錄留言')));
+  await go(pa, base, `#/social/${A.id}/${a1}`);
+  await waitComments(pa);
+  check('A 在自己的紀錄上看不到 D 的留言', !(await pa.eval(findComment('D 在 A 的紀錄留言'))));
 
   /* ===== 頁面錯誤、XSS、CSP ===== */
   for (const [name, page] of [['A', pa], ['B', pb], ['D', pd]]) {

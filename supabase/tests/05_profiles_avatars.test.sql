@@ -145,13 +145,14 @@ insert into public.blocks (blocker, blocked)
   values ('aaaaaaaa-0000-0000-0000-000000000000', 'bbbbbbbb-0000-0000-0000-000000000000');
 select is((select blocked_nickname from public.blocks where blocked = 'bbbbbbbb-0000-0000-0000-000000000000'), 'Bob',
   '封鎖名單記下 B 的暱稱');
-select is((select count(*) from public.profiles where id = 'bbbbbbbb-0000-0000-0000-000000000000'), 0::bigint,
-  '封鎖後 A 讀不到 B 的 profile（所以才需要記下暱稱）');
+-- 封鎖不解除好友：好友之間照樣看得到暱稱和頭像（被封鎖者的好友名單不會少一個人，不透露封鎖）
+select is((select count(*) from public.profiles where id = 'bbbbbbbb-0000-0000-0000-000000000000'), 1::bigint,
+  '封鎖好友後 A 仍讀得到 B 的 profile');
 select is((select count(*) from storage.objects where bucket_id = 'avatars'
-  and name like 'bbbbbbbb-0000-0000-0000-000000000000/%'), 0::bigint, '封鎖後 A 讀不到 B 的頭像');
+  and name like 'bbbbbbbb-0000-0000-0000-000000000000/%'), 1::bigint, '封鎖好友後 A 仍讀得到 B 的頭像');
 select tests.login_as('bbbbbbbb-0000-0000-0000-000000000000');
 select is((select count(*) from storage.objects where bucket_id = 'avatars'
-  and name like 'aaaaaaaa-0000-0000-0000-000000000000/%'), 0::bigint, '封鎖後 B 讀不到 A 的頭像');
+  and name like 'aaaaaaaa-0000-0000-0000-000000000000/%'), 1::bigint, '被封鎖的好友 B 仍讀得到 A 的頭像');
 select is((select count(*) from public.blocks), 0::bigint, 'B 讀不到封鎖紀錄（也就看不到 A 記下的暱稱）');
 -- 之後 B 改暱稱，封鎖名單不會跟著變（只是當下的快照）
 update public.profiles set nickname = 'Bobby' where id = 'bbbbbbbb-0000-0000-0000-000000000000';

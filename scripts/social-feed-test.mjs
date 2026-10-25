@@ -234,6 +234,8 @@ try {
   await visit(pb, base, '#/social');
   await pb.waitFor(`document.querySelector('.empty')`, { label: '空的動態牆' });
   check('A 封鎖 B 之後，B 的動態牆是空的', !(await pb.eval(`document.querySelector('.feed-card')`)));
+  check('封鎖不解除好友（B 讀得到和 A 的好友關係）',
+    (await rest(`friendships?status=eq.accepted&or=(requester.eq.${A.id},addressee.eq.${A.id})`, { token: B.token })).json?.length === 1);
 
   check('A 的頁面沒有 JavaScript 錯誤', pa.errors.length === 0, pa.errors.join(' / '));
   pa.errors.length = 0;

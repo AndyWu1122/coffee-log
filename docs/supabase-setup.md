@@ -143,7 +143,7 @@ npx supabase@2.120.0 functions deploy delete-account   # 需要先完成第 2 �
 ```sh
 npx supabase@2.120.0 login                 # 已登入可略過
 npx supabase@2.120.0 link --project-ref rygsjrzddhhhdqpoayoa
-npx supabase@2.120.0 db push --dry-run      # 應該只列出下面兩個 migration
+npx supabase@2.120.0 db push --dry-run      # 應該只列出下面三個 migration
 npx supabase@2.120.0 db push                # 套用（確認後輸入 Y）
 npx supabase@2.120.0 functions deploy feedback
 ```
@@ -151,6 +151,7 @@ npx supabase@2.120.0 functions deploy feedback
 - 套用的 migration：
   - `20261025130000_feedback_app_version_text.sql`：`feedback.app_version` 改文字（舊資料 18 → '18'）
   - `20261025140000_comments.sql`：留言表、權限、通知函式、解除好友時刪留言的 trigger
+  - `20261025150000_block_keeps_friends.sql`：封鎖不再解除好友，只隱藏（用到上一個的 `private.blocked_with`，一定要一起套用）
 - `feedback` 一定要重新部署：新版 App 送的是 `"1.1.0"` 字串，舊版 function 只收整數（會記成「不明」，不會壞）；新版也會在 log 寫出沒寄信的原因
 - 部署後確認：Supabase 後台 → Edge Functions → feedback 的 **Verify JWT** 開著；Table Editor 有 `comments`，RLS enabled
 - 最後才把分支合併到 main 並 push（前端部署）。順序反過來的話，新版 App 會在留言區顯示錯誤，直到後端部署完成

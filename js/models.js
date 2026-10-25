@@ -929,7 +929,7 @@ export async function sendFriendRequest(input) {
 
 /**
  * { incoming: 收到的邀請, outgoing: 送出的邀請, friends: 好友, blocked: 封鎖名單 }
- * 每個人是 { id, nickname, avatarUrl, since }；他人的暱稱顯示時一律要跳脫
+ * 每個人是 { id, nickname, avatarUrl, since }；好友另有 blocked（封鎖了但仍是好友）；他人的暱稱顯示時一律要跳脫
  */
 export async function listFriends(myId) {
   const [{ rows, profiles }, blocks] = await Promise.all([cloud.listFriendships(), cloud.listBlocks()]);
@@ -940,13 +940,17 @@ export async function listFriends(myId) {
     return { id, nickname: p?.nickname ?? '（不明）', avatarUrl: urls[p?.avatar_path] ?? null, since };
   };
   const newestFirst = (a, b) => String(b.since).localeCompare(String(a.since));
+  const blockedIds = new Set(blocks.map((b) => b.blocked));
   return {
     incoming: rows.filter((r) => r.status === 'pending' && r.addressee === myId)
       .map((r) => person(r.requester, r.created_at)).sort(newestFirst),
     outgoing: rows.filter((r) => r.status === 'pending' && r.requester === myId)
       .map((r) => person(r.addressee, r.created_at)).sort(newestFirst),
     friends: rows.filter((r) => r.status === 'accepted')
-      .map((r) => person(r.requester === myId ? r.addressee : r.requester, r.accepted_at)).sort(newestFirst),
+      .map((r) => {
+        const id = r.requester === myId ? r.addressee : r.requester;
+        return { ...person(id, r.accepted_at), blocked: blockedIds.has(id) };
+      }).sort(newestFirst),
     blocked: blocks.map((b) => ({ id: b.blocked, nickname: b.blocked_nickname || '（不明）', avatarUrl: null, since: b.created_at })),
   };
 }
@@ -957,7 +961,7 @@ export async function acceptFriend(myId, requesterId) {
 }
 /** 拒絕邀請、取消邀請、解除好友 */
 export const removeFriendship = (myId, otherId) => cloud.deleteFriendship(myId, otherId);
-/** 封鎖：同時解除好友、刪掉邀請；對方不會知道被封鎖 */
+/** 封鎖：不解除好友（只刪掉待處理的邀請），雙方互相看不到對方的貼文、留言、讚；對方不會知道被封鎖 */
 export const blockUser = (otherId) => cloud.block(otherId);
 export const unblockUser = (otherId) => cloud.unblock(otherId);
 

@@ -213,8 +213,11 @@ select lives_ok($$ insert into public.comments (brew_owner, brew_id, body)
   values ('aaaaaaaa-0000-0000-0000-000000000000', 'a1a1a1a1-0000-0000-0000-000000000000', 'D 在 A 的貼文') $$, 'D 在 A 的貼文留言');
 
 select tests.login_as('aaaaaaaa-0000-0000-0000-000000000000');
+select is((public.comment_activity()->>'post_comments')::int, 3, '封鎖前：A 的通知算得到 D 的留言');
 insert into public.blocks (blocked) values ('dddddddd-0000-0000-0000-000000000000');
-select is(tests.n('D 在 A 的貼文'), 0::bigint, '封鎖時（好友關係刪除）D 在 A 貼文的留言一起刪');
+select is(tests.n('D 在 A 的貼文'), 1::bigint, '封鎖不解除好友：D 在 A 貼文的留言沒有刪除');
+select is((select count(*) from public.comments where body = 'D 在 A 的貼文'), 0::bigint, 'A 看不到 D 在自己貼文的留言');
+select is((public.comment_activity()->>'post_comments')::int, 2, '封鎖後：A 的通知不算 D 的留言');
 select is((select count(*) from public.comments where body = 'D 在 B 的貼文'), 0::bigint, 'A 看不到 D 在共同好友貼文的留言');
 select tests.login_as('bbbbbbbb-0000-0000-0000-000000000000');
 select is((select count(*) from public.comments where brew_id = 'b1b1b1b1-0000-0000-0000-000000000000'), 4::bigint, 'B 照樣看得到 A、D 兩人的留言');
@@ -236,6 +239,15 @@ select throws_ok($$ insert into public.comments (brew_owner, brew_id, parent_id,
 select lives_ok($$ insert into public.comments (brew_owner, brew_id, parent_id, body)
   values ('bbbbbbbb-0000-0000-0000-000000000000', 'b1b1b1b1-0000-0000-0000-000000000000', tests.cid('B 自己的主留言'), 'D 在 B 串裡') $$,
   'D 照樣能回覆 B 的留言');
+select is((select count(*) from public.friendships where status = 'accepted'
+  and 'aaaaaaaa-0000-0000-0000-000000000000' in (requester, addressee)), 1::bigint, 'D 和 A 仍是好友');
+
+-- 解除封鎖：留言全部恢復；再封鎖回去，讓後面的測試維持 D 被封鎖
+select tests.login_as('aaaaaaaa-0000-0000-0000-000000000000');
+delete from public.blocks where blocked = 'dddddddd-0000-0000-0000-000000000000';
+select is((select count(*) from public.comments where body in ('D 在 A 的貼文', 'D 在 B 的貼文')), 2::bigint,
+  '解除封鎖後 A 又看得到 D 的留言');
+insert into public.blocks (blocked) values ('dddddddd-0000-0000-0000-000000000000');
 
 /* ========== 解除好友 ========== */
 select tests.login_as('bbbbbbbb-0000-0000-0000-000000000000');

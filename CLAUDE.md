@@ -167,7 +167,10 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - 登入狀態存在 IndexedDB meta（`auth:supabase-auth`），不放 localStorage、不進備份檔；登出用 `scope: 'local'`，網路失敗也會清掉本機 session
 - supabase-js 從 `js/vendor/` 以 `<script integrity>` 載入（不用 CDN）；只在社群頁面用到時才載入；升級步驟見 `js/vendor/README.md`
 - 頭像：私有 bucket `avatars`（≤ 100KB、只收 JPEG），路徑 `<user_id>/avatar.jpg`；前端 `image.compressAvatar` 裁成 256×256 並移除中繼資料；讀取權限跟著 profiles 走（`avatar_path` 指向它才讀得到）；不用 Google 大頭貼
-- 封鎖後雙方互相看不到 profile，所以 `blocks.blocked_nickname` 在封鎖當下由 trigger 記下對方暱稱（前端不能指定）
+- **封鎖不解除好友**（`20261025150000_block_keeps_friends.sql`）：只刪雙方之間待處理的邀請；好友關係、讚、留言都保留，雙方互相看不到對方的貼文、照片、留言（含共同好友的貼文）、讚，解除封鎖後恢復
+  - 好友之間不管封鎖都看得到 profile（被封鎖者的好友名單照樣有封鎖者，不透露封鎖）；被封鎖的好友輸入代碼得到 `already_friends`
+  - 好友管理頁：封鎖的好友留在好友名單、標「已封鎖」，按鈕換成「解除封鎖」
+- 不是好友時封鎖後雙方看不到 profile，所以 `blocks.blocked_nickname` 在封鎖當下由 trigger 記下對方暱稱（前端不能指定）
 - QR code 內容是 `#/friends/add?code=...` 的網址，用手機相機掃；iPhone 主畫面 App 和 Safari 登入狀態分開，沒登入時頁面顯示代碼讓使用者複製
 - 暱稱上限 20 字，XSS 測試用 20 字以內的攻擊字串（`"><svg onload=pwn()>`）
 
@@ -199,8 +202,8 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - **只有兩層**：回覆只能掛在同一篇貼文的主留言下（複合外鍵 `(brew_owner, brew_id, parent_id)`＋trigger）；回覆別人的回覆也掛在主留言下，`reply_to_user` 記對象，畫面顯示「@暱稱」
 - `reply_to_user` 只能是貼文作者或在這一串留過言的人（必定讀得到貼文，也不能拿來探測好友關係），且和自己沒有封鎖
 - 1–300 字（除了換行不可有控制字元）、每天 100 則、**不能修改**（沒有 update 權限）
-- 讀取：讀得到貼文、且和留言者之間沒有封鎖（`private.blocked_with`）；封鎖的雙方在共同好友的貼文上也互相看不到；對被封鎖者的錯誤碼和「不是好友」相同
-- 刪除：留言作者或貼文作者；刪主留言時回覆一起刪（外鍵 cascade）；貼文刪除／改回只有我、刪除帳號時 cascade；**解除好友（含封鎖）時刪掉雙方在對方貼文的留言**（`friendships_after_delete`，重新加好友不會恢復）
+- 讀取：讀得到貼文、且和留言者之間沒有封鎖（`private.blocked_with`）；封鎖的雙方在共同好友的貼文上也互相看不到；對被封鎖者的錯誤碼和「不是好友」相同（讚也一樣：和按讚的人有封鎖就看不到、不算讚數）
+- 刪除：留言作者或貼文作者；刪主留言時回覆一起刪（外鍵 cascade）；貼文刪除／改回只有我、刪除帳號時 cascade；**解除好友時刪掉雙方在對方貼文的留言**（`friendships_after_delete`，重新加好友不會恢復；封鎖只隱藏、不刪）
 - 暱稱：留言者常常不是讀者的好友（profiles 讀不到），所以留言當下由 trigger 記下 `author_nickname`／`reply_to_nickname`（前端不能指定），不擴大 profiles 的讀取範圍（裡面有好友代碼）；畫面上看得到 profile 就用即時暱稱與頭像，否則用快照＋首字頭像；回覆對象刪除帳號時快照一起清掉
 - 通知：`public.comment_activity(post_since, reply_since)`（security invoker，只看 auth.uid()）回傳我貼文的新留言、別人貼文上回覆我的（不重複計算）、最新時間、有新留言的貼文
 - 畫面（`js/views/comments.js`）：主留言舊→新、回覆縮排；回覆 >3 則先收起「查看其他 N 則回覆」；送出時按鈕停用、先顯示「傳送中」，失敗移除並把文字放回輸入框；刪除前 `confirm`；字數「n／300」接近上限變色、超過擋下

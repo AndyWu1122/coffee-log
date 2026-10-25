@@ -135,9 +135,9 @@ export async function render(container, { params: [owner, id], query = {}, isCur
     }
   });
 
-  // 封鎖：同時解除好友，對方看不到你的任何東西，也不會知道被封鎖
+  // 封鎖：不解除好友，雙方互相看不到對方的貼文、留言、讚，對方也不會知道被封鎖
   container.querySelector('[data-action="block"]').addEventListener('click', async () => {
-    if (!confirm(`確定封鎖「${item.nickname}」？\n會同時解除好友，雙方都看不到對方分享的紀錄。對方不會收到通知。`)) return;
+    if (!confirm(`確定封鎖「${item.nickname}」？\n不會解除好友，但你們會互相看不到對方的貼文、留言和讚。對方不會收到通知。`)) return;
     try {
       await blockUser(item.owner);
       toast('已封鎖');

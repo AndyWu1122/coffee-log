@@ -150,50 +150,73 @@ select tests.as_admin();
 select is((select notes from public.shared_brews where id = 'a0000000-0000-0000-0000-000000000001'), 'A 的筆記',
   'A 的紀錄沒有被 B 改到');
 
-/* ========== A 封鎖 B 之後，B 讀不到 A 的任何東西 ========== */
+/* ========== A 封鎖 B：仍是好友，但雙方互相看不到對方的東西 ========== */
 select tests.login_as('aaaaaaaa-0000-0000-0000-000000000000');
 select is((select count(*) from public.likes), 1::bigint, '封鎖前：A 看得到 B 的讚');
 select lives_ok($$ insert into public.blocks (blocked) values ('bbbbbbbb-0000-0000-0000-000000000000') $$, 'A 封鎖 B');
 select is((select count(*) from public.friendships
-  where 'bbbbbbbb-0000-0000-0000-000000000000' in (requester, addressee)), 0::bigint, '封鎖後好友關係解除');
-select is((select count(*) from public.likes), 0::bigint, '封鎖後 B 的讚被刪除');
+  where 'bbbbbbbb-0000-0000-0000-000000000000' in (requester, addressee) and status = 'accepted'), 1::bigint,
+  '封鎖不會解除好友');
+select is((select count(*) from public.likes), 0::bigint, '封鎖後 A 看不到 B 的讚（也不算在讚數裡）');
+select is((select count(*) from public.shared_brews where owner = 'bbbbbbbb-0000-0000-0000-000000000000'), 0::bigint,
+  '封鎖後 A 也讀不到 B 的紀錄（雙向）');
+select is((select nickname from public.profiles where id = 'bbbbbbbb-0000-0000-0000-000000000000'), 'Bob',
+  '封鎖後 A 仍看得到好友 B 的 profile');
+select tests.as_admin();
+select is((select count(*) from public.likes where user_id = 'bbbbbbbb-0000-0000-0000-000000000000'), 1::bigint,
+  'B 的讚只是隱藏，沒有刪除');
 
 select tests.login_as('bbbbbbbb-0000-0000-0000-000000000000');
 select is((select count(*) from public.shared_brews where owner = 'aaaaaaaa-0000-0000-0000-000000000000'), 0::bigint,
   '封鎖後 B 讀不到 A 的紀錄');
-select is((select count(*) from public.profiles where id = 'aaaaaaaa-0000-0000-0000-000000000000'), 0::bigint,
-  '封鎖後 B 讀不到 A 的 profile');
-select is((select count(*) from public.friendships), 0::bigint, '封鎖後 B 沒有和 A 的好友關係');
+select is((select count(*) from public.likes where brew_owner = 'aaaaaaaa-0000-0000-0000-000000000000'), 0::bigint,
+  '封鎖後 B 讀不到 A 紀錄的讚');
+select is((select count(*) from public.profiles where id = 'aaaaaaaa-0000-0000-0000-000000000000'), 1::bigint,
+  '封鎖後 B 仍看得到好友 A 的 profile（好友名單不會少一個人，不透露封鎖）');
+select is((select count(*) from public.friendships where status = 'accepted'
+  and 'aaaaaaaa-0000-0000-0000-000000000000' in (requester, addressee)), 1::bigint, 'B 看到的好友關係還在');
 select is((select count(*) from public.blocks), 0::bigint, 'B 看不到自己被封鎖');
 select throws_ok($$ insert into public.likes (brew_owner, brew_id)
   values ('aaaaaaaa-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001') $$,
   '42501', null, '封鎖後 B 不能對 A 的紀錄按讚');
-select is(public.send_friend_request(tests.code_of('aaaaaaaa-0000-0000-0000-000000000000')), 'not_found',
-  '被封鎖的 B 用正確代碼送邀請，只會得到 not_found');
-select is((select count(*) from public.friendships), 0::bigint, '被封鎖的 B 沒有送出邀請');
+select is(public.send_friend_request(tests.code_of('aaaaaaaa-0000-0000-0000-000000000000')), 'already_friends',
+  '被封鎖的好友 B 用 A 的代碼送邀請：already_friends（和沒封鎖時一樣）');
 select is_empty($$ delete from public.blocks returning 1 $$, 'B 不能解除 A 對他的封鎖');
 
 select tests.login_as('aaaaaaaa-0000-0000-0000-000000000000');
-select is(public.send_friend_request(tests.code_of('bbbbbbbb-0000-0000-0000-000000000000')), 'you_blocked',
-  'A 要先解除封鎖才能再邀請 B');
+select is(public.send_friend_request(tests.code_of('bbbbbbbb-0000-0000-0000-000000000000')), 'already_friends',
+  'A 用好友 B 的代碼：already_friends');
 select lives_ok($$ delete from public.blocks where blocked = 'bbbbbbbb-0000-0000-0000-000000000000' $$, 'A 解除封鎖');
+select is((select count(*) from public.likes), 1::bigint, '解除封鎖後 A 又看得到 B 的讚');
 select tests.login_as('bbbbbbbb-0000-0000-0000-000000000000');
-select is((select count(*) from public.shared_brews where owner = 'aaaaaaaa-0000-0000-0000-000000000000'), 0::bigint,
-  '解除封鎖不會自動恢復好友，B 仍讀不到');
+select is((select count(*) from public.shared_brews where owner = 'aaaaaaaa-0000-0000-0000-000000000000'), 1::bigint,
+  '解除封鎖後 B 又讀得到 A 的紀錄');
+
+/* ========== 封鎖待處理的邀請：邀請刪除，之後送不了邀請 ========== */
+-- 前面 C 送了邀請給 A
+select tests.login_as('aaaaaaaa-0000-0000-0000-000000000000');
+select is((select count(*) from public.friendships where status = 'pending'
+  and 'cccccccc-0000-0000-0000-000000000000' in (requester, addressee)), 1::bigint, '封鎖前：C 的邀請還在');
+select lives_ok($$ insert into public.blocks (blocked) values ('cccccccc-0000-0000-0000-000000000000') $$, 'A 封鎖 C');
+select is((select count(*) from public.friendships
+  where 'cccccccc-0000-0000-0000-000000000000' in (requester, addressee)), 0::bigint, '封鎖時待處理的邀請刪除');
+select is((select count(*) from public.profiles where id = 'cccccccc-0000-0000-0000-000000000000'), 0::bigint,
+  '邀請刪除後 A 讀不到 C 的 profile');
+select is(public.send_friend_request(tests.code_of('cccccccc-0000-0000-0000-000000000000')), 'you_blocked',
+  'A 要先解除封鎖才能邀請 C');
+select tests.login_as('cccccccc-0000-0000-0000-000000000000');
+select is(public.send_friend_request(tests.code_of('aaaaaaaa-0000-0000-0000-000000000000')), 'not_found',
+  '被封鎖的 C 用正確代碼送邀請，只會得到 not_found');
+select is((select count(*) from public.friendships), 0::bigint, '被封鎖的 C 沒有送出邀請');
 
 /* ========== 反方向：B 封鎖 A，A 也讀不到 B ========== */
--- 先封鎖、再（以管理者身分）硬塞一筆 accepted 好友：確認就算好友關係還在，RLS 的封鎖檢查也會擋下
--- （正常流程封鎖時好友關係會被刪除，這裡是在測第二道防線）
-select tests.as_admin();
-insert into public.blocks (blocker, blocked) values
-  ('bbbbbbbb-0000-0000-0000-000000000000', 'aaaaaaaa-0000-0000-0000-000000000000');
-insert into public.friendships (requester, addressee, status) values
-  ('aaaaaaaa-0000-0000-0000-000000000000', 'bbbbbbbb-0000-0000-0000-000000000000', 'accepted');
+select tests.login_as('bbbbbbbb-0000-0000-0000-000000000000');
+select lives_ok($$ insert into public.blocks (blocked) values ('aaaaaaaa-0000-0000-0000-000000000000') $$, 'B 封鎖 A');
 select tests.login_as('aaaaaaaa-0000-0000-0000-000000000000');
 select is((select count(*) from public.shared_brews where owner = 'bbbbbbbb-0000-0000-0000-000000000000'), 0::bigint,
-  'B 封鎖 A 後，就算好友關係還在，A 也讀不到 B 的紀錄（雙方都讀不到）');
-select is((select count(*) from public.profiles where id = 'bbbbbbbb-0000-0000-0000-000000000000'), 0::bigint,
-  'B 封鎖 A 後，A 讀不到 B 的 profile');
+  'B 封鎖 A 後，A 讀不到 B 的紀錄');
+select is((select count(*) from public.blocks where blocked = 'bbbbbbbb-0000-0000-0000-000000000000'), 0::bigint,
+  'A 看不到 B 封鎖了他');
 
 select * from finish();
 rollback;
