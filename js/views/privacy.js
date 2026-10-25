@@ -1,4 +1,4 @@
-// #/privacy 隱私說明（從 ☰ 選單、帳號頁進入）：收集什麼、誰看得到、照片怎麼處理、怎麼刪除
+// #/privacy 隱私說明（從 ☰ →「設定與關於」、帳號頁進入）：收集什麼、誰看得到、照片怎麼處理、怎麼刪除
 // 靜態內容，離線也能看；沒有社群功能的網址也顯示（說明資料只存在這支手機）
 // ⚠ 內容要和實際行為一致：修改資料收集、可見範圍、照片處理、刪除流程時，這頁要一起改
 import { socialAvailable } from '../models.js';
@@ -76,7 +76,7 @@ export function render(container) {
       <section class="section">
         <h2>推播通知</h2>
         <ul class="plain-list">
-          <li>在 ☰ →「通知設定」按「在這台裝置啟用通知」才會開始，不按就不會收到，也不會詢問通知權限</li>
+          <li>在 ☰ →「設定與關於」→「通知設定」按「在這台裝置啟用通知」才會開始，不按就不會收到，也不會詢問通知權限</li>
           <li><strong>存在伺服器的訂閱資訊</strong>（每台啟用的裝置一筆，最多 10 台）：瀏覽器提供的推播網址、加密用的金鑰、瀏覽器名稱（User-Agent，例如「iPhone Safari」），
             和你的帳號相連；其他使用者看不到。另外存「新留言」「回覆」兩個開關</li>
           <li><strong>通知包含什麼</strong>：只有「○○ 留言了你的貼文」或「○○ 回覆了你的留言」（○○ 是對方的暱稱）和是哪一篇紀錄（點了會打開它），
@@ -111,7 +111,7 @@ export function render(container) {
 
       <section class="section">
         <h2>有問題</h2>
-        <p>登入後可以從 ☰ →「意見回饋」告訴開發者，或到 <a href="https://github.com/AndyWu1122/coffee-log/issues" rel="noopener noreferrer" target="_blank">GitHub</a> 回報（GitHub 上的內容是公開的）。</p>
+        <p>登入後可以從 ☰ →「設定與關於」→「意見回饋」告訴開發者，或到 <a href="https://github.com/AndyWu1122/coffee-log/issues" rel="noopener noreferrer" target="_blank">GitHub</a> 回報（GitHub 上的內容是公開的）。</p>
       </section>
     </article>`;
 }

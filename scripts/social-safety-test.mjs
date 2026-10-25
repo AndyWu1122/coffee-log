@@ -111,11 +111,12 @@ try {
 
   /* ===== Service Worker 沒有快取 Supabase 的網址（API、signed URL） ===== */
   await pb.waitFor(`navigator.serviceWorker.controller !== null`, { label: 'Service Worker 接手', timeout: 15000 });
-  // ☰ 選單的版本號＝sw.js 的 APP_VERSION（要在受 Service Worker 控制的頁面檢查：visit 的強制重新整理會略過 Service Worker）
+  // 設定頁的版本號＝sw.js 的 APP_VERSION（要在受 Service Worker 控制的頁面檢查：visit 的強制重新整理會略過 Service Worker，所以只改 hash）
   const swVersion = (await readFile(path.join(root, 'sw.js'), 'utf8')).match(/const APP_VERSION = '(\d+\.\d+\.\d+)';/)?.[1];
-  const shownVersion = await pb.waitFor(`(() => { const el = document.querySelector('#app-version'); return !el.hidden && el.textContent; })()`,
-    { label: '選單的版本號' });
-  check('☰ 選單顯示的版本號等於 sw.js 的 APP_VERSION（x.y.z）', Boolean(swVersion) && shownVersion === `版本 ${swVersion}`, shownVersion);
+  await pb.eval(`location.hash = '#/settings'; true`);
+  const shownVersion = await pb.waitFor(`(() => { const el = document.querySelector('.settings #app-version'); return el && !el.hidden && el.textContent; })()`,
+    { label: '設定頁的版本號' });
+  check('設定頁顯示的版本號等於 sw.js 的 APP_VERSION（x.y.z）', Boolean(swVersion) && shownVersion === `版本 ${swVersion}`, shownVersion);
   const cacheNames = await pb.eval(`caches.keys()`);
   check('快取名稱由 APP_VERSION 產生', JSON.stringify(cacheNames) === JSON.stringify([`coffee-log-v${swVersion}`]), JSON.stringify(cacheNames));
   // 舊版 Service Worker（1.0.0 以前）回的是整數：新版頁面照樣顯示、送出成字串
@@ -192,11 +193,12 @@ try {
   const privacy = await pa.waitFor(`document.querySelector('.privacy')?.textContent`);
   check('隱私說明：寫出會存 email、照片移除 GPS、怎麼刪除帳號',
     ['email', 'GPS', '刪除我的帳號', '東京'].every((w) => privacy.includes(w)));
-  check('☰ 選單有隱私說明', await pa.eval(`Boolean(document.querySelector('#app-menu a[href="#/privacy"]:not([hidden])'))`));
+  await visit(pa, base, '#/settings');
+  check('「設定與關於」有隱私說明', Boolean(await pa.waitFor(`document.querySelector('.settings a[href="#/privacy"]')`, { label: '設定頁的隱私說明' })));
 
   /* ===== CSP ===== */
   // App 的每一頁（含分享卡片的 canvas、照片的 blob 網址）都不能因為 CSP 壞掉
-  for (const hash of ['#/', `#/brew/${brewId}`, `#/brew/${brewId}/share`, '#/brew/new', '#/beans', `#/beans/${beanId}`, '#/grinders', '#/backup', '#/feedback', '#/changelog', '#/admin',
+  for (const hash of ['#/', `#/brew/${brewId}`, `#/brew/${brewId}/share`, '#/brew/new', '#/beans', `#/beans/${beanId}`, '#/grinders', '#/backup', '#/feedback', '#/changelog', '#/settings', '#/admin',
     '#/social', '#/social?mine=1', `#/social/${A.id}/${brewId}?comments=1`]) {
     await visit(pa, base, hash);
     await pa.waitFor(`document.querySelector('#app').children.length > 0 && !document.querySelector('#app > .hint')`, { label: `${hash} 載入` });

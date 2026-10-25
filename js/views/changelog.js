@@ -1,5 +1,5 @@
-// #/changelog 更新內容（從 ☰ 選單、選單最下面的版本號、「已更新」的提示進入）
-// 靜態內容（js/changelog.js），離線也能看；打開就算看過了，☰ 的「!」跟著消失
+// #/changelog 更新內容（從 ☰ →「設定與關於」、那一頁最下面的版本號、「已更新」的提示進入）
+// 靜態內容（js/changelog.js），離線也能看；打開就算看過了，☰ 和「設定與關於」的「!」跟著消失
 import { CHANGELOG, getChangelogStatus, markChangelogSeen, isNewerThan } from '../models.js';
 import { esc, setTitle, appVersion, notifyBadgesChanged } from './ui.js';
 

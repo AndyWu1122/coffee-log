@@ -1,8 +1,8 @@
 // 進入點 + hash 路由
-import { esc, toast, appVersion, BADGES_EVENT } from './views/ui.js';
+import { esc, toast, appVersion, BADGES_EVENT, applyTheme, themePref } from './views/ui.js';
 import {
   socialAvailable, completeSignIn, requestSync, getSocialBadges, badgeText,
-  getBackupStatus, getChangelogStatus, markChangelogSeen, isAdmin, isPushRoute,
+  getBackupStatus, getChangelogStatus, markChangelogSeen, isPushRoute,
 } from './models.js';
 
 // 各 view 用動態 import 延遲載入；每個 view 匯出 render(container, params)
@@ -20,6 +20,8 @@ const routes = [
   // 個人檔案（頭像、暱稱點過來；自己的從 ☰ →「帳號」進來）
   { pattern: /^\/user\/([\w-]+)$/, tab: 'social', load: () => import('./views/profile.js') },
   // ☰ 選單裡的頁面：不屬於任何底部分頁（tab: null）
+  // 設定與關於：外觀、通知設定、隱私說明、更新內容、意見回饋、開發者後台、版本號（☰ 只放常用的）
+  { pattern: /^\/settings$/, tab: null, load: () => import('./views/settings.js') },
   { pattern: /^\/stats$/, tab: null, load: () => import('./views/stats.js') },
   { pattern: /^\/backup$/, tab: null, load: () => import('./views/backup.js') },
   { pattern: /^\/privacy$/, tab: null, load: () => import('./views/privacy.js') },
@@ -126,33 +128,15 @@ function setupMenu() {
 }
 
 /* ===== 外觀：自動（跟系統）／淺色／深色 ===== */
-// 第一次套用在 index.html <head>（避免閃爍）；這裡負責切換，判斷方式要和 <head> 那段一致
+// 第一次套用在 index.html <head>（避免閃爍）；切換在設定頁（ui.setThemePref），這裡只負責「自動」時跟著系統
+
+// MediaQueryList 要留住：沒有引用的話會被回收，change 事件就不會再觸發
+const systemLight = matchMedia('(prefers-color-scheme: light)');
 
 function setupTheme() {
-  const systemLight = matchMedia('(prefers-color-scheme: light)');
-  const readPref = () => { try { return localStorage.getItem('theme') || 'auto'; } catch { return 'auto'; } };
-  const savePref = (pref) => { try { localStorage.setItem('theme', pref); } catch { /* 無痕模式等：只在這次有效 */ } };
-  let pref = readPref();
-
-  const apply = () => {
-    const light = pref === 'light' || (pref === 'auto' && systemLight.matches);
-    document.documentElement.dataset.theme = light ? 'light' : 'dark';
-    document.querySelector('meta[name="theme-color"]').content = light ? '#ffffff' : '#2b1d14';
-    for (const btn of document.querySelectorAll('[data-theme-pref]')) {
-      btn.setAttribute('aria-checked', String(btn.dataset.themePref === pref));
-    }
-  };
-
-  document.querySelector('.theme-options').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-theme-pref]');
-    if (!btn) return;
-    pref = btn.dataset.themePref;
-    savePref(pref);
-    apply();
+  systemLight.addEventListener('change', () => {
+    if (themePref() === 'auto') applyTheme();
   });
-  // 「自動」時，系統切換深淺色要即時跟上
-  systemLight.addEventListener('change', () => { if (pref === 'auto') apply(); });
-  apply();
 }
 
 /* ===== PWA：Service Worker 與新版本提示 ===== */
@@ -164,16 +148,6 @@ function setupServiceWorker() {
   const banner = document.getElementById('update-banner');
   let waitingWorker = null;
   let updateRequested = false;
-
-  // ☰ 選單的版本號（sw.js 的 APP_VERSION，點了到更新內容）；問不到（更舊的 Service Worker 不會回覆）就維持隱藏
-  const showVersion = async () => {
-    const version = await appVersion();
-    if (version == null) return;
-    const el = document.getElementById('app-version');
-    el.firstElementChild.textContent = `版本 ${version}`;
-    el.hidden = false;
-  };
-  showVersion();
 
   const showUpdate = (worker) => {
     waitingWorker = worker;
@@ -193,7 +167,6 @@ function setupServiceWorker() {
   // 新版接手後才重新整理；第一次安裝時的接手不重新整理
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (updateRequested) location.reload();
-    else showVersion(); // 第一次安裝：剛接手，現在才問得到
   });
 
   navigator.serviceWorker.register('sw.js').then((reg) => {
@@ -228,7 +201,8 @@ async function start() {
 }
 
 /* ===== 提示：☰ 選單的「!」、底部「社群」分頁的數字 ===== */
-// ☰ 選單裡需要注意的那一項後面有「!」（強調色）：好友管理＝收到好友邀請、備份＝超過 14 天沒備份、更新內容＝還沒看過這一版的說明
+// ☰ 選單裡需要注意的那一項後面有「!」（強調色）：好友管理＝收到好友邀請、備份＝超過 14 天沒備份、
+// 設定與關於＝還沒看過這一版的更新內容（設定頁裡「更新內容」的「!」由 views/settings.js 自己判斷）
 // ☰ 按鈕上的「!」＝其中任何一項；備份、更新內容只看本機，沒有社群功能也會顯示
 // 底部「社群」分頁的數字（--badge-new）：好友新貼文＋我貼文的新留言＋回覆我的，超過 99 顯示 99+，0 不顯示
 // 時機和同步一樣（啟動、恢復網路、切回前景），另外 views 操作完會發出 BADGES_EVENT
@@ -237,7 +211,7 @@ async function start() {
 const MENU_ALERTS = {
   friends: { name: '好友管理', reason: '有新的好友邀請' },
   backup: { name: '備份', reason: '該備份了' },
-  changelog: { name: '更新內容', reason: '有新版的更新內容' },
+  settings: { name: '設定與關於', reason: '有新版的更新內容' },
 };
 
 function setupBadges() {
@@ -246,7 +220,7 @@ function setupBadges() {
   const socialTab = document.querySelector('.tabbar [data-tab="social"]');
   const socialBadge = document.getElementById('social-badge');
   const updatedBanner = document.getElementById('updated-banner');
-  const alerts = { friends: false, backup: false, changelog: false };
+  const alerts = { friends: false, backup: false, settings: false };
   let version = null;
 
   const show = () => {
@@ -261,7 +235,7 @@ function setupBadges() {
     menuBadge.hidden = !reasons.length;
     menuBtn.setAttribute('aria-label', reasons.length ? `選單（${reasons.join('、')}）` : '選單');
     // 「已更新」的提示：在更新內容頁上就不用了
-    updatedBanner.hidden = !alerts.changelog || parseHash().path === '/changelog';
+    updatedBanner.hidden = !alerts.settings || parseHash().path === '/changelog';
     if (version) document.getElementById('updated-text').textContent = `已更新到 ${version}`;
   };
 
@@ -273,15 +247,14 @@ function setupBadges() {
       const [backup, changelog] = await Promise.all([getBackupStatus(), getChangelogStatus(version)]);
       if (t !== token) return;
       alerts.backup = backup.overdue;
-      alerts.changelog = changelog.unseen;
+      alerts.settings = changelog.unseen;
     } catch (err) {
       console.warn('本機提示檢查失敗', err);
     }
     if (socialAvailable) {
       try {
-        const [{ requests, count }, admin] = await Promise.all([getSocialBadges(), isAdmin()]);
+        const { requests, count } = await getSocialBadges();
         if (t !== token) return;
-        for (const el of document.querySelectorAll('[data-admin]')) el.hidden = !admin; // ☰ 的「開發者後台」
         alerts.friends = requests;
         const text = badgeText(count);
         socialBadge.textContent = text;

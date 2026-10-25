@@ -160,26 +160,9 @@ a { color: var(--accent); }
 }
 .menu-list a:hover, .menu-list a:focus-visible { background: var(--surface); outline: none; }
 .menu-list { min-width: 248px; }
+/* 項目不多（不常用的在設定頁），但小螢幕、放大字體時仍可能超出畫面：在選單裡捲動 */
+.menu-list { max-height: calc(100dvh - 72px - var(--safe-bottom)); overflow-y: auto; overscroll-behavior: contain; }
 .menu-sep { height: 1px; background: var(--border); margin: 6px 4px; opacity: 0.6; }
-.menu-theme { padding: 4px 6px 6px; }
-.menu-label { display: flex; align-items: center; gap: 10px; padding: 6px 6px 8px; color: var(--text-dim); font-size: 0.9rem; }
-.menu-version {
-  padding: 0 4px 4px;
-  color: var(--text-dim);
-  font-size: 0.8rem;
-  text-align: center;
-}
-/* 版本號是到更新內容頁的連結，但看起來和原本一樣是小字 */
-.menu-list .menu-version a { justify-content: center; min-height: 40px; color: var(--text-dim); }
-/* 上方的分隔線和 .menu-sep 一樣（只在顯示版本號時出現） */
-.menu-version::before {
-  content: '';
-  display: block;
-  height: 1px;
-  margin: 6px 0 6px;
-  background: var(--border);
-  opacity: 0.6;
-}
 .theme-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .theme-options button {
   min-height: 48px;
@@ -196,6 +179,31 @@ a { color: var(--accent); }
   color: var(--accent-text);
   font-weight: 600;
 }
+
+/* ===== 設定與關於（#/settings） ===== */
+.settings-group {
+  display: grid;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--tap);
+  padding: 0 16px;
+  color: var(--text);
+  text-decoration: none;
+}
+.settings-row + .settings-row { border-top: 1px solid var(--border); }
+/* 右邊的「›」；有「!」時「!」靠右（margin-left: auto），「›」接在它後面 */
+.settings-row::after { content: '›'; margin-left: auto; color: var(--text-dim); font-size: 1.3rem; }
+.settings-row:has(.menu-alert:not([hidden]))::after { margin-left: 8px; }
+.settings-row:active { background: var(--surface-2); }
+.settings-version { margin: 0; text-align: center; font-size: 0.85rem; }
+.settings-version a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; color: var(--text-dim); }
 
 /* ===== 主內容：預留底部分頁列與 FAB 空間 ===== */
 #app {

@@ -99,7 +99,7 @@ export function avatarHtml({ nickname, avatarUrl }, { large = false } = {}) {
 export const profileHref = (userId) => `#/user/${encodeURIComponent(userId)}`;
 
 /**
- * 提示（☰ 選單的「!」：好友邀請、該備份了、更新內容；「社群」分頁的數字）可能改變了：app.js 收到後重新檢查
+ * 提示（☰ 選單的「!」：好友邀請、該備份了、更新內容（在「設定與關於」）；「社群」分頁的數字）可能改變了：app.js 收到後重新檢查
  * 用事件通知，views 不直接呼叫 app.js
  */
 export const BADGES_EVENT = 'social-badges-changed';
@@ -151,4 +151,29 @@ export async function copyText(text, message = '已複製') {
   } catch {
     prompt('請長按複製：', text);
   }
+}
+
+/* ===== 外觀：自動（跟系統）／淺色／深色 ===== */
+// 第一次套用在 <head> 的 js/theme.js（避免閃爍）；這裡負責切換（設定頁、app.js 共用），判斷方式要和 theme.js 一致
+// 偏好存 localStorage（CLAUDE.md 的唯一例外）；無痕模式等讀寫失敗：只在這次有效
+
+const systemLight = () => matchMedia('(prefers-color-scheme: light)').matches;
+let currentPref = null; // 這次選的（localStorage 寫不進去時也記得住）
+
+export function themePref() {
+  if (currentPref) return currentPref;
+  try { return localStorage.getItem('theme') || 'auto'; } catch { return 'auto'; }
+}
+
+export function applyTheme(pref = themePref()) {
+  const light = pref === 'light' || (pref !== 'dark' && systemLight());
+  document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  document.querySelector('meta[name="theme-color"]').content = light ? '#ffffff' : '#2b1d14';
+  document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content = light ? 'default' : 'black-translucent';
+}
+
+export function setThemePref(pref) {
+  currentPref = pref;
+  try { localStorage.setItem('theme', pref); } catch { /* 只在這次有效 */ }
+  applyTheme(pref);
 }

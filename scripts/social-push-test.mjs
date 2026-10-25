@@ -128,7 +128,9 @@ try {
   /* ===== 1. 不會一打開就詢問權限 ===== */
   await sleep(1500);
   check('打開 App：沒有詢問通知權限', (await pa.eval('window.__permAsked')) === 0);
-  check('☰ 有「通知設定」', (await pa.eval(`!document.querySelector('a[href="#/notifications"]').hidden`)) === true);
+  await pa.eval(`location.hash = '#/settings'; true`);
+  check('「設定與關於」有「通知設定」', Boolean(await pa.waitFor(`document.querySelector('.settings a[href="#/notifications"]')`, { label: '設定頁的通知設定' })));
+  check('設定頁也沒有詢問通知權限', (await pa.eval('window.__permAsked')) === 0);
 
   await visit(pa, base, '#/notifications');
   await settingsLoaded(pa);

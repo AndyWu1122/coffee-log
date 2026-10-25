@@ -1,4 +1,4 @@
-// #/feedback 意見回饋（從右上角 ☰ 選單進入）：要登入才能送（防灌送），內容只有開發者看得到
+// #/feedback 意見回饋（從 ☰ →「設定與關於」進入）：要登入才能送（防灌送），內容只有開發者看得到
 // 送出後由 Edge Function 存進 Supabase 並寄 Email 通知開發者；附上暱稱和 App 版本號，不附 email
 import {
   getSocialState, socialErrorMessage, sendFeedback, FEEDBACK_CATEGORIES, FEEDBACK_MAX, FEEDBACK_DAILY_MAX,

@@ -35,7 +35,7 @@ js/cloud.js        # 唯一存取 Supabase 的地方（角色和 db.js 一樣）
 js/sync.js         # 好友紀錄的同步（本機 friends 紀錄 → shared_brews），只由 models.js 使用
 js/push.js         # 推播通知的瀏覽器那一邊（Notification、PushManager、iOS 主畫面判斷），只由 models.js 使用
 js/vendor/         # 第三方檔案原封不動（supabase-js UMD、qrcode-generator），來源與 SRI 見 js/vendor/README.md
-js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, dripperList, dripperForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, changelog（更新內容）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, profile（個人檔案）, stats（統計：SVG 圖表）, privacy（隱私說明）, feedback（意見回饋）, notifications（通知設定）, admin（開發者後台）, ui（共用 DOM 工具）
+js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, dripperList, dripperForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, changelog（更新內容）, settings（設定與關於）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, profile（個人檔案）, stats（統計：SVG 圖表）, privacy（隱私說明）, feedback（意見回饋）, notifications（通知設定）, admin（開發者後台）, ui（共用 DOM 工具）
 icons/
 docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟、部署指令）、overnight-report.md（2026-10-26 通宵工作的報告）
 supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）、functions/admin-delete-user（開發者刪別人的帳號）、functions/_shared/account.ts（兩者共用的刪除流程）、functions/feedback（意見回饋：存檔＋寄 Email 給站長；mail.ts 是設定檢查與錯誤說明的純函式）、functions/send-push（推播通知）、functions/_shared/webpush.ts（VAPID 簽章與 RFC 8291 加密，只用 Web Crypto）
@@ -69,20 +69,22 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - id 用 crypto.randomUUID()
 
 ## 路由（hash）
-`#/` 紀錄列表（`?bean=<id>` 帶入豆子篩選，統計頁用）｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/drippers`｜`#/drippers/new`｜`#/drippers/<id>`｜`#/account` 帳號｜`#/friends` 好友管理｜`#/social` 社群（全部）｜`#/social?mine=1` 社群（我的）｜`#/social/<owner>/<id>` 紀錄詳細（`?comments=1` 捲到留言區）｜`#/user/<id>` 個人檔案｜`#/stats` 統計｜`#/privacy` 隱私說明｜`#/changelog` 更新內容｜`#/feedback` 意見回饋｜`#/notifications` 通知設定｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）｜`#/admin?tab=reports|posts|users|feedback|log` 開發者後台｜`#/admin/user/<id>`｜`#/admin/post/<owner>/<id>`
+`#/` 紀錄列表（`?bean=<id>` 帶入豆子篩選，統計頁用）｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/drippers`｜`#/drippers/new`｜`#/drippers/<id>`｜`#/account` 帳號｜`#/friends` 好友管理｜`#/social` 社群（全部）｜`#/social?mine=1` 社群（我的）｜`#/social/<owner>/<id>` 紀錄詳細（`?comments=1` 捲到留言區）｜`#/user/<id>` 個人檔案｜`#/stats` 統計｜`#/privacy` 隱私說明｜`#/changelog` 更新內容｜`#/settings` 設定與關於｜`#/feedback` 意見回饋｜`#/notifications` 通知設定｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）｜`#/admin?tab=reports|posts|users|feedback|log` 開發者後台｜`#/admin/user/<id>`｜`#/admin/post/<owner>/<id>`
 - 1.1.0 以前的 `#/feed`、`#/feed/<owner>/<id>` 由 app.js 轉址到 `#/social…`
 
 ## 介面配置
 - 底部分頁列：紀錄｜豆子｜社群（只放每天會用的頁面）；「社群 💬」是動態牆，有 `data-social`，`js/config.js` 沒設定時隱藏
-- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：帳號、好友管理、通知設定、統計、磨豆機、濾杯、備份、隱私說明、更新內容、意見回饋、開發者後台；帳號、好友管理、通知設定、意見回饋有 `data-social`，`js/config.js` 沒設定時隱藏；開發者後台有 `data-admin`，只有 `am_i_admin` 為 true 時顯示）
-- ☰ 選單裡的頁面不屬於任何分頁，路由設 `tab: null`，底部分頁都不亮
+- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**；☰ 只放比較常用的：帳號、好友管理（`data-social`）｜統計、磨豆機、濾杯、備份｜🔧 設定與關於（375×667 要整個放得下，menu-alerts-test 會量；`.menu-list` 有 `max-height` 捲動作保險）
+- **更少用的放「設定與關於」**（`#/settings`，`js/views/settings.js`），不要加回 ☰：外觀、通知設定、隱私說明、更新內容、意見回饋、開發者後台、版本號
+  - 通知設定、意見回饋只在 `js/config.js` 有設定時顯示；開發者後台（`[data-admin]`）只有 `models.isAdmin()` 為 true 時顯示，問完在 `.settings` 記 `data-admin-checked`（測試用）
+- ☰ 選單和設定頁裡的頁面不屬於任何分頁，路由設 `tab: null`，底部分頁都不亮
 - ☰ 的「!」（`app.js` 的 `setupBadges`）：選單裡需要注意的那一項後面有「!」（`.menu-alert[data-alert]`，`--accent`），☰ 按鈕上的「!」＝其中任何一項；aria-label 寫出是哪幾項
-  - 好友管理＝收到好友邀請（社群）；備份＝`getBackupStatus().overdue`（有紀錄且 ≥ 14 天沒備份，首頁按「稍後」也照樣顯示，匯出後消失）；更新內容＝還沒看過這一版
+  - 好友管理＝收到好友邀請（社群）；備份＝`getBackupStatus().overdue`（有紀錄且 ≥ 14 天沒備份，首頁按「稍後」也照樣顯示，匯出後消失）；設定與關於（`data-alert="settings"`）＝還沒看過這一版的更新內容，設定頁裡「更新內容」那一行也有「!」（settings.js 自己問 `getChangelogStatus`；只進設定頁不算看過）
   - 備份、更新內容只看本機，沒有社群功能也顯示
 - 更新內容：`js/changelog.js`，**每次升 `APP_VERSION` 都要在最前面加一段**（menu-alerts-test 檢查第一段＝`APP_VERSION`）
   - meta `changelogSeen` 記看過的版本；全新安裝（沒有豆子、紀錄）直接記成目前版本、不提示；已經在用但沒記過的算剛更新
   - 還沒看過時，畫面底部顯示「已更新到 x.y.z・看看改了什麼」（`#updated-banner`，「有新版本可用」出現時先讓它）；打開 `#/changelog` 或按 ✕ 就記成看過
-  - ☰ 選單最下面的版本號也連到 `#/changelog`
+  - 設定頁最下面的版本號也連到 `#/changelog`
 - 社群提示（`models.getSocialBadges`）：底部「社群」分頁的**數字**（`--badge-new`，和「!」的顏色要能區分）
   - 數字＝好友新貼文＋我貼文的新留言＋回覆我的留言；各自最多算 100，>99 顯示「99+」（`models.badgeText`），0 隱藏
   - 「新」＝雲端 `created_at` 比 meta 記下的 seenAt 新（`feedSeenAt`／`commentsSeenAt`／`repliesSeenAt`，雲端時間、記 userId）；好友修改舊紀錄不算
@@ -91,8 +93,9 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
   - 數字不即時更新；即時的提醒是推播通知（見「推播通知」），點通知打開 App 時數字跟著更新
 
 ## 主題（深色／淺色）
-- ☰ 選單「外觀」：自動（跟系統）｜淺色｜深色；結果寫在 `<html data-theme="dark|light">`
-- `index.html` `<head>` 用一般 `<script src="js/theme.js">`（不是 module、不是 inline，CSP 不允許 inline script）在畫面畫出前套用；`js/app.js` 的 `setupTheme()` 負責切換，兩邊判斷要一致
+- ☰ →「設定與關於」的「外觀」：自動（跟系統）｜淺色｜深色；結果寫在 `<html data-theme="dark|light">`
+- `index.html` `<head>` 用一般 `<script src="js/theme.js">`（不是 module、不是 inline，CSP 不允許 inline script）在畫面畫出前套用；之後的切換是 `js/views/ui.js` 的 `themePref`／`applyTheme`／`setThemePref`（設定頁用），`js/app.js` 的 `setupTheme()` 只負責「自動」時跟著系統；兩邊判斷要一致
+  - `matchMedia` 回傳的物件要用變數留住，否則被回收後 change 事件不再觸發
 - 顏色一律用 `css/style.css` 的變數（`--bg`、`--text`…），**不要寫死顏色**；新增顏色時兩個主題都要定義
 - 淺色主題對比已驗證：文字 ≥ 14:1、次要文字 ≥ 6.9:1、強調色 ≥ 5.2:1、邊框 ≥ 3:1；改色時要重新驗證
 - 風味輪實色格子的字色依底色選白或深（`js/flavorWheel.js` 的 `INK`），淡化格子用 `--text`
@@ -134,7 +137,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - **修改任何前端檔案後，`sw.js` 的 `APP_VERSION` 至少第三碼 +1**，否則使用者不會收到新版本（`CACHE_NAME` 由它產生，不另外維護）
   - 版本號（semver `x.y.z`，從 1.0.0 開始）：修 bug → 第三碼 +1；新功能 → 第二碼 +1、第三碼歸零；資料不相容的大改 → 第一碼 +1
   - **同時要在 `js/changelog.js` 最前面加一段更新內容**（寫給使用者看的白話；只修小錯誤也寫一句）
-  - 它也是 ☰ 選單最下面顯示的「版本 x.y.z」、意見回饋附的版本：app.js 用 `'version'` 訊息問目前接管頁面的 Service Worker（沒有 Service Worker 時不顯示）
+  - 它也是「設定與關於」頁最下面顯示的「版本 x.y.z」、意見回饋附的版本：app.js 用 `'version'` 訊息問目前接管頁面的 Service Worker（沒有 Service Worker 時不顯示）
   - 1.0.0 以前的舊版 Service Worker 回的是整數（`CACHE_VERSION`）：`ui.normalizeAppVersion` 轉成字串 `'18'`，Edge Function `feedback` 也接受整數
 - **新增前端檔案時，要加進 `sw.js` 的 `ASSETS`**，否則離線時載不到
 - 有新版時畫面底部顯示「有新版本可用」，使用者按「更新」才切換（避免填表單時被重新整理）
@@ -243,7 +246,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - 社群頁「全部｜我的」：全部包含自己的紀錄，自己的卡片標「我」；自己的紀錄詳細頁有「編輯」（這台裝置有這筆才顯示）、沒有檢舉／封鎖；卡片顯示讚數、留言數
 
 ### 開發者後台
-- ☰ →「🛠️ 開發者後台」（`#/admin`，`js/views/admin.js`）：檢舉｜貼文｜用戶｜回饋｜紀錄；用戶詳細（他所有雲端貼文、留言）、貼文詳細（全部留言、檢舉）
+- ☰ →「設定與關於」→「🛠️ 開發者後台」（`#/admin`，`js/views/admin.js`）：檢舉｜貼文｜用戶｜回饋｜紀錄；用戶詳細（他所有雲端貼文、留言）、貼文詳細（全部留言、檢舉）
 - 前端只負責隱藏入口；**後台讀資料一律走 security definer 的 `public.admin_*`**（開頭 `private.require_admin()`，不是開發者 42501），**不要在 shared_brews、comments、profiles 加「開發者可讀」的 RLS**（permissive 政策是 OR，開發者自己的動態牆、通知數字會混進所有人的貼文）；Storage 例外：開發者可讀 brew-photos、avatars，可刪 brew-photos
 - 刪除：原因必填（1–200 字，`private.check_reason`）→ `confirm` → 送出；每次都先寫 `public.admin_audit_log` 再刪
   - 留言：`admin_delete_comment`（回覆 cascade）
@@ -266,7 +269,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - 編輯：自己的檔案頁「編輯個人檔案」（頭像、暱稱、自我介紹、器材、豆子，輸入框顯示「n／上限」）；☰ →「帳號」有「我的個人檔案」入口
 
 ### 意見回饋
-- ☰ →「意見回饋」（`#/feedback`），要登入才能送（防灌送）；類型（bug/idea/other）、內容 ≤ 1000 字，附暱稱（author）與 App 版本號（`feedback.app_version` 是文字：`x.y.z` 或舊版的整數字串），不附 email
+- ☰ →「設定與關於」→「意見回饋」（`#/feedback`），要登入才能送（防灌送）；類型（bug/idea/other）、內容 ≤ 1000 字，附暱稱（author）與 App 版本號（`feedback.app_version` 是文字：`x.y.z` 或舊版的整數字串），不附 email
 - `feedback` 表和檢舉一樣：只能以自己的名義新增，誰都讀不到（連作者自己），站長在 Supabase 後台看；刪除帳號時 cascade 刪除
 - App 呼叫 Edge Function `feedback`：用**呼叫者的 JWT** 寫入（RLS、每日上限照常生效）→ 透過 Resend 寄**純文字** Email 給站長；先存檔再寄信，寄信失敗不影響回饋
 - 沒寄出信時 function log 一定有一行 `[feedback] 沒有寄信：<原因>`（設定缺漏、假值、Resend 的錯誤翻成中文，`mail.ts`）；寄出時記 Resend 的 email id；log 不可含金鑰
@@ -306,7 +309,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - `node scripts/social-feedback-test.mjs`：意見回饋的畫面、Edge Function 權限、寄給站長的 Email（假 Resend）、寄信失敗仍存檔、function log 寫出看得懂的原因且不含金鑰（讀 `docker logs`）、每天 5 則、誰都讀不到
 - `node scripts/feedback-mail-test.mjs`：不需要 Supabase；Node 直接載入 `functions/feedback/mail.ts` 測設定檢查與 Resend 錯誤說明
 - `node scripts/drippers-test.mjs`：不需要 Supabase；Node 測 `js/drippers.js`，headless Chrome 用 1.7.0 的舊版 db.js（`git show 9b2c4c8:js/db.js`）建出 v5 的資料再開新版：升級轉換、重新整理不重複、表單預設與「再沖一杯」、封存與刪除、卡片／分享卡片／統計／上傳的列用濾杯名稱、v1／v3／v4 備份匯入
-- `node scripts/menu-alerts-test.mjs`：不需要 Supabase；headless Chrome 測 ☰ 的「!」（該備份了、更新內容）、「已更新」提示、更新內容頁，並檢查 `js/changelog.js` 第一段＝`APP_VERSION`
+- `node scripts/menu-alerts-test.mjs`：不需要 Supabase；headless Chrome 測 ☰ 選單的項目與 375×667 放得下、設定頁（版本號、外觀切換與跟著系統）、☰ 的「!」（該備份了、更新內容）、「已更新」提示、更新內容頁，並檢查 `js/changelog.js` 第一段＝`APP_VERSION`
 - **改了 Edge Function 之後要 `docker restart supabase_edge_runtime_coffee-log`**，本機才會載入新程式
 - `node scripts/supabase-comments-test.mjs`：留言的權限從 API 層測（A、B 好友，C 非好友，D 被封鎖）：兩層、回覆對象、內容、每日上限、封鎖、解除好友、改回只有我、刪除帳號（delete-account）
 - `node scripts/social-comments-test.mjs`：三個 headless Chrome（A、B、D）測留言畫面：回覆位置、@暱稱、收起、刪除權限與確認、送出失敗改回、300 字、數字徽章與 99+、全部／我的、封鎖、XSS、CSP

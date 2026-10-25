@@ -209,7 +209,9 @@ try {
     && saved?.favorite_gear === 'Kalita' && saved?.favorite_beans === '巴拿馬藝伎', q(saved));
 
   /* ===== 開發者後台不受影響：一般使用者的入口照樣隱藏 ===== */
-  check('一般使用者看不到開發者後台', await pa.eval(`document.querySelector('[data-admin]').hidden`));
+  await visit(pa, base, '#/settings');
+  await pa.waitFor(`document.querySelector('.settings')?.dataset.adminChecked === 'true'`, { label: '設定頁問完是不是開發者' });
+  check('一般使用者看不到開發者後台', await pa.eval(`document.querySelector('.settings [data-admin]').hidden`));
 
   /* ===== 頁面錯誤、XSS、CSP ===== */
   for (const [name, page] of Object.entries(pages)) {

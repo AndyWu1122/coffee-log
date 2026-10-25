@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process';
 import {
   call, check, summary, setupUsers, realSession, cleanup, rest, rows, insertBrew, serviceKey,
 } from './supabase-local.mjs';
-import { startServer, launchChrome, prepare, visit, fill, submit, text, toast, noInjection, signIn, sleep } from './chrome.mjs';
+import { startServer, launchChrome, prepare, visit, fill, submit, text, toast, noInjection, signIn } from './chrome.mjs';
 
 const XSS_NICK = '"><svg onload=pwn()>'; // 暱稱上限 20 字
 const XSS_BODY = '<img src=x onerror=pwn()> 好喝 <b>粗體</b>';
@@ -39,8 +39,12 @@ async function go(page, base, hash) {
   await visit(page, base, hash);
   await page.eval(`window.confirm = (msg) => { window.__confirm = msg; return true; }; true`);
 }
-const adminEntryShown = (page) => page.eval(`!document.querySelector('[data-admin]').hidden`);
-const recheck = (page) => page.eval(`document.dispatchEvent(new Event('visibilitychange')); true`);
+/** 「設定與關於」頁有沒有「開發者後台」（等設定頁問完是不是開發者） */
+async function adminEntryShown(page, base) {
+  await go(page, base, '#/settings');
+  await page.waitFor(`document.querySelector('.settings')?.dataset.adminChecked === 'true'`, { label: '設定頁問完是不是開發者' });
+  return page.eval(`!document.querySelector('.settings [data-admin]').hidden`);
+}
 const pageText = (page) => page.eval(`document.querySelector('#app').textContent`);
 
 /** 在 sel 的刪除按鈕開出原因表單、填原因、送出 */
@@ -82,10 +86,7 @@ try {
   /* ===== 一般使用者：看不到入口，直接開也沒有權限 ===== */
   const pu = await openPage(chrome, base);
   await signIn(pu, await realSession(U));
-  await go(pu, base, '#/');
-  await recheck(pu);
-  await sleep(1500);
-  check('一般使用者：☰ 沒有「開發者後台」', !(await adminEntryShown(pu)));
+  check('一般使用者：設定頁沒有「開發者後台」', !(await adminEntryShown(pu, base)));
   await go(pu, base, '#/admin');
   await pu.waitFor(`document.querySelector('#app .empty p')?.textContent.includes('沒有權限')`, { label: 'U 看到沒有權限' });
   check('一般使用者直接開 #/admin：顯示沒有權限', !(await pu.eval(`document.querySelector('#admin-page')`)));
@@ -96,10 +97,8 @@ try {
   /* ===== 開發者：入口、檢舉列表 ===== */
   const pm = await openPage(chrome, base);
   await signIn(pm, await realSession(M));
-  await go(pm, base, '#/');
-  await recheck(pm);
-  await pm.waitFor(`!document.querySelector('[data-admin]').hidden`, { label: 'M 的 ☰ 出現開發者後台' });
-  check('開發者：☰ 有「開發者後台」', true);
+  check('開發者：設定頁有「開發者後台」', await adminEntryShown(pm, base));
+  check('開發者後台不在 ☰ 選單（☰ 只放常用的）', !(await pm.eval(`Boolean(document.querySelector('#app-menu a[href="#/admin"]'))`)));
   await go(pm, base, '#/admin');
   await pm.waitFor(`document.querySelectorAll('#admin-list > li').length === 1`, { label: '檢舉列表' });
   check('預設是檢舉列表，顯示被檢舉的貼文與檢舉內容（只是文字）',

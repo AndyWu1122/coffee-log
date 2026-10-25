@@ -25,41 +25,27 @@
   <header class="app-header">
     <h1 id="page-title">手沖紀錄</h1>
     <!-- 不常調整的設定放在這個選單，不加到底部分頁列
-         ☰ 上的「!」＝選單裡有任何一項有「!」（.menu-alert：好友邀請、該備份了、還沒看過的更新內容；app.js 的 setupBadges） -->
+         ☰ 上的「!」＝選單裡有任何一項有「!」（.menu-alert：好友邀請、該備份了、還沒看過的更新內容（在「設定與關於」）；app.js 的 setupBadges） -->
     <div class="menu">
       <button type="button" class="menu-btn" id="menu-btn" aria-label="選單"
         aria-haspopup="menu" aria-expanded="false" aria-controls="app-menu">☰<span class="notify-badge"
         id="menu-badge" aria-hidden="true" hidden>!</span></button>
       <div class="menu-list" id="app-menu" role="menu" hidden>
-        <!-- 咖啡社群：js/config.js 有設定才顯示（app.js 的 setupMenu） -->
+        <!-- 只放常用的入口；不常用的（外觀、通知設定、隱私說明、更新內容、意見回饋、開發者後台、版本號）在「設定與關於」（#/settings）
+             咖啡社群：js/config.js 有設定才顯示（app.js 的 setupMenu） -->
         <a role="menuitem" href="#/account" data-social hidden><span aria-hidden="true">👤</span>帳號</a>
         <a role="menuitem" href="#/friends" data-social hidden><span aria-hidden="true">🤝</span>好友管理<span
           class="menu-alert" data-alert="friends" aria-hidden="true" hidden>!</span></a>
-        <a role="menuitem" href="#/notifications" data-social hidden><span aria-hidden="true">🔔</span>通知設定</a>
         <div class="menu-sep" role="separator" data-social hidden></div>
         <a role="menuitem" href="#/stats"><span aria-hidden="true">📊</span>統計</a>
         <a role="menuitem" href="#/grinders"><span aria-hidden="true">⚙️</span>磨豆機</a>
         <a role="menuitem" href="#/drippers"><span aria-hidden="true">☕</span>濾杯</a>
         <a role="menuitem" href="#/backup"><span aria-hidden="true">💾</span>備份<span
           class="menu-alert" data-alert="backup" aria-hidden="true" hidden>!</span></a>
-        <a role="menuitem" href="#/privacy"><span aria-hidden="true">🔒</span>隱私說明</a>
-        <a role="menuitem" href="#/changelog"><span aria-hidden="true">✨</span>更新內容<span
-          class="menu-alert" data-alert="changelog" aria-hidden="true" hidden>!</span></a>
-        <!-- 意見回饋：要登入才能送（防灌送），js/config.js 沒設定時不顯示 -->
-        <a role="menuitem" href="#/feedback" data-social hidden><span aria-hidden="true">💬</span>意見回饋</a>
-        <!-- 開發者後台：只有開發者看得到入口（app.js 問資料庫 am_i_admin）；真正的權限在資料庫與 Edge Function -->
-        <a role="menuitem" href="#/admin" data-admin hidden><span aria-hidden="true">🛠️</span>開發者後台</a>
         <div class="menu-sep" role="separator"></div>
-        <div class="menu-theme" role="group" aria-labelledby="theme-label">
-          <span class="menu-label" id="theme-label"><span aria-hidden="true">🌓</span>外觀</span>
-          <div class="theme-options">
-            <button type="button" role="menuitemradio" data-theme-pref="auto" aria-checked="false">自動</button>
-            <button type="button" role="menuitemradio" data-theme-pref="light" aria-checked="false">淺色</button>
-            <button type="button" role="menuitemradio" data-theme-pref="dark" aria-checked="false">深色</button>
-          </div>
-        </div>
-        <!-- 版本號＝sw.js 的 APP_VERSION（app.js 向 Service Worker 詢問）；沒有 Service Worker 時不顯示；點了到更新內容 -->
-        <div class="menu-version" id="app-version" hidden><a role="menuitem" href="#/changelog"></a></div>
+        <!-- 「!」＝還沒看過這一版的更新內容（設定頁裡的「更新內容」也有「!」） -->
+        <a role="menuitem" href="#/settings"><span aria-hidden="true">🔧</span>設定與關於<span
+          class="menu-alert" data-alert="settings" aria-hidden="true" hidden>!</span></a>
       </div>
     </div>
   </header>

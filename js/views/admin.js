@@ -1,4 +1,4 @@
-// #/admin 開發者後台（☰ 選單，只有開發者看得到入口）
+// #/admin 開發者後台（☰ →「設定與關於」，只有開發者看得到入口）
 //   #/admin?tab=reports|posts|users|feedback|log  列表（預設檢舉）
 //   #/admin/user/<id>                              用戶詳細：他所有雲端貼文和留言、刪除帳號
 //   #/admin/post/<owner>/<id>                      貼文詳細：內容、檢舉、全部留言、刪除

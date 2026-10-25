@@ -72,8 +72,9 @@ try {
   chrome = await launchChrome();
   const pa = await chrome.newPage(base, { isolated: true });
   await prepare(pa);
-  check('☰ 選單有「意見回饋」', await pa.eval(`Boolean(document.querySelector('#app-menu a[href="#/feedback"]:not([hidden])'))`));
   await pa.waitFor(`navigator.serviceWorker.controller !== null`, { label: 'Service Worker 接手', timeout: 15000 });
+  await pa.eval(`location.hash = '#/settings'; true`);
+  check('「設定與關於」有「意見回饋」', Boolean(await pa.waitFor(`document.querySelector('.settings a[href="#/feedback"]')`, { label: '設定頁的意見回饋' })));
   await pa.eval(`location.hash = '#/feedback'; true`); // 只改 hash：保持受 Service Worker 控制（才問得到版本號）
   await pa.waitFor(`document.querySelector('#app .empty a[href="#/account"]')`, { label: '要先登入' });
   check('沒登入：提示要先登入，沒有表單', !(await pa.eval(`document.querySelector('#feedback-form')`)));
