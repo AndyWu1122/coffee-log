@@ -1576,12 +1576,13 @@ export async function disablePushHere() {
   }
 }
 
-export const saveNotificationPrefs = (prefs) =>
-  cloud.saveNotificationPrefs({ comments: Boolean(prefs.comments), replies: Boolean(prefs.replies) });
+export const saveNotificationPrefs = (prefs) => cloud.saveNotificationPrefs({
+  comments: Boolean(prefs.comments), replies: Boolean(prefs.replies), newPosts: Boolean(prefs.newPosts), likes: Boolean(prefs.likes),
+});
 
-/** 只接受 App 內部的社群貼文路由（sw.js 傳來的換頁訊息再檢查一次） */
+/** 只接受 App 內部的社群貼文路由（sw.js 傳來的換頁訊息再檢查一次；和 sw.js 的 PUSH_ROUTE 一致） */
 const UUID_RE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
-const PUSH_ROUTE = new RegExp(`^#/social(/${UUID_RE}/${UUID_RE}\\?comments=1)?$`);
+const PUSH_ROUTE = new RegExp(`^#/social(/${UUID_RE}/${UUID_RE}(\\?comments=1)?)?$`);
 export const isPushRoute = (path) => typeof path === 'string' && PUSH_ROUTE.test(path);
 
 /* ===== 開發者後台 ===== */

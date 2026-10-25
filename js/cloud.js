@@ -420,12 +420,15 @@ export const deletePushSubscription = (endpoint) => run(async (sb) => {
   unwrap(await sb.from('push_subscriptions').delete().eq('endpoint', endpoint));
 });
 
-/** 通知的開關 { comments, replies }；沒存過＝都開 */
-export const getNotificationPrefs = () => run(async (sb) =>
-  unwrap(await sb.from('notification_prefs').select('comments, replies').maybeSingle()) ?? { comments: true, replies: true });
+/** 通知的開關 { comments, replies, newPosts, likes }；沒存過＝好友新貼文關、其他開（和資料庫的預設值相同） */
+export const getNotificationPrefs = () => run(async (sb) => {
+  const row = unwrap(await sb.from('notification_prefs').select('comments, replies, new_posts, likes').maybeSingle());
+  if (!row) return { comments: true, replies: true, newPosts: false, likes: true };
+  return { comments: row.comments, replies: row.replies, newPosts: row.new_posts, likes: row.likes };
+});
 
-export const saveNotificationPrefs = ({ comments, replies }) => run(async (sb) => {
-  unwrap(await sb.from('notification_prefs').upsert({ comments, replies }, { onConflict: 'user_id' }));
+export const saveNotificationPrefs = ({ comments, replies, newPosts, likes }) => run(async (sb) => {
+  unwrap(await sb.from('notification_prefs').upsert({ comments, replies, new_posts: newPosts, likes }, { onConflict: 'user_id' }));
 });
 
 /* ===== 檢舉、刪除帳號 ===== */

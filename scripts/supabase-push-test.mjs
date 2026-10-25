@@ -205,7 +205,167 @@ try {
   check('log 沒有 endpoint、使用者的金鑰、VAPID 私鑰', !logs.includes(pathOf('b1').split('/').pop()) && !logs.includes(keys.B.p256dh)
     && !logs.includes(keys.B.auth) && !logs.includes('Ka74bLPnWHTLH'));
 
-  /* ===== 10. 刪除帳號：訂閱一起刪除 ===== */
+  /* ===== 11. 好友新貼文 ===== */
+  // A 的 a1 在 8. 被 410 刪掉了：換一台新的
+  check('A 換一台裝置訂閱', (await subscribePush(A, 'a-more', keys.A)).status === 201);
+  const upsertPrefs = (user, body) => rest('notification_prefs?on_conflict=user_id', {
+    method: 'POST', token: user.token, headers: { Prefer: 'resolution=merge-duplicates,return=representation' }, body,
+  });
+  const share = async (user, extra = {}) => {
+    const id = crypto.randomUUID();
+    const r = await rest('shared_brews', {
+      method: 'POST', token: user.token,
+      body: { id, bean_name: '肯亞 AA', brewed_at: new Date().toISOString(), coffee_g: 15, water_g: 240, notes: '不能出現的筆記', ...extra },
+    });
+    return { id, r };
+  };
+  const msgOf = (g, k) => JSON.parse(decrypt(g.body, k).text);
+  const settle = async (since, n) => { await waitPushes(since, n); await sleep(2000); return push.received.slice(since); };
+
+  check('A 的偏好：好友新貼文預設關、按讚預設開', (() => {
+    const p = rows(again)?.[0];
+    return p?.new_posts === false && p?.likes === true;
+  })(), JSON.stringify(rows(again)?.[0]));
+  since = push.received.length;
+  await share(A);
+  check('好友新貼文預設關：B、D 都不會收到', await noMorePushes(since));
+
+  for (const u of [B, C, D]) await upsertPrefs(u, { new_posts: true });
+  const oldFormat = await upsertPrefs(B, { comments: true, replies: true });
+  check('舊版只存 comments、replies：不會改到 new_posts、likes', rows(oldFormat)?.[0]?.new_posts === true && rows(oldFormat)?.[0]?.likes === true, oldFormat.text);
+
+  since = push.received.length;
+  const n1 = await share(A);
+  got = await settle(since, 2);
+  check('A 分享：好友 B、D 收到，非好友 C 沒有', got.map((g) => g.path).sort().join() === [pathOf('b1'), pathOf('d1')].sort().join(), got.map((g) => g.path).join());
+  const postMsg = got.find((g) => g.path === pathOf('b1'));
+  const pm = postMsg && msgOf(postMsg, keys.B);
+  check('解密後：post、A 的暱稱、豆子名稱、貼文、第一則會響', pm?.kind === 'post' && pm.nickname === 'A' && pm.bean === '肯亞 AA'
+    && pm.owner === A.id && pm.brewId === n1.id && pm.others === 0 && pm.quiet === false, JSON.stringify(pm));
+  check('通知沒有筆記', postMsg && !decrypt(postMsg.body, keys.B).text.includes('不能出現'));
+  check('通知只有 v、kind、nickname、owner、brewId、bean、others、quiet', pm && Object.keys(pm).sort().join() === 'bean,brewId,kind,nickname,others,owner,quiet,v');
+  const topicFriendA = postMsg?.headers.topic;
+
+  since = push.received.length;
+  await rest(`shared_brews?owner=eq.${A.id}&id=eq.${n1.id}`, { method: 'PATCH', token: A.token, body: { notes: '改過', bean_name: '改名' } });
+  check('修改舊貼文：不通知', await noMorePushes(since));
+  await rest(`shared_brews?owner=eq.${A.id}&id=eq.${n1.id}`, { method: 'DELETE', token: A.token });
+  const reshared = await share(A, { id: n1.id });
+  check('改回只有我再分享：上傳成功', reshared.r.status === 201, reshared.r.text);
+  check('…不再通知', await noMorePushes(since));
+
+  since = push.received.length;
+  const n2 = await share(A, { bean_name: '哥倫比亞' });
+  got = await settle(since, 2);
+  const second = got.find((g) => g.path === pathOf('b1'));
+  const sm = second && msgOf(second, keys.B);
+  check('30 分鐘內第二篇：照樣送、安靜、others 1、指向新那篇', got.length === 2 && sm?.quiet === true && sm.others === 1 && sm.brewId === n2.id && sm.bean === '哥倫比亞', JSON.stringify(sm));
+  check('同一位好友的 Topic 相同', second?.headers.topic === topicFriendA);
+  psql(`update private.push_windows set started_at = now() - interval '31 minutes' where key = 'friend:${A.id}'`);
+  since = push.received.length;
+  await share(A);
+  got = await settle(since, 2);
+  check('超過 30 分鐘：重新開始（響）', got.length === 2 && got.every((g) => msgOf(g, g.path === pathOf('b1') ? keys.B : keys.D).quiet === false));
+
+  // 封鎖：D 封鎖了 B（6.）。B 分享：A 沒開、D 封鎖 → 沒有人；A 打開後只有 A
+  since = push.received.length;
+  await share(B);
+  check('B 分享：D 封鎖了 B、A 沒開 → 沒有通知', await noMorePushes(since));
+  await upsertPrefs(A, { new_posts: true });
+  since = push.received.length;
+  await share(B);
+  got = await settle(since, 1);
+  check('A 打開後：只有 A 收到（D 封鎖 B 照樣收不到）', got.length === 1 && got[0].path === pathOf('a-more'), got.map((g) => g.path).join());
+  await upsertPrefs(A, { new_posts: false });
+
+  // 停權
+  psql(`update auth.users set banned_until = now() + interval '1 day' where id = '${A.id}'`);
+  since = push.received.length;
+  await share(A);
+  check('發文者被停權：不通知', await noMorePushes(since));
+  psql(`update auth.users set banned_until = null where id = '${A.id}'; update auth.users set banned_until = now() + interval '1 day' where id = '${B.id}'`);
+  psql(`delete from private.push_windows where key = 'friend:${A.id}'`);
+  since = push.received.length;
+  await share(A);
+  got = await settle(since, 1);
+  check('收件人 B 被停權：只有 D 收到', got.length === 1 && got[0].path === pathOf('d1'), got.map((g) => g.path).join());
+  psql(`update auth.users set banned_until = null where id = '${B.id}'`);
+
+  // 每天 30 筆：第 31 筆上傳被拒，也就不會通知
+  psql(`insert into private.rate_events (user_id, kind) select '${A.id}', 'brew_insert'
+    from generate_series(1, 30 - private.count_today('${A.id}', 'brew_insert'))`);
+  since = push.received.length;
+  const capped = await share(A);
+  check('第 31 筆上傳被拒（rate_limited）', capped.r.json?.hint === 'rate_limited', capped.r.text);
+  check('…沒有通知', await noMorePushes(since));
+
+  /* ===== 12. 按讚 ===== */
+  const like = (user, owner, brewId) => rest('likes', { method: 'POST', token: user.token, body: { brew_owner: owner, brew_id: brewId } });
+  const unlike = (user, owner, brewId) => rest(`likes?brew_owner=eq.${owner}&brew_id=eq.${brewId}&user_id=eq.${user.id}`, { method: 'DELETE', token: user.token });
+  const lp = n2.id; // A 的貼文
+  since = push.received.length;
+  check('B 按讚 A 的貼文', (await like(B, A.id, lp)).status === 201);
+  got = await settle(since, 1);
+  const lm = got[0] && msgOf(got[0], keys.A);
+  check('A 收到按讚：like、B、這篇、響', got.length === 1 && got[0].path === pathOf('a-more') && lm?.kind === 'like' && lm.nickname === 'B'
+    && lm.owner === A.id && lm.brewId === lp && lm.others === 0 && lm.quiet === false, JSON.stringify(lm));
+  check('按讚的通知只有 v、kind、nickname、owner、brewId、others、quiet', lm && Object.keys(lm).sort().join() === 'brewId,kind,nickname,others,owner,quiet,v');
+  check('讚的 Topic 和留言的不同（不會取代留言通知）', got[0] && got[0].headers.topic !== topicP1);
+  const topicLike = got[0]?.headers.topic;
+
+  since = push.received.length;
+  await like(A, A.id, lp);
+  check('自己按自己的讚：不通知', await noMorePushes(since, 2500));
+  await unlike(B, A.id, lp);
+  await like(B, A.id, lp);
+  check('B 收回再按：不再通知', await noMorePushes(since));
+
+  since = push.received.length;
+  await like(D, A.id, lp);
+  got = await settle(since, 1);
+  const dm = got[0] && msgOf(got[0], keys.A);
+  check('30 分鐘內 D 也按讚：「D 和其他 1 人」、安靜、Topic 相同', got.length === 1 && dm?.nickname === 'D' && dm.others === 1 && dm.quiet === true
+    && got[0].headers.topic === topicLike, JSON.stringify(dm));
+
+  // 封鎖：D 封鎖了 B，RLS 讓雙方按不到讚；直接新增（繞過 RLS）確認 trigger 也不送（兩個方向）
+  const bPost = (await share(B)).id;
+  const dPost = (await share(D)).id;
+  check('D 按不到 B 的讚（RLS）', (await like(D, B.id, bPost)).status >= 400);
+  since = push.received.length;
+  psql(`insert into public.likes (brew_owner, brew_id, user_id) values ('${B.id}', '${bPost}', '${D.id}'), ('${D.id}', '${dPost}', '${B.id}')`);
+  check('封鎖的雙方互相按讚：都不通知', await noMorePushes(since));
+
+  // 關掉「按讚」
+  await upsertPrefs(A, { likes: false });
+  since = push.received.length;
+  await like(B, A.id, n1.id);
+  check('A 關掉「按讚」：不通知', await noMorePushes(since));
+  await upsertPrefs(A, { likes: true });
+
+  /* ===== 13. send-push 檢查新的格式 ===== */
+  const recipient = (kind, extra = {}) => ({ user_id: A.id, kind, ...extra });
+  const postJob = (recipients, extra = {}) => ({ ...fresh(), bean_name: '豆', recipients, ...extra });
+  const many = Array.from({ length: 201 }, () => recipient('post', { count: 1, quiet: false }));
+  for (const [name, body] of [
+    ['新貼文 201 人', postJob(many)],
+    ['讚 2 人', { ...fresh(), recipients: [recipient('like', { count: 1, quiet: false }), recipient('like', { count: 1, quiet: false })] }],
+    ['不認得的 kind', { ...fresh(), recipients: [recipient('follow')] }],
+    ['count 是字串', postJob([recipient('post', { count: '1', quiet: false })])],
+    ['count 是 0', postJob([recipient('post', { count: 0, quiet: false })])],
+    ['quiet 不是 boolean', postJob([recipient('post', { count: 1, quiet: 'yes' })])],
+    ['新貼文和留言混在一起', postJob([recipient('post', { count: 1, quiet: false }), recipient('comment')])],
+    ['新貼文沒有豆子名稱', postJob([recipient('post', { count: 1, quiet: false })], { bean_name: undefined })],
+    ['留言帶 count', { ...fresh(), recipients: [recipient('comment', { count: 1 })] }],
+    ['讚帶豆子名稱', postJob([recipient('like', { count: 1, quiet: false })])],
+  ]) {
+    const r = await signedPush(body);
+    check(`send-push：${name} → 400`, r.status === 400, `${r.status}`);
+  }
+  since = push.received.length;
+  check('send-push：正確的新貼文 → 200', (await signedPush(postJob(Array.from({ length: 200 }, () => recipient('post', { count: 1, quiet: false }))))).status === 200);
+  check('…送到 A', (await waitPushes(since, 1)).length >= 1);
+
+  /* ===== 14. 刪除帳號：訂閱一起刪除 ===== */
   const del = await fetch('http://127.0.0.1:54321/functions/v1/delete-account', { method: 'POST', headers: { Authorization: `Bearer ${userToken(D.id)}` } });
   check('D 刪除帳號', del.status === 200, `${del.status}`);
   check('D 的訂閱 cascade 刪除', rows(await rest(`push_subscriptions?user_id=eq.${D.id}`, { headers: admin }))?.length === 0);

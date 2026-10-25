@@ -1,5 +1,6 @@
-// 推播通知：有人留言我的貼文、回覆我的留言（由資料庫 trigger private.comments_push 透過 pg_net 呼叫）
-// 通知誰、封鎖、偏好、5 分鐘合併都已經在資料庫判斷好；這裡只負責「讀訂閱 → 加密 → 送出 → 清掉過期的」
+// 推播通知：有人留言我的貼文、回覆我的留言（trigger private.comments_push）、好友發新貼文（private.shared_brews_push）、
+// 有人按讚我的貼文（private.likes_push），都由資料庫透過 pg_net 呼叫
+// 通知誰、封鎖、偏好、合併（留言 5 分鐘、新貼文與讚 30 分鐘）都已經在資料庫判斷好；這裡只負責「讀訂閱 → 加密 → 送出 → 清掉過期的」
 //
 // 身分：呼叫者是資料庫，不是使用者（config.toml 的 verify_jwt = false）
 //   一律檢查 x-push-signature ＝ 內容的 HMAC-SHA256（金鑰 PUSH_WEBHOOK_SECRET，資料庫那邊存在 vault），而且內容的 sent_at 在 2 分鐘內；
@@ -10,7 +11,8 @@
 //   （port 54398，保留路徑），本機絕對不會連到真的推播服務
 // ⚠ 不要用 config.toml 的 [edge_runtime.secrets]：`supabase secrets set` 會把它一起上傳到正式專案
 //
-// 推播內容只有 { v, kind, nickname, owner, brewId }：不含留言原文；點擊的網址由 sw.js 驗證 uuid 後自己組
+// 推播內容只有 { v, kind, nickname, owner, brewId }，新貼文多 bean（豆子名稱）、新貼文與讚多 others（合併了幾則）、quiet（安靜取代）：
+//   不含留言原文、筆記；點擊的網址由 sw.js 驗證 uuid 後自己組
 // log 只記數量與狀態碼（沒送出時寫原因），不記 endpoint、金鑰
 import { ENDPOINT, pushRequest, topicFor, vapidConfig } from '../_shared/webpush.ts';
 
@@ -37,7 +39,9 @@ const VAPID = await vapidConfig(LOCAL ? LOCAL_VAPID : {
 });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const KINDS = new Set(['comment', 'reply']);
+// 一次最多幾位收件人：留言最多 3 位（貼文作者、被回覆的人、主留言作者）、新貼文每批 200 位好友、讚只有貼文作者
+const MAX_RECIPIENTS: Record<string, number> = { comment: 3, reply: 3, post: 200, like: 1 };
+const BEAN_MAX = 30;
 const admin = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` };
 
 const json = (status: number, body: unknown) =>
@@ -53,24 +57,41 @@ async function signedBy(secret: string, body: string, signature: string) {
   return crypto.subtle.verify('HMAC', key, sig, new TextEncoder().encode(body));
 }
 
-type Job = { owner: string; brewId: string; nickname: string; recipients: { userId: string; kind: string }[] };
+type Recipient = { userId: string; kind: string; count: number; quiet: boolean };
+type Job = { owner: string; brewId: string; nickname: string; bean: string; recipients: Recipient[] };
 
 /** 驗證 trigger 送來的內容；不合格回傳 null */
 function parse(body: unknown): Job | null {
-  const b = body as { brew_owner?: unknown; brew_id?: unknown; actor_nickname?: unknown; recipients?: unknown; sent_at?: unknown } | null;
+  const b = body as {
+    brew_owner?: unknown; brew_id?: unknown; actor_nickname?: unknown; bean_name?: unknown; recipients?: unknown; sent_at?: unknown;
+  } | null;
   // 太舊的（被重送的）不收：同一則通知不能被拿來一直重送
   if (typeof b?.sent_at !== 'number' || Math.abs(Date.now() / 1000 - b.sent_at) > MAX_AGE_S) return null;
   if (typeof b.brew_owner !== 'string' || !UUID.test(b.brew_owner)) return null;
   if (typeof b.brew_id !== 'string' || !UUID.test(b.brew_id)) return null;
-  if (!Array.isArray(b.recipients) || b.recipients.length < 1 || b.recipients.length > 3) return null;
-  const recipients = [];
-  for (const r of b.recipients as { user_id?: unknown; kind?: unknown }[]) {
-    if (typeof r?.user_id !== 'string' || !UUID.test(r.user_id) || typeof r.kind !== 'string' || !KINDS.has(r.kind)) return null;
-    recipients.push({ userId: r.user_id, kind: r.kind });
+  if (!Array.isArray(b.recipients) || b.recipients.length < 1) return null;
+  const recipients: Recipient[] = [];
+  for (const r of b.recipients as { user_id?: unknown; kind?: unknown; count?: unknown; quiet?: unknown }[]) {
+    if (typeof r?.user_id !== 'string' || !UUID.test(r.user_id) || typeof r.kind !== 'string' || !Object.hasOwn(MAX_RECIPIENTS, r.kind)) return null;
+    // 合併的次數與安靜：只有新貼文、讚有（留言的合併是直接不送）
+    const merged = r.kind === 'post' || r.kind === 'like';
+    const count = merged ? r.count : 1;
+    if (!Number.isInteger(count) || (count as number) < 1 || (count as number) > 10000) return null;
+    if (merged ? typeof r.quiet !== 'boolean' : r.quiet !== undefined || r.count !== undefined) return null;
+    recipients.push({ userId: r.user_id, kind: r.kind, count: count as number, quiet: r.quiet === true });
   }
+  // 新貼文、讚各自一批，不和留言混在一起；人數不超過上限
+  const kinds = new Set(recipients.map((r) => r.kind));
+  const first = recipients[0].kind;
+  if ((first === 'post' || first === 'like') && kinds.size > 1) return null;
+  if ([...kinds].some((k) => (k === 'post' || k === 'like') && first !== k)) return null;
+  if (recipients.length > MAX_RECIPIENTS[first]) return null;
+  // 豆子名稱只有新貼文有（≤ 30 字，資料庫已經截過）
+  if (first === 'post' ? typeof b.bean_name !== 'string' : b.bean_name !== undefined) return null;
+  const bean = first === 'post' ? [...(b.bean_name as string)].slice(0, BEAN_MAX).join('') : '';
   // 暱稱 ≤ 20 字（資料庫的 check）；這裡只再截一次，顯示時 sw.js 也會清理
   const nickname = typeof b.actor_nickname === 'string' ? [...b.actor_nickname].slice(0, 20).join('') : '';
-  return { owner: b.brew_owner, brewId: b.brew_id, nickname, recipients };
+  return { owner: b.brew_owner, brewId: b.brew_id, nickname, bean, recipients };
 }
 
 type Row = { id: string; user_id: string; endpoint: string; p256dh: string; auth: string };
@@ -120,13 +141,20 @@ Deno.serve(async (req) => {
     return json(500, { error: 'failed' });
   }
   const subs = (await res.json() as Row[]).filter((s) => ENDPOINT.test(s.endpoint));
-  const kindOf = new Map(job.recipients.map((r) => [r.userId, r.kind]));
+  const byUser = new Map(job.recipients.map((r) => [r.userId, r]));
 
-  // 同一篇貼文同一個 tag：sw.js 顯示時取代舊的通知，推播服務裡還沒送達的也被取代
-  const topic = await topicFor(`post:${job.owner}/${job.brewId}`);
-  const results = await Promise.all(subs.map((s) => deliver(s, JSON.stringify({
-    v: 1, kind: kindOf.get(s.user_id), nickname: job.nickname, owner: job.owner, brewId: job.brewId,
-  }), topic)));
+  // 同一個 tag（和 sw.js 相同）：sw.js 顯示時取代舊的通知，推播服務裡還沒送達的也被取代
+  //   留言、回覆：同一篇貼文；讚：同一篇貼文的讚（不蓋掉留言的通知）；新貼文：同一位好友
+  const kind = job.recipients[0].kind;
+  const tag = kind === 'post' ? `friend:${job.owner}` : kind === 'like' ? `like:${job.owner}/${job.brewId}` : `post:${job.owner}/${job.brewId}`;
+  const topic = await topicFor(tag);
+  const results = await Promise.all(subs.map((s) => {
+    const r = byUser.get(s.user_id)!;
+    const message: Record<string, unknown> = { v: 1, kind: r.kind, nickname: job.nickname, owner: job.owner, brewId: job.brewId };
+    if (r.kind === 'post') message.bean = job.bean;
+    if (r.kind === 'post' || r.kind === 'like') Object.assign(message, { others: r.count - 1, quiet: r.quiet });
+    return deliver(s, JSON.stringify(message), topic);
+  }));
 
   const count = (r: string) => results.filter((x) => x === r).length;
   const summary = { sent: count('sent'), expired: count('expired'), failed: count('failed') };

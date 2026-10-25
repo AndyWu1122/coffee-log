@@ -1,4 +1,4 @@
-// #/notifications 通知設定（從 ☰ →「設定與關於」進入）：「新留言」「回覆」開關（存在帳號），以及在這台裝置啟用推播通知
+// #/notifications 通知設定（從 ☰ →「設定與關於」進入）：「新留言」「回覆」「按讚」「好友新貼文」開關（存在帳號），以及在這台裝置啟用推播通知
 // 只有按「在這台裝置啟用通知」時才詢問通知權限（不在打開 App 時詢問）
 // iPhone 要從主畫面開啟才能用推播：不是的話只顯示加入主畫面的說明
 import {
@@ -27,7 +27,7 @@ export async function render(container, { isCurrent }) {
     container.innerHTML = `
       <div class="empty">
         <p>要先${action}才能設定通知</p>
-        <p class="hint">登入後，有人留言你分享的紀錄、回覆你的留言時，手機會跳出通知。</p>
+        <p class="hint">登入後，有人留言你分享的紀錄、回覆你的留言、按讚，或好友分享新的紀錄時，手機會跳出通知。</p>
         <a class="btn btn-primary" href="#/account">前往${action}</a>
       </div>`;
     return;
@@ -51,14 +51,25 @@ export async function render(container, { isCurrent }) {
           <input type="checkbox" name="replies" ${prefs.replies ? 'checked' : ''}>
           <span><strong>回覆</strong><span class="hint">有人回覆我的留言</span></span>
         </label>
-        <p class="hint">這兩個開關存在你的帳號，每一台啟用通知的裝置都一樣。</p>
+        <label class="switch-row">
+          <input type="checkbox" name="likes" ${prefs.likes ? 'checked' : ''}>
+          <span><strong>按讚</strong><span class="hint">有人說我分享的紀錄讚</span></span>
+        </label>
+        <label class="switch-row">
+          <input type="checkbox" name="newPosts" ${prefs.newPosts ? 'checked' : ''}>
+          <span><strong>好友新貼文</strong><span class="hint">好友分享了新的紀錄（預設關閉）</span></span>
+        </label>
+        <p class="hint">這些開關存在你的帳號，每一台啟用通知的裝置都一樣。</p>
       </section>
 
       <section class="section">
         <ul class="plain-list hint">
-          <li>通知只顯示「○○ 留言了你的貼文」或「○○ 回覆了你的留言」（○○ 是對方的暱稱），不會顯示留言內容，鎖定畫面上也一樣</li>
+          <li>留言、回覆的通知只顯示「○○ 留言了你的貼文」或「○○ 回覆了你的留言」（○○ 是對方的暱稱），不會顯示留言內容，鎖定畫面上也一樣</li>
+          <li>好友新貼文顯示「○○ 分享了一杯 豆子名稱」，不會顯示筆記</li>
           <li>同一篇紀錄 5 分鐘內的多則留言只通知一次</li>
-          <li>點通知會打開那篇紀錄的留言</li>
+          <li>同一篇紀錄 30 分鐘內的讚合併成一則「○○ 和其他 N 人說你的貼文讚」；同一位好友 30 分鐘內的新貼文也合併成一則（iPhone 合併時可能仍會響）</li>
+          <li>同一個人對同一篇紀錄的讚只通知一次，收回再按不會再通知；分享過的紀錄改回只有我再分享也不會再通知</li>
+          <li>點通知會打開那篇紀錄</li>
         </ul>
         <a href="#/privacy">隱私說明：訂閱資訊存在哪、怎麼關閉</a>
       </section>

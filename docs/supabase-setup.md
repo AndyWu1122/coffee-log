@@ -14,6 +14,7 @@
 > 2026-10-26：新版 `feedback`（log 會寫出沒寄信的原因）已先部署；`feature/comments` 的 migration 與前端**尚未部署**，步驟見 5-3
 > 2026-10-25：留言、封鎖不解除好友（1.2.0）、更新內容（1.3.0）、開發者後台（1.4.0）與 1.4.1 的修正都已部署上線；`feature/profile`（個人檔案，1.5.0）**尚未部署**，步驟見 5-5
 > 2026-10-29：推播通知（1.9.0）已部署：migration、`send-push`（Verify JWT 關閉）、secrets、vault 都已設定，前端公鑰已填；步驟見 5-6
+> 按讚、好友新貼文的推播（1.11.0，分支 feature/push-more）：**還沒部署**，步驟見 5-7
 
 ## 1. 建立 Supabase 專案（你）
 
@@ -284,6 +285,38 @@ git push                                    # 合併到 main 之後；GitHub Pag
    - `推播服務回傳 403`：`js/config.js` 的公鑰和 secrets 的 `VAPID_PUBLIC_KEY` 不是同一組 → 公鑰改對後，每台裝置停用再啟用一次
    - `送出 1、過期刪除 0、失敗 0`：已經交給 Apple／Google → 檢查手機的系統設定是否允許這個 App 的通知、專注模式
 3. **Database → `net._http_response`**（SQL Editor：`select status_code, created from net._http_response order by created desc limit 5;`）：trigger 呼叫 function 的結果
+
+## 5-7. 部署 feature/push-more（按讚、好友新貼文的推播，1.11.0）
+
+沿用 5-6 的金鑰、secrets、vault，**不需要設定任何新的金鑰**。
+
+### 1. 部署（Claude，你確認後；後端先上、前端最後）
+
+```sh
+npx supabase@2.120.0 db push --dry-run      # 應該只列出 20261030100000_push_posts_likes.sql
+npx supabase@2.120.0 db push                # 套用（確認後輸入 Y）
+npx supabase@2.120.0 functions deploy send-push --no-verify-jwt
+git push                                    # 合併到 main 之後；GitHub Pages 部署成 1.11.0
+```
+
+- migration：`notification_prefs` 加 `new_posts`（預設關）、`likes`（預設開）；`private.push_notified_posts`、`private.push_notified_likes`（記下通知過的，不重複通知）、`private.push_windows`（30 分鐘合併）；trigger `private.shared_brews_push`、`private.likes_push`
+- **順序很重要**：migration 先上、send-push 緊接著部署。migration 上了但 send-push 還是舊版時，新的兩種通知會被舊版回 400（不會送出、也不影響上傳和按讚），部署完就正常
+- 舊版 App（1.10.0 以前）照常運作：通知設定只有兩個開關，存檔時不會改到新的兩個
+- send-push 確認 **Verify JWT 仍然是關的**
+
+### 2. 實機確認（你）
+
+1. 已經啟用通知的手機不用重新啟用；等 App 更新到 1.11.0（底部「有新版本可用」→ 更新）
+2. ☰ →「🔧 設定與關於」→「通知設定」：有四個開關，「按讚」開、「好友新貼文」關
+3. 請一位好友按讚你的紀錄 → 「<暱稱> 說你的貼文讚」→ 點通知打開那篇紀錄；30 分鐘內再有人按讚，通知改成「<暱稱> 和其他 1 人…」（Android 不會再響；iPhone 可能會）
+4. 打開「好友新貼文」，請好友分享一杯 → 「<暱稱> 分享了一杯 <豆子名稱>」
+
+### 沒收到通知
+
+同 5-6 的檢查順序，另外：
+- 按讚：同一個人對同一篇只通知一次（收回再按不會再通知）；自己按自己的不通知
+- 好友新貼文：只在紀錄**第一次**分享時通知（修改、改回只有我再分享都不算）；確認你的「好友新貼文」開關是開的
+- 合併中的通知沒有響是正常的（看通知中心的內容有沒有更新）
 
 ## 6. 實際登入一次（你）
 

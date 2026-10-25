@@ -277,20 +277,25 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - **`config.toml` 不要設定 `[edge_runtime.secrets]`**：`supabase secrets set` 會把它一起上傳到正式專案、蓋掉真的金鑰（曾經發生過）
 - 正式專案要另外部署：`npx supabase@2.120.0 functions deploy feedback`（步驟見 `docs/supabase-setup.md` 5-2）
 
-### 推播通知（1.9.0，已部署）
-有人留言我的貼文、回覆我的留言時，手機跳出通知。標準 Web Push（VAPID），不用 Firebase 等第三方服務。
-- 流程：comments 新增 → trigger `private.comments_push`（通知誰、合併都在這裡判斷）→ pg_net → Edge Function `send-push`（service_role 讀訂閱、加密、送出）→ Apple／Google 的推播服務
+### 推播通知（1.9.0 留言／回覆，已部署；1.11.0 加按讚、好友新貼文，分支 feature/push-more，還沒部署）
+有人留言我的貼文、回覆我的留言、按讚我的貼文，或好友發新貼文時，手機跳出通知。標準 Web Push（VAPID），不用 Firebase 等第三方服務。
+- 流程：comments／likes／shared_brews 新增 → trigger `private.comments_push`／`private.likes_push`／`private.shared_brews_push`（通知誰、合併都在這裡判斷）→ pg_net → Edge Function `send-push`（service_role 讀訂閱、加密、送出）→ Apple／Google 的推播服務
+  - 1.11.0 的兩個 trigger 共用 `private.push_ready()`、`private.push_send(payload)`（簽章＋`net.http_post`）、`private.push_window()`；已部署的 `comments_push` 不改
+- **好友新貼文**（`20261030100000_push_posts_likes.sql`）：只掛 `after insert on shared_brews`（修改不算）；`private.push_notified_posts`（不接 shared_brews 外鍵）記下通知過的貼文，改回只有我再分享不重複；對象＝已接受的好友，排除封鎖（任一方向）、停權、`new_posts` 關、沒有訂閱；send-push 每批 ≤ 200 人；每天最多 30 則＝沿用 `brew_insert` 的每天 30 筆，不另外計數；內容多 `bean`（豆子名稱 ≤ 30 字），不含筆記
+- **按讚**：`after insert on likes`；自己按自己的不通知；`private.push_notified_likes` 記下（作者、貼文、按讚者），收回再按不重複；封鎖（任一方向）、任一方停權、`likes` 關、沒有訂閱不送
+- **30 分鐘合併**（`private.push_windows`，key `friend:<owner>`／`like:<owner>/<id>`）：視窗內第一則照常響；之後的照樣送，帶 `others`（合併了幾則）、`quiet: true`，sw.js 用同一個 tag、`silent`／`renotify: false` 安靜取代內容（「B 分享了 3 杯，最新：…」「D 和其他 2 人說你的貼文讚」）；iPhone 可能不支援 silent，取代時仍會響
 - **`push_subscriptions`**：id, user_id, endpoint(unique), p256dh, auth, user_agent, created_at；只能新增、讀、刪自己的（沒有 update）；每人 10 台（trigger 先 advisory lock）
   - **endpoint 只能是已知推播服務的 https 網址**（`private.push_endpoint_ok`：fcm.googleapis.com、*.push.apple.com、*.push.services.mozilla.com、*.notify.windows.com；host 後面只能接路徑）→ 防 SSRF，function 送出前用 `webpush.ts` 的 `ENDPOINT` 再檢查一次；兩邊要一致
-- **`notification_prefs`**：user_id, comments, replies（沒有這列＝都開）；只能讀寫自己的；存在帳號（每台裝置一樣）
+- **`notification_prefs`**：user_id, comments, replies, new_posts（預設關）, likes（預設開）；沒有這列＝新貼文關、其他開（`cloud.getNotificationPrefs` 的預設要和資料庫一致）；只能讀寫自己的；存在帳號（每台裝置一樣）；舊版 App 的 upsert 只帶 comments、replies，不會蓋掉新欄位
 - **通知誰**（和 `comment_activity` 同一套）：貼文作者（comment）、`reply_to_user` 與主留言作者（reply）；同一人只算一次，貼文作者優先
   - 不通知：自己、和留言者有封鎖（任一方向）、讀不到貼文（不是作者也不是沒封鎖的好友）、留言者或收件人 `auth.users.banned_until > now()`（App 沒有停權功能，用 Supabase 的 ban 就會生效）、偏好關掉、沒有訂閱
   - **5 分鐘合併**：`private.push_throttle`（收件人＋貼文），上一則送出後 5 分鐘內同一篇不再送；通知的 `tag`＝`post:<owner>/<id>`，新的取代舊的；`Topic` header 讓推播服務裡還沒送達的也被取代
 - **trigger ↔ function 的驗證**：vault 的 `push_webhook_secret` ＝ secrets 的 `PUSH_WEBHOOK_SECRET`；trigger 送 `x-push-signature`（body 的 HMAC-SHA256），body 有 `sent_at`，function 只收 2 分鐘內的；**密鑰本身不送出**（pg_net 的 `net.*` 表是 Supabase 預設的 PUBLIC 權限，雖然沒從 API 公開也不放密鑰）
   - function 的網址也在 vault（`send_push_url`）；沒設定就不送；推播出錯一律 `exception when others`，**絕不影響留言寫入**
   - `send-push` 的 `verify_jwt = false`（呼叫者是資料庫），身分只靠簽章
-- **推播內容只有 `{ v, kind, nickname, owner, brewId }`**，不含留言原文；sw.js 只當文字顯示（去掉控制字元與改變方向的字元、≤ 20 字），標題「手沖紀錄」、內容「<暱稱> 留言了你的貼文／回覆了你的留言」；格式不對顯示通用的「有新的留言」（iOS 規定每則推播都要顯示）
-- **點通知**：sw.js 用驗證過的 uuid 自己組 `#/social/<owner>/<id>?comments=1`（`PUSH_ROUTE`，和 `models.isPushRoute` 一致），不合格一律 `#/social`；App 開著就 `postMessage` 讓那個視窗換頁（app.js 再檢查一次）＋`focus()`，沒開才 `openWindow`
+- **推播內容只有 `{ v, kind, nickname, owner, brewId }`**（kind：comment／reply／post／like；post 多 `bean`，post、like 多 `others`、`quiet`），不含留言原文、筆記；send-push 檢查每種 kind 的人數上限（留言 3、新貼文 200、讚 1）、不能混在一起；sw.js 只當文字顯示（`cleanText`：去掉控制字元與改變方向的字元，暱稱 ≤ 20 字、豆子 ≤ 30 字），標題「手沖紀錄」、內容「<暱稱> 留言了你的貼文／回覆了你的留言／說你的貼文讚／分享了一杯 <豆子>」；格式不對顯示通用的「有新的留言」（iOS 規定每則推播都要顯示）
+  - tag／Topic：留言、回覆 `post:<owner>/<id>`；讚 `like:<owner>/<id>`（不蓋掉留言的）；新貼文 `friend:<owner>`
+- **點通知**：sw.js 用驗證過的 uuid 自己組 `#/social/<owner>/<id>?comments=1`（留言、回覆）或 `#/social/<owner>/<id>`（讚、新貼文）（`PUSH_ROUTE`，和 `models.isPushRoute` 一致），不合格一律 `#/social`；App 開著就 `postMessage` 讓那個視窗換頁（app.js 再檢查一次）＋`focus()`，沒開才 `openWindow`
 - 金鑰：VAPID 公鑰在 `js/config.js`（`vapidPublicKey`；空字串＝還沒開放）；私鑰、`VAPID_SUBJECT`、`PUSH_WEBHOOK_SECRET` 只在 Supabase secrets；站長用 `scripts/vapid-keys.mjs` 在自己電腦產生（寫出 `.env.push`、`.env.push.sql`，被 `.env.*` 排除），**私鑰不貼給 Claude**
   - 本機：send-push 用 `LOCAL_VAPID`（repo 裡的測試用金鑰）與 `local-push-secret`，**所有推播改送到假推播伺服器** `host.docker.internal:54398`（保留路徑），不會連到真的推播服務；vault 由測試的 `setupPushVault()` 設定（`db reset` 會清掉）
 - 介面（`#/notifications`）：只有按「在這台裝置啟用通知」才 `Notification.requestPermission()`（不在打開 App 時問）；iPhone 不是從主畫面開啟只顯示「分享 → 加入主畫面」的說明、沒有按鈕；拒絕時說明到系統設定開啟
@@ -317,8 +322,8 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - `node scripts/supabase-profile-test.mjs`：個人檔案的權限從 API 層測（A、B 好友，C 非好友，D 被封鎖的好友，E 邀請中）：新欄位誰都不能直接讀、`profile_detail` 只給本人和沒有封鎖的好友、不能改別人的、長度與控制字元被拒絕
 - `node scripts/social-profile-test.mjs`：headless Chrome 測個人檔案頁（好友看到全部、非好友只有暱稱快照、封鎖找不到、XSS、從卡片／詳細頁／留言／@暱稱／好友名單跳轉、點擊範圍 44px、編輯）
 - `node scripts/webpush-test.mjs`：不需要 Supabase；Node 載入 `_shared/webpush.ts` 加密與簽章，用 `push-helpers.mjs`（只用 node:crypto）獨立解密、驗證 VAPID；允許的推播服務清單
-- `node scripts/supabase-push-test.mjs`：API 層（A、B、D 好友，C 非好友）：訂閱的權限、10 台、SSRF；send-push 沒簽章／錯簽章／使用者 JWT／重送都被拒；實際留言 → 假推播伺服器（port 54398）收到正確的人、解密後沒有留言原文、5 分鐘合併、封鎖、偏好、410 刪訂閱、log 不含 endpoint 與金鑰
-- `node scripts/social-push-test.mjs`：headless Chrome（PushManager 換成假的，不連 FCM）：不會一打開就問權限、開關、拒絕的說明、iPhone 非主畫面、啟用存訂閱；B 留言 → 解密 → `ServiceWorker.deliverPushMessage` 送進 A 的 sw.js → 通知內容與 tag → 在 sw.js 執行 `openApp` → 同一個視窗換到那篇貼文；惡意內容與外部網址只到 `#/social`；登出刪訂閱；截圖
+- `node scripts/supabase-push-test.mjs`：API 層（A、B、D 好友，C 非好友）：訂閱的權限、10 台、SSRF；send-push 沒簽章／錯簽章／使用者 JWT／重送都被拒；實際留言 → 假推播伺服器（port 54398）收到正確的人、解密後沒有留言原文、5 分鐘合併、封鎖、偏好、410 刪訂閱、log 不含 endpoint 與金鑰；好友新貼文（預設關、非好友／封鎖／停權不收、修改與再分享不通知、30 分鐘合併、第 31 筆）、按讚（自己按、收回再按、合併、封鎖、偏好）、send-push 新格式的檢查（pgTAP 的 `12_push_more` 測同一套規則與 200 人分批）
+- `node scripts/social-push-test.mjs`：headless Chrome（PushManager 換成假的，不連 FCM）：不會一打開就問權限、開關、拒絕的說明、iPhone 非主畫面、啟用存訂閱；B 留言 → 解密 → `ServiceWorker.deliverPushMessage` 送進 A 的 sw.js → 通知內容與 tag → 在 sw.js 執行 `openApp` → 同一個視窗換到那篇貼文；惡意內容與外部網址只到 `#/social`；四個開關的預設與存檔；真的按讚 → 通知、安靜取代、新貼文的文字與惡意豆子名稱、點按讚通知換頁；登出刪訂閱；截圖
 - `node scripts/admin-ui-test.mjs`：headless Chrome 測後台畫面（入口只有開發者看得到、原因必填與確認、刪完畫面更新、作者看到「已被移除」、XSS、CSP）
 - 新增 Edge Function 後本機要 `npx supabase@2.120.0 stop` 再 `start` 才會載入（只改程式的話 `docker restart supabase_edge_runtime_coffee-log` 就好）
 - `node scripts/social-ui-test.mjs`：兩個隔離的 headless Chrome 環境（A、B）操作真的畫面：加好友、封鎖、XSS、頭像 EXIF、登出；登入用 admin API 拿真的 session（Google 登入無法自動化）

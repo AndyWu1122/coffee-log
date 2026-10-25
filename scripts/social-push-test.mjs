@@ -136,7 +136,8 @@ try {
   await settingsLoaded(pa);
   check('打開通知設定頁：還沒詢問權限', (await pa.eval('window.__permAsked')) === 0);
   check('有「在這台裝置啟用通知」按鈕', Boolean(await pa.eval(`document.querySelector('[data-action="enable"]')`)));
-  check('兩個開關預設都開', (await pa.eval(`[...document.querySelectorAll('.switch-row input')].map((i) => i.checked).join()`)) === 'true,true');
+  const defaults = await pa.eval(`[...document.querySelectorAll('.switch-row input')].map((i) => i.name + ':' + i.checked).join()`);
+  check('預設：新留言、回覆、按讚開，好友新貼文關', defaults === 'comments:true,replies:true,likes:true,newPosts:false', defaults);
   check('說明通知不含留言內容', (await text(pa, '.notifications-page')).includes('不會顯示留言內容'));
   check('開關每一列 ≥ 48px', (await pa.eval(`Math.min(...[...document.querySelectorAll('.switch-row')].map((r) => r.getBoundingClientRect().height))`)) >= 48);
   check('390px 沒有橫向捲動', (await pa.eval('document.documentElement.scrollWidth <= innerWidth')) === true);
@@ -161,6 +162,20 @@ try {
   await toast(pa, '已儲存');
   prefs = rows(await rest(`notification_prefs?user_id=eq.${A.id}`, { headers: admin }))?.[0];
   check('再打開「回覆」', prefs?.replies === true);
+  await click(pa, '.switch-row input[name="newPosts"]');
+  await toast(pa, '已儲存');
+  await pa.waitFor(`!document.querySelector('.switch-row input[name="newPosts"]').disabled`, { label: '存完好友新貼文' });
+  await click(pa, '.switch-row input[name="likes"]');
+  await pa.waitFor(`!document.querySelector('.switch-row input[name="likes"]').disabled`, { label: '存完按讚' });
+  prefs = rows(await rest(`notification_prefs?user_id=eq.${A.id}`, { headers: admin }))?.[0];
+  check('打開「好友新貼文」、關掉「按讚」：存到雲端', prefs?.new_posts === true && prefs?.likes === false && prefs?.comments === true, JSON.stringify(prefs));
+  await visit(pa, base, '#/notifications');
+  await settingsLoaded(pa);
+  const reloaded = await pa.eval(`[...document.querySelectorAll('.switch-row input')].map((i) => i.name + ':' + i.checked).join()`);
+  check('重新打開：四個開關都照存的', reloaded === 'comments:true,replies:true,likes:false,newPosts:true', reloaded);
+  await click(pa, '.switch-row input[name="likes"]');
+  await pa.waitFor(`!document.querySelector('.switch-row input[name="likes"]').disabled`, { label: '存完按讚' });
+  check('再打開「按讚」', rows(await rest(`notification_prefs?user_id=eq.${A.id}`, { headers: admin }))?.[0]?.likes === true);
 
   /* ===== 3. 拒絕權限 ===== */
   await pa.eval(`window.__answer = 'denied'; true`);
@@ -193,7 +208,7 @@ try {
   const help = await text(iphone, '#push-ios-help');
   check('iPhone 不是從主畫面開啟：顯示加入主畫面的說明', help?.includes('分享') && help.includes('加入主畫面') && help.includes('從主畫面'), help);
   check('iPhone 不是從主畫面開啟：沒有啟用按鈕', !(await iphone.eval(`document.querySelector('[data-action="enable"]')`)));
-  check('iPhone 的說明頁：開關照樣可以設定', (await iphone.eval(`document.querySelectorAll('.switch-row input').length`)) === 2);
+  check('iPhone 的說明頁：開關照樣可以設定', (await iphone.eval(`document.querySelectorAll('.switch-row input').length`)) === 4);
   const home = await openPage(chrome, base, { ua: IPHONE_UA, standalone: true });
   await signIn(home, await realSession(B));
   await visit(home, base, '#/notifications');
@@ -260,6 +275,54 @@ try {
   await sleep(300);
   check('不是 JSON：照樣顯示通用提示', (await pa.eval(`navigator.serviceWorker.ready.then((r) => r.getNotifications({ tag: 'comments' })).then((ns) => ns[0]?.body)`)) === '有新的留言');
 
+  /* ===== 6-1. 按讚、好友新貼文 ===== */
+  const deliver = (data) => pa.cdp('ServiceWorker.deliverPushMessage', {
+    origin: new URL(base).origin, registrationId, data: typeof data === 'string' ? data : JSON.stringify(data),
+  }).then(() => sleep(500));
+  const byTag = (tag) => pa.eval(`navigator.serviceWorker.ready.then((r) => r.getNotifications({ tag: ${q(tag)} }))
+    .then((ns) => ns.map((n) => ({ body: n.body, path: n.data?.path, silent: n.silent, renotify: n.renotify })))`);
+
+  // 真的按讚：B 按 A 的貼文 → 假推播伺服器 → 解密 → 送進 A 的 sw.js
+  const likeSince = push.received.length;
+  check('B 按讚 A 的貼文', (await rest('likes', { method: 'POST', token: B.token, body: { brew_owner: A.id, brew_id: post } })).status === 201);
+  for (let i = 0; i < 100 && push.received.length === likeSince; i++) await sleep(100);
+  const likeGot = push.received.slice(likeSince);
+  check('假推播伺服器收到按讚的通知', likeGot.length === 1);
+  const likePayload = likeGot[0] ? decrypt(likeGot[0].body, keysA).text : '{}';
+  await deliver(likePayload);
+  const likeTag = `like:${A.id}/${post}`;
+  let shown = await byTag(likeTag);
+  check('按讚：「B 說你的貼文讚」、會響', shown.length === 1 && shown[0].body === 'B 說你的貼文讚' && shown[0].silent === false && shown[0].renotify === true, JSON.stringify(shown));
+  check('按讚：點了打開那篇貼文（不是留言區）', shown[0]?.path === `#/social/${A.id}/${post}`, shown[0]?.path);
+  check('按讚的通知不會蓋掉留言的通知', (await byTag(`post:${A.id}/${post}`)).length === 1);
+  await deliver({ v: 1, kind: 'like', nickname: 'C', owner: A.id, brewId: post, others: 2, quiet: true });
+  shown = await byTag(likeTag);
+  check('30 分鐘內的讚：取代成「C 和其他 2 人說你的貼文讚」、安靜', shown.length === 1 && shown[0].body === 'C 和其他 2 人說你的貼文讚'
+    && shown[0].silent === true && shown[0].renotify === false, JSON.stringify(shown));
+  for (const others of ['5', -1, 1.5, 1e9]) {
+    await deliver({ v: 1, kind: 'like', nickname: 'C', owner: A.id, brewId: post, others });
+    shown = await byTag(likeTag);
+    check(`others 是 ${q(others)}：當成 0`, shown[0]?.body === 'C 說你的貼文讚', JSON.stringify(shown));
+  }
+
+  // 好友新貼文
+  const friendTag = `friend:${B.id}`;
+  await deliver({ v: 1, kind: 'post', nickname: 'B', owner: B.id, brewId: post, bean: '衣索比亞 耶加雪菲', others: 0, quiet: false });
+  shown = await byTag(friendTag);
+  check('新貼文：「B 分享了一杯 衣索比亞 耶加雪菲」', shown.length === 1 && shown[0].body === 'B 分享了一杯 衣索比亞 耶加雪菲' && shown[0].silent === false, JSON.stringify(shown));
+  check('新貼文：點了打開那篇貼文', shown[0]?.path === `#/social/${B.id}/${post}`);
+  await deliver({ v: 1, kind: 'post', nickname: 'B', owner: B.id, brewId: A.id, bean: '肯亞', others: 2, quiet: true });
+  shown = await byTag(friendTag);
+  check('同一位好友 30 分鐘內：取代成「B 分享了 3 杯，最新：肯亞」、安靜、打開最新那篇', shown.length === 1
+    && shown[0].body === 'B 分享了 3 杯，最新：肯亞' && shown[0].silent === true && shown[0].path === `#/social/${B.id}/${A.id}`, JSON.stringify(shown));
+  await deliver({ v: 1, kind: 'post', nickname: 'B', owner: B.id, brewId: post, bean: `<b>壞‮豆</b>\n${'很長'.repeat(30)}` });
+  shown = await byTag(friendTag);
+  check('豆子名稱只當成文字、去掉換行與改變方向的字元、最多 30 字', shown[0]?.body === `B 分享了一杯 ${[...`<b>壞豆</b>${'很長'.repeat(30)}`].slice(0, 30).join('')}`, JSON.stringify(shown));
+  await deliver({ v: 1, kind: 'post', nickname: 'B', owner: B.id, brewId: post, bean: 42 });
+  check('豆子名稱不是字串：顯示「咖啡」', (await byTag(friendTag))[0]?.body === 'B 分享了一杯 咖啡');
+  await deliver({ v: 1, kind: 'follow', nickname: 'B', owner: B.id, brewId: post });
+  check('不認得的 kind：通用提示', (await byTag('comments'))[0]?.body === '有新的留言');
+
   /* ===== 7. 點通知：A 開著的視窗換到那篇貼文 ===== */
   const before = await pageTargets(chrome, pa);
   const target = `#/social/${A.id}/${post}?comments=1`;
@@ -271,6 +334,14 @@ try {
   check('沒有開新視窗', (await pageTargets(chrome, pa)) === before);
   await pa.waitFor(`document.querySelector('#app').textContent.includes(${q(SECRET_BODY)})`, { label: '貼文詳細頁顯示留言' }).catch(() => null);
   check('詳細頁打開，看得到 B 的留言', (await pa.eval(`document.querySelector('#app').textContent.includes(${q(SECRET_BODY)})`)) === true);
+
+  // 按讚的通知：換到那篇貼文（不帶 comments=1）
+  await visit(pa, base, '#/beans');
+  const likeTarget = `#/social/${A.id}/${post}`;
+  await inServiceWorker(chrome, pa, `self.registration.getNotifications({ tag: ${q(`like:${A.id}/${post}`)} })
+    .then(([n]) => { n.close(); return openApp(n.data.path); }).then(() => true)`);
+  await pa.waitFor(`location.hash === ${q(likeTarget)}`, { label: '換到按讚的貼文', timeout: 5000 }).catch(() => null);
+  check('點按讚的通知：A 的視窗換到那篇貼文', (await pa.eval('location.hash')) === likeTarget, await pa.eval('location.hash'));
 
   // 外部網址、App 其他頁面：只到 #/social
   for (const bad of ['https://evil.example/', 'javascript:pwn()', '#/admin', `#/social/${A.id}/${post}?comments=1&x=https://evil.example`, '//evil.example/#/social']) {
