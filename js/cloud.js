@@ -399,6 +399,35 @@ export const deleteComment = (commentId) => run(async (sb) =>
 export const commentActivity = (postSince, replySince) => run(async (sb) =>
   unwrap(await sb.rpc('comment_activity', { post_since: postSince, reply_since: replySince })));
 
+/* ===== 推播通知 ===== */
+// 訂閱、偏好都只能讀寫自己的（RLS）；通知誰、合併由資料庫 trigger 判斷，送出由 Edge Function send-push（使用者呼叫不了）
+
+/** 這個 endpoint 是不是已經存在我的訂閱裡（別人的讀不到，所以只會找到自己的） */
+export const hasPushSubscription = (endpoint) => run(async (sb) =>
+  unwrap(await sb.from('push_subscriptions').select('id').eq('endpoint', endpoint).limit(1)).length > 0);
+
+/**
+ * 存這台裝置的訂閱（user_id 由資料庫用 auth.uid() 決定）；已經存過就不再新增
+ * 失敗時 CloudError 的 code：23505（endpoint 被別的帳號用了）、P0001 + hint too_many_devices（超過 10 台）
+ */
+export const savePushSubscription = (row) => run(async (sb) => {
+  const existing = unwrap(await sb.from('push_subscriptions').select('id').eq('endpoint', row.endpoint).limit(1));
+  if (existing.length) return;
+  unwrap(await sb.from('push_subscriptions').insert(row));
+});
+
+export const deletePushSubscription = (endpoint) => run(async (sb) => {
+  unwrap(await sb.from('push_subscriptions').delete().eq('endpoint', endpoint));
+});
+
+/** 通知的開關 { comments, replies }；沒存過＝都開 */
+export const getNotificationPrefs = () => run(async (sb) =>
+  unwrap(await sb.from('notification_prefs').select('comments, replies').maybeSingle()) ?? { comments: true, replies: true });
+
+export const saveNotificationPrefs = ({ comments, replies }) => run(async (sb) => {
+  unwrap(await sb.from('notification_prefs').upsert({ comments, replies }, { onConflict: 'user_id' }));
+});
+
 /* ===== 檢舉、刪除帳號 ===== */
 
 /** 檢舉一筆看得到的紀錄（reporter 由資料庫用 auth.uid() 決定；每天 10 次的上限由 trigger 檢查） */

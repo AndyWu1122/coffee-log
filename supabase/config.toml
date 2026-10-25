@@ -375,7 +375,7 @@ authorization_url_path = "/oauth/consent"
 allow_dynamic_registration = false
 
 [edge_runtime]
-# 刪除帳號（supabase/functions/delete-account）、意見回饋（supabase/functions/feedback）用
+# 刪除帳號（supabase/functions/delete-account）、意見回饋（supabase/functions/feedback）、推播通知（supabase/functions/send-push）用
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
 # `per_worker` (default) — enables hot reload during local development.
@@ -387,7 +387,7 @@ inspector_port = 8083
 deno_version = 2
 
 # ⚠ 不要設定 [edge_runtime.secrets]：`supabase secrets set` 會把這裡的值一起上傳到正式專案，蓋掉真的金鑰
-# （意見回饋在本機寄到假 Resend 的設定寫在 supabase/functions/feedback/index.ts，依 SUPABASE_URL 判斷）
+# （意見回饋在本機寄到假 Resend、推播送到假推播伺服器的設定寫在各自的 index.ts，依 SUPABASE_URL 判斷）
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
@@ -402,6 +402,11 @@ verify_jwt = true
 # 意見回饋：閘道先驗證 JWT，函式裡用呼叫者的 JWT 寫入資料表（RLS、每日上限照常生效）
 [functions.feedback]
 verify_jwt = true
+
+# 推播通知：呼叫者是資料庫（trigger + pg_net），不是使用者，所以不驗證 JWT；
+# 函式裡一律檢查 x-push-secret（vault 的 push_webhook_secret ＝ PUSH_WEBHOOK_SECRET），一般使用者呼叫不了
+[functions.send-push]
+verify_jwt = false
 
 [analytics]
 enabled = false

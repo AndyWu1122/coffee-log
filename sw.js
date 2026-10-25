@@ -1,7 +1,7 @@
 // Service Worker：安裝時預先快取所有檔案，之後一律從快取讀取（離線可用）
 // ⚠ 修改任何前端檔案後，APP_VERSION 至少第三碼 +1，使用者才會收到新版本（規則見 CLAUDE.md「版本號」）
 // 它也是 ☰ 選單顯示的版本號、意見回饋附的版本（app.js 用 'version' 訊息詢問）
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 const CACHE_NAME = `coffee-log-v${APP_VERSION}`;
 
 const ASSETS = [
@@ -23,6 +23,7 @@ const ASSETS = [
   'js/stats.js',
   'js/drippers.js',
   'js/id.js',
+  'js/push.js',
   'js/vendor/supabase-js-2.117.3.js',
   'js/vendor/qrcode-generator-2.0.4.js',
   'js/views/ui.js',
@@ -48,6 +49,7 @@ const ASSETS = [
   'js/views/changelog.js',
   'js/views/admin.js',
   'js/views/feedback.js',
+  'js/views/notifications.js',
   'icons/icon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png',
@@ -87,4 +89,61 @@ self.addEventListener('fetch', (event) => {
       ?? (request.mode === 'navigate' ? await cache.match('index.html') : undefined);
     return cached ?? fetch(request);
   })());
+});
+
+/* ===== 推播通知（有人留言我的貼文、回覆我的留言） ===== */
+// 內容由 Edge Function send-push 送來：{ v, kind, nickname, owner, brewId }，不含留言原文
+// 只當成文字顯示；點擊後的網址由這裡用驗證過的 uuid 組出 App 內部的路由（不接受任何網址，不會跳到外部網站）
+
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const IS_UUID = new RegExp(`^${UUID}$`);
+// 和 models.js 的 isPushRoute 一致
+const PUSH_ROUTE = new RegExp(`^#/social(/${UUID}/${UUID}\\?comments=1)?$`);
+const NICKNAME_MAX = 20;
+
+/** 暱稱：去掉控制字元與改變文字方向的字元（避免假冒內容），最多 20 字 */
+function cleanNickname(value) {
+  if (typeof value !== 'string') return '';
+  return [...value.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim()]
+    .slice(0, NICKNAME_MAX).join('');
+}
+
+/** 推播內容 → 要顯示的通知；格式不對時顯示通用的提示（iOS 規定每則推播都要顯示通知） */
+function notificationFor(data) {
+  const ok = data && IS_UUID.test(data.owner) && IS_UUID.test(data.brewId) && (data.kind === 'comment' || data.kind === 'reply');
+  if (!ok) return { body: '有新的留言', tag: 'comments', path: '#/social' };
+  const who = cleanNickname(data.nickname) || '有人';
+  return {
+    body: data.kind === 'reply' ? `${who} 回覆了你的留言` : `${who} 留言了你的貼文`,
+    // 同一篇貼文同一個 tag：新的通知取代舊的（5 分鐘內的合併在伺服器那邊）
+    tag: `post:${data.owner}/${data.brewId}`,
+    path: `#/social/${data.owner}/${data.brewId}?comments=1`,
+  };
+}
+
+self.addEventListener('push', (event) => {
+  let data = null;
+  try { data = event.data?.json() ?? null; } catch { /* 不是 JSON：顯示通用的提示 */ }
+  const n = notificationFor(data);
+  event.waitUntil(self.registration.showNotification('手沖紀錄', {
+    body: n.body, tag: n.tag, renotify: true, icon: 'icons/icon-192.png', data: { path: n.path },
+  }));
+});
+
+/** 打開 App 到 path：已經開著就在那個視窗換頁（不開新視窗），沒有才開新的 */
+async function openApp(path) {
+  if (!PUSH_ROUTE.test(path)) path = '#/social';
+  const scope = self.registration.scope;
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  const app = windows.find((c) => c.url.startsWith(scope));
+  if (app) {
+    app.postMessage({ type: 'navigate', path });
+    return app.focus().catch(() => app);
+  }
+  return self.clients.openWindow(new URL(path, scope).href);
+}
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(openApp(event.notification.data?.path));
 });

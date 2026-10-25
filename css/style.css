@@ -527,6 +527,29 @@ input:focus, select:focus, textarea:focus {
 .toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 0.9rem; min-height: var(--tap); }
 .toggle input { width: 22px; min-height: 22px; height: 22px; }
 
+/* ===== 通知設定的開關 ===== */
+/* 整列都可以點（≥ 48px）；開關的圓點：關閉時用 --text（在 --border 上）、開啟時用 --accent-text（在 --accent 上），兩個主題都分得清楚 */
+.switch-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: var(--tap); padding: 8px 0; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.switch-row > span { display: grid; gap: 2px; order: -1; }
+.switch-row input {
+  appearance: none; -webkit-appearance: none; flex: none; position: relative; cursor: pointer;
+  width: 52px; height: 32px; min-height: 32px; margin: 0; padding: 0;
+  border: none; border-radius: 16px; background: var(--border); transition: background 0.15s;
+}
+.switch-row input::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px;
+  border-radius: 50%; background: var(--text); transition: transform 0.15s;
+}
+.switch-row input:checked { background: var(--accent); }
+.switch-row input:checked::after { transform: translateX(20px); background: var(--accent-text); }
+.switch-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch-row input:disabled { opacity: 0.6; }
+.notifications-page .notice p { margin: 0 0 6px; }
+.notifications-page .notice p:last-child { margin-bottom: 0; }
+
 /* ===== Toast ===== */
 .toast {
   position: fixed;

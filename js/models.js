@@ -9,6 +9,7 @@ import { mergeDripperNames } from './drippers.js';
 import { newId } from './id.js';
 import * as cloud from './cloud.js';
 import * as sync from './sync.js';
+import * as push from './push.js';
 
 // views 只依賴 models，風味輪資料、圖片解碼、分享卡片的計算由這裡轉出
 export { FLAVOR_WHEEL, flavorNote, sortFlavorNotes } from './flavorWheel.js';
@@ -966,8 +967,11 @@ export async function completeSignIn(search) {
 /** 換頁到 Google 登入；完成後回到 App 首頁（網址必須在 Supabase 的 Redirect URLs 允許清單裡） */
 export const signInWithGoogle = () => cloud.signInWithGoogle(location.origin + location.pathname);
 
-/** 登出這台裝置；本機的沖煮紀錄不受影響 */
-export const signOut = () => cloud.signOut();
+/** 登出這台裝置；本機的沖煮紀錄不受影響。先刪掉這台裝置的推播訂閱（要登入才刪得到），失敗也照樣退訂、登出 */
+export async function signOut() {
+  await disablePushHere().catch(() => {});
+  return cloud.signOut();
+}
 
 /** LINE、Facebook、Instagram 等 App 內建的瀏覽器：Google 不允許在裡面登入 */
 export const isInAppBrowser = () => /\bLine\/|FBAN|FBAV|Instagram|MicroMessenger/i.test(navigator.userAgent);
@@ -1502,6 +1506,7 @@ export async function sendFeedback({ category, message, appVersion = null }) {
 export async function deleteAccount() {
   const userId = await sync.sessionUserId();
   await cloud.deleteAccount();
+  await push.unsubscribe().catch(() => {}); // 雲端的訂閱已經 cascade 刪除；這台裝置也退訂
   const [brews, states] = await Promise.all([db.getAll('brews'), db.getAll('sync')]);
   const otherAccount = new Set(states.filter((st) => st.userId !== userId).map((st) => st.brewId));
   const shared = brews.filter((b) => b.visibility === 'friends' && !otherAccount.has(b.id));
@@ -1511,6 +1516,73 @@ export async function deleteAccount() {
   });
   return { privatized: shared.length };
 }
+
+/* ===== 推播通知 ===== */
+// 有人留言我的貼文、回覆我的留言時跳出通知；通知誰、封鎖、合併都在資料庫判斷（private.comments_push）
+// 開關（新留言、回覆）存在雲端，換裝置也一樣；「在這台裝置啟用」才會詢問通知權限並訂閱
+
+/**
+ * 通知設定頁的狀態：
+ *   { status: 'unavailable' | 'signed-out' | 'no-profile' }
+ *   { status: 'ready', support, device, prefs }
+ *     support：'ok' | 'ios-browser'（iPhone 不是從主畫面開啟）| 'unsupported' | 'unconfigured'
+ *     device：'on'（這台已啟用）| 'off' | 'denied'（使用者拒絕了，要到系統設定開）
+ *     prefs：{ comments, replies }
+ */
+export async function getPushState() {
+  const state = await getSocialState();
+  if (state.status !== 'ready') return { status: state.status };
+  const support = push.support();
+  const prefs = await cloud.getNotificationPrefs();
+  let device = 'off';
+  if (support === 'ok') {
+    if (push.permission() === 'denied') device = 'denied';
+    else if (push.permission() === 'granted') {
+      const sub = await push.currentSubscription();
+      if (sub && await cloud.hasPushSubscription(sub.endpoint)) device = 'on';
+    }
+  }
+  return { status: 'ready', support, device, prefs };
+}
+
+/**
+ * 在這台裝置啟用通知（只在使用者按按鈕時呼叫：會跳出系統的權限詢問）
+ * 回傳 { ok: true } 或 { ok: false, reason: 'denied' | 'dismissed' | 'too_many_devices' }
+ */
+export async function enablePush() {
+  const result = await push.requestPermission();
+  if (result !== 'granted') return { ok: false, reason: result === 'denied' ? 'denied' : 'dismissed' };
+  let sub = await push.subscribe();
+  try {
+    await cloud.savePushSubscription(push.subscriptionRow(sub));
+  } catch (err) {
+    if (err?.hint === 'too_many_devices') return { ok: false, reason: 'too_many_devices' };
+    if (err?.code !== '23505') throw err;
+    // 這個 endpoint 還記在別的帳號（之前登出時沒連上網路）：換一個新的訂閱
+    sub = await push.subscribe({ fresh: true });
+    await cloud.savePushSubscription(push.subscriptionRow(sub));
+  }
+  return { ok: true };
+}
+
+/** 停用這台裝置的通知：先刪雲端的訂閱（失敗也沒關係：退訂後推播服務會回 410，下次送的時候自動刪掉），再退訂 */
+export async function disablePushHere() {
+  const sub = await push.currentSubscription();
+  if (!sub) return;
+  try {
+    await cloud.deletePushSubscription(sub.endpoint);
+  } finally {
+    await push.unsubscribe();
+  }
+}
+
+export const saveNotificationPrefs = (prefs) =>
+  cloud.saveNotificationPrefs({ comments: Boolean(prefs.comments), replies: Boolean(prefs.replies) });
+
+/** 只接受 App 內部的社群貼文路由（sw.js 傳來的換頁訊息再檢查一次） */
+const UUID_RE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const PUSH_ROUTE = new RegExp(`^#/social(/${UUID_RE}/${UUID_RE}\\?comments=1)?$`);
+export const isPushRoute = (path) => typeof path === 'string' && PUSH_ROUTE.test(path);
 
 /* ===== 開發者後台 ===== */
 // 權限只在伺服器檢查（private.admins、public.admin_*、Edge Function admin-delete-user）；這裡只整理資料與訊息

@@ -8,6 +8,8 @@
 const LOCAL = {
   url: 'http://127.0.0.1:54321',
   anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0',
+  // 推播通知的 VAPID 公鑰（本機測試用；私鑰在 supabase/functions/send-push/index.ts 的 LOCAL_VAPID，只送到假推播伺服器）
+  vapidPublicKey: 'BLB8xISVwsudCQHkIqTCHD6wXCj_aQtohBMMge9PDf9cRImVMYN19IAhz5iscwu_riTKEk1hIiKQstaO2vliO-g',
 };
 
 // 正式專案（Tokyo）：publishable key 和 anon key 一樣是公開的（步驟見 docs/supabase-setup.md）
@@ -15,6 +17,9 @@ const LOCAL = {
 const PRODUCTION = {
   url: 'https://rygsjrzddhhhdqpoayoa.supabase.co',
   anonKey: 'sb_publishable_jJfi96HHgNORDl1-IYFsLg_adfwn9ma',
+  // 推播通知的 VAPID 公鑰（公開的）：站長用 scripts/vapid-keys.mjs 產生，私鑰只在 Supabase secrets（docs/supabase-setup.md 5-6）
+  // 空字串＝還沒設定，通知設定頁顯示「還沒開放」
+  vapidPublicKey: '',
 };
 
 function pick() {

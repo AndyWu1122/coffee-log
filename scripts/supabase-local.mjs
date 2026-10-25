@@ -1,7 +1,7 @@
 // 本機 Supabase 測試的共用工具：讀金鑰、簽 JWT、HTTP、建立測試帳號、斷言
 // 金鑰在執行時從 `supabase status` 讀取，不寫進檔案；只允許連本機，絕不連正式專案
 
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 
 /* ===== 讀本機 Supabase 的網址與金鑰 ===== */
@@ -173,4 +173,37 @@ export async function signPhoto(token, path, { expiresIn = 3600, bucket = BUCKET
 export async function photoExists(path, bucket = BUCKET) {
   const r = await call(`/storage/v1/object/${bucket}/${path}`, { headers: serviceHeaders });
   return r.status === 200;
+}
+
+/* ===== 推播通知 ===== */
+
+/** 在本機資料庫直接執行 SQL（只連本機的 Docker 容器），回傳輸出（-At：沒有欄名、不對齊） */
+export function psql(sql) {
+  return execFileSync('docker', ['exec', 'supabase_db_coffee-log', 'psql', '-U', 'postgres', '-v', 'ON_ERROR_STOP=1', '-At', '-c', sql],
+    { encoding: 'utf8' }).trim();
+}
+
+/**
+ * 本機的推播設定：vault 的 send_push_url（資料庫容器連到 Kong）、push_webhook_secret（和本機 send-push 的 LOCAL_SECRET 相同）
+ * 正式專案由站長在 SQL Editor 設定（docs/supabase-setup.md 5-6）；db reset 會清掉，每次測試前重設
+ */
+export const LOCAL_PUSH_SECRET = 'local-push-secret';
+export function setupPushVault() {
+  psql(`delete from vault.secrets where name in ('send_push_url', 'push_webhook_secret');
+    select vault.create_secret('http://kong:8000/functions/v1/send-push', 'send_push_url');
+    select vault.create_secret('${LOCAL_PUSH_SECRET}', 'push_webhook_secret');`);
+}
+
+/** 新增一筆推播訂閱（endpoint 是 FCM 的網址；本機的 send-push 會改送到假推播伺服器，保留路徑） */
+export const pushEndpoint = (name) => `https://fcm.googleapis.com/fcm/send/${run}-${name}`;
+export const subscribePush = (user, name, keys) => rest('push_subscriptions', {
+  method: 'POST', token: user.token, headers: representation,
+  body: { endpoint: pushEndpoint(name), p256dh: keys.p256dh, auth: keys.auth, user_agent: 'push-test' },
+});
+
+/** 像資料庫 trigger 一樣簽章後呼叫 send-push（測試 function 自己的檢查用） */
+export function signedPush(payload, secret = LOCAL_PUSH_SECRET) {
+  const body = JSON.stringify(payload);
+  const sig = createHmac('sha256', secret).update(body).digest('hex');
+  return fetch(`${api}/functions/v1/send-push`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-push-signature': sig }, body });
 }

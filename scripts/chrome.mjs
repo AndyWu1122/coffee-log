@@ -92,7 +92,7 @@ function connect(wsUrl) {
 }
 
 /**
- * 啟動 headless Chrome，回傳 { newPage(url, { isolated }), close() }
+ * 啟動 headless Chrome，回傳 { newPage(url, { isolated }), close(), send(method, params, sessionId) }
  * extraArgs：額外的命令列參數（例如 --host-resolver-rules）
  */
 export async function launchChrome({ extraArgs = [] } = {}) {
@@ -137,8 +137,12 @@ export async function launchChrome({ extraArgs = [] } = {}) {
 
     const page = {
       errors,
+      targetId,
+      browserContextId,
       /** 直接送 DevTools Protocol 指令（截圖、模擬裝置等） */
       cdp: send,
+      /** 這個分頁的 DevTools Protocol 事件（例如 ServiceWorker.workerRegistrationUpdated） */
+      on: (fn) => client.on((msg) => { if (msg.sessionId === sessionId && msg.method) fn(msg); }),
       /** 在頁面執行運算式（可以是 Promise），回傳 JSON 可序列化的結果 */
       async eval(expression) {
         const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
@@ -190,7 +194,10 @@ export async function launchChrome({ extraArgs = [] } = {}) {
     await rm(userDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }).catch(() => {});
   }
 
-  return { newPage, close };
+  /** 瀏覽器層級的 DevTools Protocol 指令（Target.getTargets、Target.attachToTarget 等）；sessionId 給了就送到那個 target */
+  const send = (method, params, sessionId) => client.send(method, params, sessionId);
+
+  return { newPage, close, send };
 }
 
 /* ===== 獨立的 JPEG 檢查（不用 App 的 image.js，避免同一個錯誤兩邊都看不出來） ===== */

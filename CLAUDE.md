@@ -33,12 +33,13 @@ js/cardLayout.js   # 分享卡片的純計算：cover 裁切、雷達圖座標�
 js/config.js       # Supabase 連線設定（依網址：localhost → 本機、github.io → 正式；null ＝ 沒有社群功能）
 js/cloud.js        # 唯一存取 Supabase 的地方（角色和 db.js 一樣）；supabase-js 用到才載入
 js/sync.js         # 好友紀錄的同步（本機 friends 紀錄 → shared_brews），只由 models.js 使用
+js/push.js         # 推播通知的瀏覽器那一邊（Notification、PushManager、iOS 主畫面判斷），只由 models.js 使用
 js/vendor/         # 第三方檔案原封不動（supabase-js UMD、qrcode-generator），來源與 SRI 見 js/vendor/README.md
-js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, dripperList, dripperForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, changelog（更新內容）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, profile（個人檔案）, stats（統計：SVG 圖表）, privacy（隱私說明）, feedback（意見回饋）, admin（開發者後台）, ui（共用 DOM 工具）
+js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, dripperList, dripperForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, changelog（更新內容）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, profile（個人檔案）, stats（統計：SVG 圖表）, privacy（隱私說明）, feedback（意見回饋）, notifications（通知設定）, admin（開發者後台）, ui（共用 DOM 工具）
 icons/
 docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟、部署指令）、overnight-report.md（2026-10-26 通宵工作的報告）
-supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）、functions/admin-delete-user（開發者刪別人的帳號）、functions/_shared/account.ts（兩者共用的刪除流程）、functions/feedback（意見回饋：存檔＋寄 Email 給站長；mail.ts 是設定檢查與錯誤說明的純函式）
-scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs（最後五個不需要 Supabase）
+supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）、functions/admin-delete-user（開發者刪別人的帳號）、functions/_shared/account.ts（兩者共用的刪除流程）、functions/feedback（意見回饋：存檔＋寄 Email 給站長；mail.ts 是設定檢查與錯誤說明的純函式）、functions/send-push（推播通知）、functions/_shared/webpush.ts（VAPID 簽章與 RFC 8291 加密，只用 Web Crypto）
+scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs、webpush-test.mjs（最後六個不需要 Supabase）、supabase-push-test.mjs、social-push-test.mjs、push-helpers.mjs（推播測試共用：解密、假推播伺服器）、vapid-keys.mjs（站長產生正式金鑰用，不是測試）
 tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mjs 用 headless Chrome 開；不屬於 App、不放進 ASSETS）
 ```
 
@@ -68,12 +69,12 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - id 用 crypto.randomUUID()
 
 ## 路由（hash）
-`#/` 紀錄列表（`?bean=<id>` 帶入豆子篩選，統計頁用）｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/drippers`｜`#/drippers/new`｜`#/drippers/<id>`｜`#/account` 帳號｜`#/friends` 好友管理｜`#/social` 社群（全部）｜`#/social?mine=1` 社群（我的）｜`#/social/<owner>/<id>` 紀錄詳細（`?comments=1` 捲到留言區）｜`#/user/<id>` 個人檔案｜`#/stats` 統計｜`#/privacy` 隱私說明｜`#/changelog` 更新內容｜`#/feedback` 意見回饋｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）｜`#/admin?tab=reports|posts|users|feedback|log` 開發者後台｜`#/admin/user/<id>`｜`#/admin/post/<owner>/<id>`
+`#/` 紀錄列表（`?bean=<id>` 帶入豆子篩選，統計頁用）｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/drippers`｜`#/drippers/new`｜`#/drippers/<id>`｜`#/account` 帳號｜`#/friends` 好友管理｜`#/social` 社群（全部）｜`#/social?mine=1` 社群（我的）｜`#/social/<owner>/<id>` 紀錄詳細（`?comments=1` 捲到留言區）｜`#/user/<id>` 個人檔案｜`#/stats` 統計｜`#/privacy` 隱私說明｜`#/changelog` 更新內容｜`#/feedback` 意見回饋｜`#/notifications` 通知設定｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）｜`#/admin?tab=reports|posts|users|feedback|log` 開發者後台｜`#/admin/user/<id>`｜`#/admin/post/<owner>/<id>`
 - 1.1.0 以前的 `#/feed`、`#/feed/<owner>/<id>` 由 app.js 轉址到 `#/social…`
 
 ## 介面配置
 - 底部分頁列：紀錄｜豆子｜社群（只放每天會用的頁面）；「社群 💬」是動態牆，有 `data-social`，`js/config.js` 沒設定時隱藏
-- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：帳號、好友管理、統計、磨豆機、濾杯、備份、隱私說明、更新內容、意見回饋、開發者後台；帳號、好友管理、意見回饋有 `data-social`，`js/config.js` 沒設定時隱藏；開發者後台有 `data-admin`，只有 `am_i_admin` 為 true 時顯示）
+- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**（目前有：帳號、好友管理、通知設定、統計、磨豆機、濾杯、備份、隱私說明、更新內容、意見回饋、開發者後台；帳號、好友管理、通知設定、意見回饋有 `data-social`，`js/config.js` 沒設定時隱藏；開發者後台有 `data-admin`，只有 `am_i_admin` 為 true 時顯示）
 - ☰ 選單裡的頁面不屬於任何分頁，路由設 `tab: null`，底部分頁都不亮
 - ☰ 的「!」（`app.js` 的 `setupBadges`）：選單裡需要注意的那一項後面有「!」（`.menu-alert[data-alert]`，`--accent`），☰ 按鈕上的「!」＝其中任何一項；aria-label 寫出是哪幾項
   - 好友管理＝收到好友邀請（社群）；備份＝`getBackupStatus().overdue`（有紀錄且 ≥ 14 天沒備份，首頁按「稍後」也照樣顯示，匯出後消失）；更新內容＝還沒看過這一版
@@ -86,7 +87,8 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
   - 數字＝好友新貼文＋我貼文的新留言＋回覆我的留言；各自最多算 100，>99 顯示「99+」（`models.badgeText`），0 隱藏
   - 「新」＝雲端 `created_at` 比 meta 記下的 seenAt 新（`feedSeenAt`／`commentsSeenAt`／`repliesSeenAt`，雲端時間、記 userId）；好友修改舊紀錄不算
   - 歸零：讀社群頁第一頁時記下；「全部」三種都記，「我的」只記留言的兩種
-  - 檢查時機和同步一樣（啟動、`online`、切回前景），views 操作完用 `notifyBadgesChanged()` 發事件；沒登入不載入 supabase-js；不做即時推播
+  - 檢查時機和同步一樣（啟動、`online`、切回前景），views 操作完用 `notifyBadgesChanged()` 發事件；沒登入不載入 supabase-js
+  - 數字不即時更新；即時的提醒是推播通知（見「推播通知」），點通知打開 App 時數字跟著更新
 
 ## 主題（深色／淺色）
 - ☰ 選單「外觀」：自動（跟系統）｜淺色｜深色；結果寫在 `<html data-theme="dark|light">`
@@ -156,7 +158,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 
 ## 咖啡社群（後端：Supabase）
 規格見 `docs/social-spec.md`（分 5 階段，每階段通過測試、使用者確認後才進下一階段）；待決事項與決定見 `docs/social-open-questions.md`。
-目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）、階段 3（帳號與好友）、階段 4（動態牆與同步）、階段 5（安全與隱私收尾），之後加上留言與回覆、封鎖不解除好友（都已部署），開發者後台（已部署）；個人檔案（`feature/profile`，正式專案尚未部署，步驟見 `docs/supabase-setup.md` 5-5）。正式專案：`rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），migration 與 `delete-account` 已部署；建立與設定步驟見 `docs/supabase-setup.md`。
+目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）、階段 3（帳號與好友）、階段 4（動態牆與同步）、階段 5（安全與隱私收尾），之後加上留言與回覆、封鎖不解除好友（都已部署），開發者後台（已部署）；個人檔案（`feature/profile`，正式專案尚未部署，步驟見 `docs/supabase-setup.md` 5-5）；推播通知（`feature/push`，正式專案尚未部署，步驟見 5-6）。正式專案：`rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），migration 與 `delete-account` 已部署；建立與設定步驟見 `docs/supabase-setup.md`。
 
 ### 資安規則（每個階段都必須遵守）
 - 每張表和 Storage bucket 都必須開 RLS，預設拒絕
@@ -176,7 +178,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 profiles、friendships、blocks、shared_brews、likes、reports（public，API 公開、RLS 保護）；rate_events（private，每日／每小時上限的計數）
 - 加好友只能透過 `send_friend_request(code)`，不能直接新增 friendships；沒有「搜尋所有使用者」
 - shared_brews 主鍵 `(owner, id)`，id 沿用本機紀錄 id；雲端只放 friends 紀錄，所以不存可見度
-- 上限：每天 20 個好友邀請、30 筆上傳、10 次檢舉、5 則意見回饋、100 則留言（台灣時間日曆日，只算新增，刪掉不還）；每小時打錯代碼 10 次
+- 上限：每天 20 個好友邀請、30 筆上傳、10 次檢舉、5 則意見回饋、100 則留言（台灣時間日曆日，只算新增，刪掉不還）；每小時打錯代碼 10 次；推播訂閱每人 10 台裝置
 
 ### 照片 Storage（階段 2）
 - 私有 bucket `brew-photos`：單檔 ≤ 1MB（`image.CLOUD_PHOTO_MAX_BYTES` 要一致）、只收 `image/jpeg`；路徑 `<user_id>/<brew_id>.jpg`（`models.cloudPhotoPath`，一律小寫）
@@ -272,6 +274,26 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - **`config.toml` 不要設定 `[edge_runtime.secrets]`**：`supabase secrets set` 會把它一起上傳到正式專案、蓋掉真的金鑰（曾經發生過）
 - 正式專案要另外部署：`npx supabase@2.120.0 functions deploy feedback`（步驟見 `docs/supabase-setup.md` 5-2）
 
+### 推播通知（`feature/push`，1.9.0）
+有人留言我的貼文、回覆我的留言時，手機跳出通知。標準 Web Push（VAPID），不用 Firebase 等第三方服務。
+- 流程：comments 新增 → trigger `private.comments_push`（通知誰、合併都在這裡判斷）→ pg_net → Edge Function `send-push`（service_role 讀訂閱、加密、送出）→ Apple／Google 的推播服務
+- **`push_subscriptions`**：id, user_id, endpoint(unique), p256dh, auth, user_agent, created_at；只能新增、讀、刪自己的（沒有 update）；每人 10 台（trigger 先 advisory lock）
+  - **endpoint 只能是已知推播服務的 https 網址**（`private.push_endpoint_ok`：fcm.googleapis.com、*.push.apple.com、*.push.services.mozilla.com、*.notify.windows.com；host 後面只能接路徑）→ 防 SSRF，function 送出前用 `webpush.ts` 的 `ENDPOINT` 再檢查一次；兩邊要一致
+- **`notification_prefs`**：user_id, comments, replies（沒有這列＝都開）；只能讀寫自己的；存在帳號（每台裝置一樣）
+- **通知誰**（和 `comment_activity` 同一套）：貼文作者（comment）、`reply_to_user` 與主留言作者（reply）；同一人只算一次，貼文作者優先
+  - 不通知：自己、和留言者有封鎖（任一方向）、讀不到貼文（不是作者也不是沒封鎖的好友）、留言者或收件人 `auth.users.banned_until > now()`（App 沒有停權功能，用 Supabase 的 ban 就會生效）、偏好關掉、沒有訂閱
+  - **5 分鐘合併**：`private.push_throttle`（收件人＋貼文），上一則送出後 5 分鐘內同一篇不再送；通知的 `tag`＝`post:<owner>/<id>`，新的取代舊的；`Topic` header 讓推播服務裡還沒送達的也被取代
+- **trigger ↔ function 的驗證**：vault 的 `push_webhook_secret` ＝ secrets 的 `PUSH_WEBHOOK_SECRET`；trigger 送 `x-push-signature`（body 的 HMAC-SHA256），body 有 `sent_at`，function 只收 2 分鐘內的；**密鑰本身不送出**（pg_net 的 `net.*` 表是 Supabase 預設的 PUBLIC 權限，雖然沒從 API 公開也不放密鑰）
+  - function 的網址也在 vault（`send_push_url`）；沒設定就不送；推播出錯一律 `exception when others`，**絕不影響留言寫入**
+  - `send-push` 的 `verify_jwt = false`（呼叫者是資料庫），身分只靠簽章
+- **推播內容只有 `{ v, kind, nickname, owner, brewId }`**，不含留言原文；sw.js 只當文字顯示（去掉控制字元與改變方向的字元、≤ 20 字），標題「手沖紀錄」、內容「<暱稱> 留言了你的貼文／回覆了你的留言」；格式不對顯示通用的「有新的留言」（iOS 規定每則推播都要顯示）
+- **點通知**：sw.js 用驗證過的 uuid 自己組 `#/social/<owner>/<id>?comments=1`（`PUSH_ROUTE`，和 `models.isPushRoute` 一致），不合格一律 `#/social`；App 開著就 `postMessage` 讓那個視窗換頁（app.js 再檢查一次）＋`focus()`，沒開才 `openWindow`
+- 金鑰：VAPID 公鑰在 `js/config.js`（`vapidPublicKey`，正式的空字串＝還沒開放）；私鑰、`VAPID_SUBJECT`、`PUSH_WEBHOOK_SECRET` 只在 Supabase secrets；站長用 `scripts/vapid-keys.mjs` 在自己電腦產生（寫出 `.env.push`、`.env.push.sql`，被 `.env.*` 排除），**私鑰不貼給 Claude**
+  - 本機：send-push 用 `LOCAL_VAPID`（repo 裡的測試用金鑰）與 `local-push-secret`，**所有推播改送到假推播伺服器** `host.docker.internal:54398`（保留路徑），不會連到真的推播服務；vault 由測試的 `setupPushVault()` 設定（`db reset` 會清掉）
+- 介面（`#/notifications`）：只有按「在這台裝置啟用通知」才 `Notification.requestPermission()`（不在打開 App 時問）；iPhone 不是從主畫面開啟只顯示「分享 → 加入主畫面」的說明、沒有按鈕；拒絕時說明到系統設定開啟
+- 登出：先刪這台的訂閱再登出（`models.signOut`，失敗也照樣退訂）；刪除帳號：cascade 刪訂閱、偏好、合併狀態，本機退訂；endpoint 被別的帳號佔住（23505）就退訂重訂一次
+- 隱私說明頁有「推播通知」一節：**改通知內容、訂閱存的欄位時要一起改**
+
 ### 本機開發（不連正式專案）
 - 需要 Docker Desktop 執行中；CLI 用 `npx supabase@2.120.0`（固定版本，不全域安裝）
 - `npx supabase@2.120.0 start`／`stop`；`db reset` 重建資料庫並套用所有 migration
@@ -291,6 +313,9 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - `node scripts/admin-api-test.mjs`：開發者後台的權限從 API 層測（一般使用者改 user_metadata、把自己加進 admins 都拿不到權限；開發者刪留言、貼文、帳號；操作紀錄連 service_role 都改不了）；用 `docker exec supabase_db_coffee-log psql` 加測試用的開發者
 - `node scripts/supabase-profile-test.mjs`：個人檔案的權限從 API 層測（A、B 好友，C 非好友，D 被封鎖的好友，E 邀請中）：新欄位誰都不能直接讀、`profile_detail` 只給本人和沒有封鎖的好友、不能改別人的、長度與控制字元被拒絕
 - `node scripts/social-profile-test.mjs`：headless Chrome 測個人檔案頁（好友看到全部、非好友只有暱稱快照、封鎖找不到、XSS、從卡片／詳細頁／留言／@暱稱／好友名單跳轉、點擊範圍 44px、編輯）
+- `node scripts/webpush-test.mjs`：不需要 Supabase；Node 載入 `_shared/webpush.ts` 加密與簽章，用 `push-helpers.mjs`（只用 node:crypto）獨立解密、驗證 VAPID；允許的推播服務清單
+- `node scripts/supabase-push-test.mjs`：API 層（A、B、D 好友，C 非好友）：訂閱的權限、10 台、SSRF；send-push 沒簽章／錯簽章／使用者 JWT／重送都被拒；實際留言 → 假推播伺服器（port 54398）收到正確的人、解密後沒有留言原文、5 分鐘合併、封鎖、偏好、410 刪訂閱、log 不含 endpoint 與金鑰
+- `node scripts/social-push-test.mjs`：headless Chrome（PushManager 換成假的，不連 FCM）：不會一打開就問權限、開關、拒絕的說明、iPhone 非主畫面、啟用存訂閱；B 留言 → 解密 → `ServiceWorker.deliverPushMessage` 送進 A 的 sw.js → 通知內容與 tag → 在 sw.js 執行 `openApp` → 同一個視窗換到那篇貼文；惡意內容與外部網址只到 `#/social`；登出刪訂閱；截圖
 - `node scripts/admin-ui-test.mjs`：headless Chrome 測後台畫面（入口只有開發者看得到、原因必填與確認、刪完畫面更新、作者看到「已被移除」、XSS、CSP）
 - 新增 Edge Function 後本機要 `npx supabase@2.120.0 stop` 再 `start` 才會載入（只改程式的話 `docker restart supabase_edge_runtime_coffee-log` 就好）
 - `node scripts/social-ui-test.mjs`：兩個隔離的 headless Chrome 環境（A、B）操作真的畫面：加好友、封鎖、XSS、頭像 EXIF、登出；登入用 admin API 拿真的 session（Google 登入無法自動化）

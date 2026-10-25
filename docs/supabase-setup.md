@@ -13,6 +13,7 @@
 > 2026-10-25：意見回饋的 migration 與 `feedback` 已部署，`RESEND_API_KEY`、`FEEDBACK_TO` 已設定（見 5-2）；Email 一開始沒收到，原因是 `RESEND_API_KEY` 無效（Resend 回 401），2026-10-26 換新 key 後已正常（排查步驟見 5-2 的「沒收到 Email」）
 > 2026-10-26：新版 `feedback`（log 會寫出沒寄信的原因）已先部署；`feature/comments` 的 migration 與前端**尚未部署**，步驟見 5-3
 > 2026-10-25：留言、封鎖不解除好友（1.2.0）、更新內容（1.3.0）、開發者後台（1.4.0）與 1.4.1 的修正都已部署上線；`feature/profile`（個人檔案，1.5.0）**尚未部署**，步驟見 5-5
+> 2026-10-29：`feature/push`（推播通知，1.9.0）**尚未部署**，步驟見 5-6
 
 ## 1. 建立 Supabase 專案（你）
 
@@ -208,6 +209,82 @@ git push                                    # 合併到 main 之後；GitHub Pag
 - 沒有新的 Edge Function、沒有新的 secret
 - ⚠ Supabase 後台的 Table Editor 用的是管理者權限，照樣看得到全部欄位；SQL Editor 也是
 
+## 5-6. 部署 feature/push（推播通知，1.9.0）
+
+有人留言我的貼文、回覆我的留言時，手機跳出通知（標準 Web Push＋VAPID，不用 Firebase 等第三方服務）。
+流程：留言寫入 → 資料庫 trigger（判斷通知誰）→ pg_net 呼叫 Edge Function `send-push` → Apple／Google 的推播服務 → 手機
+
+**要設定的金鑰**（全部由你在自己的電腦產生、自己設定；**私鑰和密鑰不要貼給任何人，包括 Claude**）：
+
+| 名稱 | 放在哪 | 公開？ |
+|---|---|---|
+| `VAPID_PUBLIC_KEY` | Supabase secrets＋`js/config.js` 的 `PRODUCTION.vapidPublicKey` | 公開（瀏覽器訂閱時要用） |
+| `VAPID_PRIVATE_KEY` | Supabase secrets | **不公開** |
+| `VAPID_SUBJECT` | Supabase secrets（`mailto:你的信箱`，推播服務有問題時聯絡你） | — |
+| `PUSH_WEBHOOK_SECRET` | Supabase secrets＋vault 的 `push_webhook_secret`（兩邊一樣） | **不公開** |
+| `send_push_url` | vault | 公開（function 的網址） |
+
+- 資料庫和 function 之間用 `PUSH_WEBHOOK_SECRET` 驗證：trigger 對內容做 HMAC 簽章，密鑰本身不會被送出；沒有正確簽章的請求一律 401，一般使用者呼叫不了
+- vault 是 Supabase 內建的加密儲存，只有資料庫管理者讀得到
+
+### 1. 產生金鑰（你）
+
+```sh
+node scripts/vapid-keys.mjs 你的信箱@gmail.com
+```
+
+- 產生兩個檔案（都在 repo 根目錄，已被 `.gitignore` 排除，不會被 commit）：
+  - `.env.push`：四個 secrets
+  - `.env.push.sql`：vault 的設定（SQL）
+- 畫面上只印出 **VAPID 公鑰**，這個可以貼給 Claude
+
+### 2. 設定 secrets 與 vault（你）
+
+```sh
+npx supabase@2.120.0 link --project-ref rygsjrzddhhhdqpoayoa    # 已 link 可略過
+npx supabase@2.120.0 secrets set --env-file .env.push
+npx supabase@2.120.0 secrets list                                 # 確認有 VAPID_PUBLIC_KEY、VAPID_PRIVATE_KEY、VAPID_SUBJECT、PUSH_WEBHOOK_SECRET
+```
+
+- Supabase 後台 → **SQL Editor** → 打開 `.env.push.sql`，把內容整段貼上執行（建立 vault 的 `send_push_url`、`push_webhook_secret`）
+- 兩個都設定好之後，**刪掉 `.env.push` 和 `.env.push.sql`**（金鑰只留在 Supabase；要換金鑰就重新執行第 1 步）
+- 不要把它們寫進 `config.toml`（`[edge_runtime.secrets]` 會被 `secrets set` 一起上傳，見 5-2）
+
+### 3. 前端的公鑰（Claude）
+
+把第 1 步印出的 **VAPID 公鑰** 告訴 Claude，填進 `js/config.js` 的 `PRODUCTION.vapidPublicKey`（空字串時通知設定頁顯示「還沒開放」）。
+
+### 4. 部署（Claude，你確認後；後端先上、前端最後）
+
+```sh
+npx supabase@2.120.0 db push --dry-run      # 應該只列出 20261029100000_push.sql
+npx supabase@2.120.0 db push                # 套用（確認後輸入 Y）
+npx supabase@2.120.0 functions deploy send-push --no-verify-jwt
+git push                                    # 合併到 main 之後；GitHub Pages 部署成 1.9.0
+```
+
+- migration：pg_net、`push_subscriptions`（每人最多 10 台、endpoint 只能是 Apple／Google／Mozilla／Microsoft 的推播服務）、`notification_prefs`、`private.push_throttle`（5 分鐘合併）、留言後的 trigger `private.comments_push`
+- Supabase 後台 → Edge Functions → send-push：確認 **Verify JWT 是關的**（呼叫者是資料庫，沒有使用者的 JWT；身分由簽章確認）
+- Database → Extensions：`pg_net` 已啟用
+
+### 5. 實機確認（你）
+
+1. **iPhone**（iOS 16.4 以上）：Safari 開 App →「分享」→「加入主畫面」→ 從主畫面開啟 → ☰ →「🔔 通知設定」→「在這台裝置啟用通知」→ 允許
+2. **Android**：Chrome 開 App → ☰ →「🔔 通知設定」→「在這台裝置啟用通知」→ 允許
+3. 請一位好友在你分享的紀錄留言 → 手機跳出「<暱稱> 留言了你的貼文」→ 點通知打開那篇紀錄的留言
+4. App 開著時點通知：應該在同一個視窗換頁，不會開新視窗
+
+### 沒收到通知（照順序檢查）
+
+1. **Table Editor → push_subscriptions**：有沒有你的裝置？沒有 → 在通知設定頁重新啟用
+2. **Edge Functions → send-push → Logs**：找 `[send-push]` 開頭的行
+   - 沒有任何紀錄：trigger 沒有呼叫 → 檢查 vault（SQL Editor：`select name from vault.decrypted_secrets;` 應該有 `send_push_url`、`push_webhook_secret`）；5 分鐘內同一篇貼文只通知一次
+   - 只有 401（Invocations 頁）：vault 的 `push_webhook_secret` 和 secrets 的 `PUSH_WEBHOOK_SECRET` 不一樣 → 重做第 1、2 步
+   - `沒有送出：…VAPID…`：secrets 沒設定或格式不對（log 會寫原因）
+   - `推播服務回傳 403`：`js/config.js` 的公鑰和 secrets 的 `VAPID_PUBLIC_KEY` 不是同一組 → 公鑰改對後，每台裝置停用再啟用一次
+   - `送出 1、過期刪除 0、失敗 0`：已經交給 Apple／Google → 檢查手機的系統設定是否允許這個 App 的通知、專注模式
+3. **Database → `net._http_response`**（SQL Editor：`select status_code, created from net._http_response order by created desc limit 5;`）：trigger 呼叫 function 的結果
+
 ## 6. 實際登入一次（你）
 
 1. 手機用 Safari／Chrome 開 <https://andywu1122.github.io/coffee-log/> → ☰ →「帳號」→「用 Google 登入」→ 設定暱稱
@@ -223,4 +300,6 @@ git push                                    # 合併到 main 之後；GitHub Pag
 - [ ] Edge Functions：`delete-account`、`feedback` 已部署，Verify JWT 開著
 - [ ] Table Editor：`comments` 存在、RLS enabled
 - [ ] Edge Functions → Secrets：有 `RESEND_API_KEY`、`FEEDBACK_TO`
-- [ ] repo 裡沒有 secret／service_role key、資料庫密碼、Google Client Secret
+- [ ] Edge Functions：`send-push` 已部署，**Verify JWT 關閉**；Secrets 有 `VAPID_PUBLIC_KEY`、`VAPID_PRIVATE_KEY`、`VAPID_SUBJECT`、`PUSH_WEBHOOK_SECRET`
+- [ ] repo 根目錄沒有 `.env.push`、`.env.push.sql`（設定完就刪掉）
+- [ ] repo 裡沒有 secret／service_role key、資料庫密碼、Google Client Secret、VAPID 私鑰

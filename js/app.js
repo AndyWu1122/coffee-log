@@ -2,7 +2,7 @@
 import { esc, toast, appVersion, BADGES_EVENT } from './views/ui.js';
 import {
   socialAvailable, completeSignIn, requestSync, getSocialBadges, badgeText,
-  getBackupStatus, getChangelogStatus, markChangelogSeen, isAdmin,
+  getBackupStatus, getChangelogStatus, markChangelogSeen, isAdmin, isPushRoute,
 } from './models.js';
 
 // 各 view 用動態 import 延遲載入；每個 view 匯出 render(container, params)
@@ -34,6 +34,7 @@ const routes = [
   { pattern: /^\/account$/, tab: null, load: () => import('./views/account.js') },
   { pattern: /^\/friends(?:\/add)?$/, tab: null, load: () => import('./views/friends.js') },
   { pattern: /^\/feedback$/, tab: null, load: () => import('./views/feedback.js') },
+  { pattern: /^\/notifications$/, tab: null, load: () => import('./views/notifications.js') },
   // 開發者後台（只有開發者看得到入口；權限在資料庫與 Edge Function 檢查）
   { pattern: /^\/admin$/, tab: null, load: () => import('./views/admin.js') },
   { pattern: /^\/admin\/user\/([\w-]+)$/, tab: null, load: () => import('./views/admin.js') },
@@ -184,6 +185,11 @@ function setupServiceWorker() {
     waitingWorker?.postMessage('skipWaiting');
   });
 
+  // 點推播通知時 App 已經開著：sw.js 叫這個視窗換到那篇貼文（不開新視窗）；只接受 App 內部的社群路由
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type === 'navigate' && isPushRoute(e.data.path)) location.hash = e.data.path;
+  });
+
   // 新版接手後才重新整理；第一次安裝時的接手不重新整理
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (updateRequested) location.reload();
@@ -225,7 +231,8 @@ async function start() {
 // ☰ 選單裡需要注意的那一項後面有「!」（強調色）：好友管理＝收到好友邀請、備份＝超過 14 天沒備份、更新內容＝還沒看過這一版的說明
 // ☰ 按鈕上的「!」＝其中任何一項；備份、更新內容只看本機，沒有社群功能也會顯示
 // 底部「社群」分頁的數字（--badge-new）：好友新貼文＋我貼文的新留言＋回覆我的，超過 99 顯示 99+，0 不顯示
-// 時機和同步一樣（啟動、恢復網路、切回前景），另外 views 操作完會發出 BADGES_EVENT；不做即時推播
+// 時機和同步一樣（啟動、恢復網路、切回前景），另外 views 操作完會發出 BADGES_EVENT
+// （推播通知只負責叫使用者回來；點通知打開 App 或切回前景時，這裡的數字跟著更新）
 
 const MENU_ALERTS = {
   friends: { name: '好友管理', reason: '有新的好友邀請' },
