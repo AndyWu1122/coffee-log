@@ -1019,6 +1019,7 @@ const SHARE_STATUS = {
   rate_limited: { tone: 'warn', text: '今天的分享額度（30 筆）已用完，明天會自動上傳' },
   invalid: { tone: 'warn', text: '內容不符合雲端的限制，無法分享，請修改內容' },
   failed: { tone: 'warn', text: '上傳失敗，稍後會自動再試' },
+  removed: { tone: 'warn', text: '這筆紀錄已被開發者移除，無法再分享' },
 };
 
 /** 紀錄的分享狀態 { tone, text }（只讀本機）；只有我的紀錄回傳 null */
@@ -1319,3 +1320,126 @@ export async function deleteAccount() {
   });
   return { privatized: shared.length };
 }
+
+/* ===== 開發者後台 ===== */
+// 權限只在伺服器檢查（private.admins、public.admin_*、Edge Function admin-delete-user）；這裡只整理資料與訊息
+// 後台的文字幾乎都來自使用者，顯示時一律要跳脫
+
+export const ADMIN_PAGE_SIZE = 50;
+export const ADMIN_REASON_MAX = 200; // 和資料庫的 check_reason 一致
+
+/** 目前登入的人是不是開發者（只決定要不要顯示入口）；沒登入不載入 supabase-js，連不上就當作不是 */
+export async function isAdmin() {
+  if (!socialAvailable || !(await sync.sessionUserId())) return false;
+  try {
+    return await cloud.amIAdmin();
+  } catch {
+    return false;
+  }
+}
+
+/** 刪除原因：去掉前後空白後 1–200 字；回傳錯誤訊息或 '' */
+export function validateAdminReason(reason) {
+  const s = String(reason ?? '').trim();
+  if (!s) return '請填寫原因';
+  if (s.length > ADMIN_REASON_MAX) return `原因最多 ${ADMIN_REASON_MAX} 字`;
+  return '';
+}
+
+/** 後台操作失敗的訊息 */
+export function adminErrorMessage(err) {
+  if (err?.code === '42501' || (err?.code === '403' && err.hint === 'forbidden')) return '沒有權限：只有開發者可以使用';
+  if (err?.hint === 'self') return '不能刪除自己的帳號';
+  if (err?.hint === 'admin') return '不能刪除其他開發者';
+  if (err?.code === '22023' || err?.hint === 'invalid_reason') return `請填寫原因（${ADMIN_REASON_MAX} 字以內）`;
+  if (err?.code === 'P0002' || err?.code === '404') return '找不到，可能已經被刪除了';
+  return socialErrorMessage(err);
+}
+
+const ADMIN_ACTIONS = { delete_comment: '刪除留言', delete_post: '刪除貼文', delete_user: '刪除帳號' };
+const REPORT_REASON_LABELS = { spam: '垃圾訊息', inappropriate: '不當內容', harassment: '騷擾', other: '其他' };
+const FEEDBACK_LABELS = { bug: '問題回報', idea: '功能建議', other: '其他' };
+
+/** 後台的貼文 → 畫面用的資料（沿用動態牆的格式，再加上讚數、留言數、檢舉數） */
+async function adminPostItems(rows) {
+  const profiles = new Map(rows.map((r) => [r.owner, { id: r.owner, nickname: r.owner_nickname ?? '（已刪除的帳號）' }]));
+  const photoUrls = await cloud.brewPhotoUrls(rows.map((r) => r.photo_path));
+  return rows.map((row) => ({
+    ...toFeedItem(row, { myId: null, profiles, avatarUrls: {}, photoUrls, likes: [], commentCounts: {}, newCommentKeys: new Set() }),
+    likeCount: row.likes, commentCount: row.comments, reportCount: row.reports,
+  }));
+}
+
+/** 後台的留言 → 畫面用的資料；暱稱優先用目前的，帳號已刪除就用留言當下的快照 */
+async function adminCommentItems(rows) {
+  const avatarUrls = await cloud.avatarUrls(rows.map((c) => c.author_avatar_path));
+  return rows.map((c) => ({
+    id: c.id, owner: c.brew_owner, brewId: c.brew_id, parentId: c.parent_id, author: c.author,
+    nickname: c.author_current_nickname ?? c.author_nickname, avatarUrl: avatarUrls[c.author_avatar_path] ?? null,
+    replyToNickname: c.reply_to_nickname, body: c.body, createdAt: c.created_at, replies: c.replies,
+  }));
+}
+
+/** 一頁列表：{ items, hasMore }（多拿一筆判斷還有沒有） */
+async function adminPage(name, args, offset, map = (rows) => rows) {
+  const rows = await cloud.adminQuery(name, { ...args, lim: ADMIN_PAGE_SIZE + 1, off: offset });
+  return { items: await map(rows.slice(0, ADMIN_PAGE_SIZE)), hasMore: rows.length > ADMIN_PAGE_SIZE };
+}
+
+/** 用戶列表（註冊時間新→舊），search 比對暱稱 */
+export const adminListUsers = ({ search = '', offset = 0 } = {}) =>
+  adminPage('admin_list_users', { search: search.trim() }, offset, async (rows) => {
+    const urls = await cloud.avatarUrls(rows.map((u) => u.avatar_path));
+    return rows.map((u) => ({
+      id: u.id, nickname: u.nickname, avatarUrl: urls[u.avatar_path] ?? null, createdAt: u.created_at,
+      posts: u.posts, comments: u.comments, reports: u.reports, isAdmin: u.is_admin,
+    }));
+  });
+
+/** 用戶詳細：{ profile, posts, comments }；不存在回傳 null */
+export async function adminUserDetail(uid) {
+  const data = await cloud.adminQuery('admin_user_detail', { uid });
+  if (!data) return null;
+  const p = data.profile;
+  const urls = await cloud.avatarUrls([p.avatar_path]);
+  const [posts, comments] = await Promise.all([adminPostItems(data.posts), adminCommentItems(data.comments)]);
+  return {
+    profile: { id: p.id, nickname: p.nickname, avatarUrl: urls[p.avatar_path] ?? null, createdAt: p.created_at, isAdmin: p.is_admin, reports: p.reports },
+    posts, comments,
+  };
+}
+
+/** 全部貼文（沖煮時間新→舊） */
+export const adminListPosts = ({ offset = 0 } = {}) => adminPage('admin_list_posts', {}, offset, adminPostItems);
+
+/** 一篇貼文：{ post, comments（舊→新）, reports }；已刪除回傳 null */
+export async function adminPostDetail(owner, id) {
+  const data = await cloud.adminQuery('admin_post_detail', { p_owner: owner, p_id: id });
+  if (!data) return null;
+  const [[post], comments] = await Promise.all([adminPostItems([data.post]), adminCommentItems(data.comments)]);
+  return {
+    post, comments,
+    reports: data.reports.map((r) => ({ ...r, reasonLabel: REPORT_REASON_LABELS[r.reason] ?? r.reason })),
+  };
+}
+
+export const adminListReports = ({ offset = 0 } = {}) => adminPage('admin_list_reports', {}, offset, (rows) =>
+  rows.map((r) => ({ ...r, reasonLabel: REPORT_REASON_LABELS[r.reason] ?? r.reason })));
+
+export const adminListFeedback = ({ offset = 0 } = {}) => adminPage('admin_list_feedback', {}, offset, (rows) =>
+  rows.map((f) => ({ ...f, categoryLabel: FEEDBACK_LABELS[f.category] ?? f.category })));
+
+export const adminListAudit = ({ offset = 0 } = {}) => adminPage('admin_list_audit', {}, offset, (rows) =>
+  rows.map((l) => ({ ...l, actionLabel: ADMIN_ACTIONS[l.action] ?? l.action })));
+
+/** 刪除留言（主留言的回覆一起刪）；原因必填 */
+export const adminDeleteComment = (commentId, reason) => cloud.adminDeleteComment(commentId, reason.trim());
+
+/** 刪除貼文：資料庫刪紀錄並寫紀錄後，照片用 Storage API 刪（失敗只留下讀不到的檔案，不影響結果） */
+export async function adminDeletePost(owner, id, reason) {
+  const photoPath = await cloud.adminDeletePost(owner, id, reason.trim());
+  if (photoPath) await cloud.removeBrewPhotos([photoPath]).catch((err) => console.warn('照片刪除失敗', photoPath, err));
+}
+
+/** 刪除帳號（Edge Function admin-delete-user：照片、頭像、auth 使用者，資料表 cascade） */
+export const adminDeleteUser = (userId, reason) => cloud.adminDeleteUser(userId, reason.trim());

@@ -43,6 +43,8 @@
           class="menu-alert" data-alert="changelog" aria-hidden="true" hidden>!</span></a>
         <!-- 意見回饋：要登入才能送（防灌送），js/config.js 沒設定時不顯示 -->
         <a role="menuitem" href="#/feedback" data-social hidden><span aria-hidden="true">💬</span>意見回饋</a>
+        <!-- 開發者後台：只有開發者看得到入口（app.js 問資料庫 am_i_admin）；真正的權限在資料庫與 Edge Function -->
+        <a role="menuitem" href="#/admin" data-admin hidden><span aria-hidden="true">🛠️</span>開發者後台</a>
         <div class="menu-sep" role="separator"></div>
         <div class="menu-theme" role="group" aria-labelledby="theme-label">
           <span class="menu-label" id="theme-label"><span aria-hidden="true">🌓</span>外觀</span>

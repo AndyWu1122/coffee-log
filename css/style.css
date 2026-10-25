@@ -755,3 +755,38 @@ a.feed-body:active { background: var(--surface-2); }
   font-size: 0.8rem;
   vertical-align: middle;
 }
+
+/* ===== 開發者後台（#/admin） ===== */
+.admin { display: grid; gap: 16px; }
+.admin-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.admin-tabs a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  text-decoration: none;
+}
+.admin-tabs a[aria-current="page"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.admin-search { display: flex; gap: 8px; }
+.admin-search input { flex: 1; min-width: 0; }
+.admin-row, .admin-comment {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.admin-row .person-head, .admin-link { color: var(--text); text-decoration: none; }
+.admin-link { display: grid; gap: 6px; }
+.admin-comment.is-reply { margin-left: 24px; }
+.admin-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.admin-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: flex-end; }
+.admin-counts { display: flex; flex-wrap: wrap; gap: 12px; color: var(--text-dim); }
+.admin-counts .is-reported { color: var(--danger); font-weight: 600; }
+.admin-reason { padding: 12px; border: 1px solid var(--danger); border-radius: var(--radius); }
+.admin .person-name { color: var(--text); }
+.admin-comment .feed-head { padding: 0; }

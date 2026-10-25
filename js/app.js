@@ -2,7 +2,7 @@
 import { esc, toast, appVersion, BADGES_EVENT } from './views/ui.js';
 import {
   socialAvailable, completeSignIn, requestSync, getSocialBadges, badgeText,
-  getBackupStatus, getChangelogStatus, markChangelogSeen,
+  getBackupStatus, getChangelogStatus, markChangelogSeen, isAdmin,
 } from './models.js';
 
 // 各 view 用動態 import 延遲載入；每個 view 匯出 render(container, params)
@@ -28,6 +28,10 @@ const routes = [
   { pattern: /^\/account$/, tab: null, load: () => import('./views/account.js') },
   { pattern: /^\/friends(?:\/add)?$/, tab: null, load: () => import('./views/friends.js') },
   { pattern: /^\/feedback$/, tab: null, load: () => import('./views/feedback.js') },
+  // 開發者後台（只有開發者看得到入口；權限在資料庫與 Edge Function 檢查）
+  { pattern: /^\/admin$/, tab: null, load: () => import('./views/admin.js') },
+  { pattern: /^\/admin\/user\/([\w-]+)$/, tab: null, load: () => import('./views/admin.js') },
+  { pattern: /^\/admin\/post\/([\w-]+)\/([\w-]+)$/, tab: null, load: () => import('./views/admin.js') },
 ];
 
 /** 解析 "#/brew/new?from=abc" → { path: '/brew/new', query: { from: 'abc' } } */
@@ -262,8 +266,9 @@ function setupBadges() {
     }
     if (socialAvailable) {
       try {
-        const { requests, count } = await getSocialBadges();
+        const [{ requests, count }, admin] = await Promise.all([getSocialBadges(), isAdmin()]);
         if (t !== token) return;
+        for (const el of document.querySelectorAll('[data-admin]')) el.hidden = !admin; // ☰ 的「開發者後台」
         alerts.friends = requests;
         const text = badgeText(count);
         socialBadge.textContent = text;

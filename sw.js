@@ -39,6 +39,7 @@ const ASSETS = [
   'js/views/comments.js',
   'js/views/privacy.js',
   'js/views/changelog.js',
+  'js/views/admin.js',
   'js/views/feedback.js',
   'icons/icon.svg',
   'icons/icon-192.png',

@@ -70,6 +70,7 @@ const taipeiDate = (d = new Date()) => new Date(d.getTime() + 8 * 3600000).toISO
 
 /** CloudError 的錯誤碼 → 記在 sync store 的原因 */
 function failureReason(err) {
+  if (err?.code === '23514' && err.hint === 'removed') return 'removed'; // 開發者刪掉的貼文，不能再上傳
   if (err?.code === 'P0001') return 'rate_limited';             // 每天 30 筆
   if (/^2[23]/.test(err?.code ?? '')) return 'invalid';         // check 約束、資料格式（內容沒改就不重送）
   return 'failed';
@@ -129,6 +130,7 @@ async function syncOnce() {
       const d = await desired(brew, user.id);
       const exists = remote.has(brew.id);
       const remotePhoto = remote.get(brew.id)?.photo_path ?? null;
+      if (st?.error === 'removed') continue;                                                  // 被開發者移除：永遠不再上傳
       if (exists && !st?.error && st?.row === d.json && st.photoAt === d.photoAt) continue; // 已同步
       if (st?.error === 'invalid' && st.failedRow === d.json) continue;                       // 內容沒改，送了也會被拒絕
       if (!exists && st?.error === 'rate_limited' && st.failedOn === taipeiDate()) insertBlocked = true; // 今天已經撞到上限
@@ -199,7 +201,8 @@ export function request() {
 /**
  * 一筆紀錄的分享狀態（只讀本機，不連網路）：
  * off（只有我）、signed-out（沒登入）、synced（已分享）、pending（等待上傳）、
- * rate_limited（今天的額度用完）、invalid（內容不符合雲端的限制）、failed（上傳失敗，會再試）
+ * rate_limited（今天的額度用完）、invalid（內容不符合雲端的限制）、failed（上傳失敗，會再試）、
+ * removed（被開發者移除，不會再上傳）
  */
 export async function brewStatus(brew) {
   if (brew?.visibility !== 'friends') return 'off';
@@ -207,6 +210,7 @@ export async function brewStatus(brew) {
   if (!userId) return 'signed-out';
   const st = await db.get('sync', brew.id);
   if (!st || st.userId !== userId) return 'pending';
+  if (st.error === 'removed') return 'removed';
   const d = await desired(brew, userId);
   if (st.error && st.failedRow === d.json) return st.error;
   return !st.error && st.row === d.json && st.photoAt === d.photoAt ? 'synced' : 'pending';

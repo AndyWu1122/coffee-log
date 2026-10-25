@@ -14,11 +14,12 @@ const PAGE = 1000; // PostgREST 一次最多回傳的筆數（max_rows）
 /** 這個環境有沒有社群功能（config.js 沒設定就沒有） */
 export const available = SUPABASE !== null;
 
-/** 失敗時丟出的錯誤：code 是 'network'、PostgreSQL 錯誤碼（如 23514）或 HTTP 狀態 */
+/** 失敗時丟出的錯誤：code 是 'network'、PostgreSQL 錯誤碼（如 23514）或 HTTP 狀態；hint 是資料庫給的提示（如 'removed'） */
 export class CloudError extends Error {
-  constructor(message, code) {
+  constructor(message, code, hint = '') {
     super(message);
     this.code = code;
+    this.hint = hint;
   }
 }
 
@@ -71,7 +72,7 @@ const isNetworkError = (error) => !navigator.onLine || /fetch|network|load faile
 function unwrap({ data, error }) {
   if (!error) return data;
   if (isNetworkError(error)) throw new CloudError('連不上伺服器，請確認網路連線', 'network');
-  throw new CloudError(error.message || '發生錯誤', error.code || String(error.status ?? error.statusCode ?? ''));
+  throw new CloudError(error.message || '發生錯誤', error.code || String(error.status ?? error.statusCode ?? ''), error.hint ?? '');
 }
 
 async function run(fn) {
@@ -389,4 +390,32 @@ export const deleteAccount = () => run(async (sb) => {
   }
   if (!data?.deleted) throw new CloudError('刪除帳號失敗，請稍後再試', 'function');
   await sb.auth.signOut({ scope: 'local' });
+});
+
+/* ===== 開發者後台 ===== */
+// 權限一律在資料庫（public.admin_*，不是開發者回 42501）與 Edge Function admin-delete-user 檢查；這裡只負責呼叫
+
+/** 目前登入的人是不是開發者（只決定要不要顯示入口） */
+export const amIAdmin = () => run(async (sb) => unwrap(await sb.rpc('am_i_admin')) === true);
+
+/** 後台的讀取函式：name 是 admin_list_users 這類名稱，回傳 JSON */
+export const adminQuery = (name, args = {}) => run(async (sb) => unwrap(await sb.rpc(name, args)));
+
+export const adminDeleteComment = (commentId, reason) => run(async (sb) => {
+  unwrap(await sb.rpc('admin_delete_comment', { comment_id: uuid(commentId), reason }));
+});
+
+/** 刪除貼文；回傳照片路徑（沒有照片是 null），由呼叫端用 removeBrewPhotos 刪（開發者可以刪 brew-photos） */
+export const adminDeletePost = (owner, id, reason) => run(async (sb) =>
+  unwrap(await sb.rpc('admin_delete_post', { p_owner: uuid(owner), p_id: uuid(id), reason })));
+
+/** 刪除別人的帳號（Edge Function admin-delete-user）；被拒時 code 是 HTTP 狀態，hint 是 self／admin／forbidden… */
+export const adminDeleteUser = (userId, reason) => run(async (sb) => {
+  const { data, error } = await sb.functions.invoke('admin-delete-user', { body: { userId: uuid(userId), reason } });
+  if (error) {
+    if (error.name === 'FunctionsFetchError' || isNetworkError(error)) throw new CloudError('連不上伺服器，請確認網路連線', 'network');
+    const body = await error.context?.json?.().catch(() => null);
+    throw new CloudError('刪除帳號失敗', String(error.context?.status ?? 'function'), body?.error ?? '');
+  }
+  if (!data?.deleted) throw new CloudError('刪除帳號失敗', 'function');
 });
