@@ -1,6 +1,6 @@
 // ☰ 選單的「!」（該備份了、還沒看過的更新內容）、設定與關於頁、更新內容頁
 // 不需要 Supabase（沒登入時社群提示只讀本機）；headless Chrome（找不到時設 CHROME_PATH）
-// 確認：☰ 選單在小螢幕（375×667）放得下、不常用的項目在設定頁；設定頁的版本號、切換外觀；
+// 確認：☰ 選單（含使用教學）在小螢幕（375×667）放得下、不常用的項目在設定頁；設定頁的版本號、切換外觀；
 // 全新安裝不提示；超過 14 天沒備份時 ☰ 和「備份」有「!」，按「稍後」照樣顯示、匯出後消失；
 // 更新後顯示「已更新」、☰ 的「設定與關於」與設定頁「更新內容」的「!」，打開更新內容頁或按 ✕ 後消失；已經在用、沒記過版本的人算剛更新；
 // js/changelog.js 第一段的版本＝sw.js 的 APP_VERSION
@@ -69,9 +69,10 @@ try {
   check('沒登入：設定頁看不到開發者後台', !(await shown('.settings [data-admin]')));
 
   /* ===== ☰ 選單：只放常用的，小螢幕放得下 ===== */
-  const menuHrefs = await page.eval(`[...document.querySelectorAll('#app-menu a[role="menuitem"]:not([hidden])')].map((a) => a.getAttribute('href'))`);
-  check('☰ 選單只有常用的項目＋設定與關於',
-    q(menuHrefs) === q(['#/account', '#/friends', '#/stats', '#/grinders', '#/drippers', '#/backup', '#/settings']), q(menuHrefs));
+  // 按鈕（使用教學）沒有 href，用 id 代表
+  const menuHrefs = await page.eval(`[...document.querySelectorAll('#app-menu [role="menuitem"]:not([hidden])')].map((a) => a.getAttribute('href') ?? '#' + a.id)`);
+  check('☰ 選單只有常用的項目＋使用教學＋設定與關於',
+    q(menuHrefs) === q(['#/account', '#/friends', '#/stats', '#/grinders', '#/drippers', '#/backup', '#menu-tour', '#/settings']), q(menuHrefs));
   check('☰ 選單沒有外觀、版本號', !(await page.eval(`Boolean(document.querySelector('#app-menu [data-theme-pref], #app-menu #app-version'))`)));
   await page.cdp('Emulation.setDeviceMetricsOverride', { width: 375, height: 667, deviceScaleFactor: 2, mobile: true });
   await click(page, '#menu-btn');

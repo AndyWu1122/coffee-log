@@ -20,6 +20,7 @@
   /* QR code 不分主題都是淺底深色，相機才掃得到 */
   --qr-bg: #ffffff;
   --qr-fg: #1c140f;
+  --tour-dim: rgba(0, 0, 0, 0.72);   /* 新手教學：亮出來以外的地方變暗 */
 
   --radius: 14px;
   --tap: 48px;            /* 最小點擊高度 */
@@ -47,6 +48,7 @@
   --shadow: rgba(60, 35, 15, 0.18);
   --qr-bg: #ffffff;
   --qr-fg: #21160e;
+  --tour-dim: rgba(33, 22, 14, 0.62);
 
   color-scheme: light;
 }
@@ -148,7 +150,7 @@ a { color: var(--accent); }
   border-radius: var(--radius);
   box-shadow: 0 8px 24px var(--shadow);
 }
-.menu-list a {
+.menu-list a, .menu-list button {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -158,7 +160,8 @@ a { color: var(--accent); }
   color: var(--text);
   text-decoration: none;
 }
-.menu-list a:hover, .menu-list a:focus-visible { background: var(--surface); outline: none; }
+.menu-list button { width: 100%; border: none; background: none; font: inherit; text-align: left; cursor: pointer; }
+.menu-list a:hover, .menu-list a:focus-visible, .menu-list button:hover, .menu-list button:focus-visible { background: var(--surface); outline: none; }
 .menu-list { min-width: 248px; }
 /* 項目不多（不常用的在設定頁），但小螢幕、放大字體時仍可能超出畫面：在選單裡捲動 */
 .menu-list { max-height: calc(100dvh - 72px - var(--safe-bottom)); overflow-y: auto; overscroll-behavior: contain; }
@@ -912,3 +915,39 @@ a.feed-body:active { background: var(--surface-2); }
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
+
+/* ===== 新手教學（js/views/tour.js） ===== */
+/* 亮出來的範圍用很大的 box-shadow 把其他地方變暗；沒有要標示的元素時，整個 blocker 變暗、卡片在中央 */
+.tour-blocker { position: fixed; inset: 0; z-index: 60; }
+.tour-center .tour-blocker { background: var(--tour-dim); }
+.tour-spot {
+  position: fixed;
+  z-index: 61;
+  pointer-events: none;
+  box-shadow: 0 0 0 3px var(--accent), 0 0 0 200vmax var(--tour-dim);
+  transition: left 0.2s, top 0.2s, width 0.2s, height 0.2s;
+}
+.tour-spot[hidden] { display: none; }
+.tour-card {
+  position: fixed;
+  z-index: 62;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+.tour-progress { margin: 0; color: var(--text-dim); font-size: 0.85rem; }
+.tour-title { margin: 2px 0 6px; font-size: 1.15rem; }
+.tour-body { margin: 0 0 14px; }
+.tour-card [data-act="start"] { margin-bottom: 10px; }
+.tour-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.tour-actions .btn { min-height: var(--tap); padding: 0 14px; }
+.tour-actions .btn[hidden], .tour-card .btn[hidden] { display: none; }
+/* 略過靠左，上一步／下一步靠右 */
+.tour-skip { margin-right: auto; background: none; border-color: transparent; color: var(--text-dim); }
+.tour-actions [data-act="next"] { min-width: 96px; }
+@media (prefers-reduced-motion: reduce) { .tour-spot { transition: none; } }

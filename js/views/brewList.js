@@ -61,6 +61,8 @@ export async function render(container, { query = {}, isCurrent }) {
            <p>還沒有沖煮紀錄</p>
            <a class="btn btn-primary" href="#/brew/new">新增第一筆</a>
          </div>`;
+    // 空白時也放 ＋（新手教學會標示它；沒有豆子時表單會請他先新增豆子）
+    container.insertAdjacentHTML('beforeend', '<a class="fab" href="#/brew/new" aria-label="新增紀錄">＋</a>');
     return;
   }
 

@@ -684,6 +684,22 @@ export async function getChangelogStatus(version) {
 /** 看過了（打開更新內容頁、或關掉「已更新」的提示） */
 export const markChangelogSeen = (version) => db.setMeta(CHANGELOG_SEEN_KEY, version);
 
+/* ===== 新手教學（views/tour.js） ===== */
+
+const ONBOARDING_KEY = 'onboardingSeen'; // 看過新手教學的時間（ISO）；不匯出、匯入取代全部也不清除
+
+/**
+ * 要不要自動顯示新手教學（只在首頁打開時問）：這台裝置沒看過、而且沒有任何豆子和紀錄
+ * 回答「要」的同時就記成看過：看完、略過、中途關掉 App 都算，之後（含升版）不再自動顯示
+ * 已經有資料的人直接記成看過；☰ 重看不經過這裡
+ */
+export async function claimOnboarding() {
+  if (await db.getMeta(ONBOARDING_KEY)) return false;
+  const [brews, beans] = await Promise.all([db.getAll('brews'), db.getAll('beans')]);
+  await db.setMeta(ONBOARDING_KEY, new Date().toISOString());
+  return !brews.length && !beans.length;
+}
+
 /** 這一段比上次看過的版本新（更新內容頁標「新」） */
 export const isNewerThan = (version, seen) => compareVersions(version, seen) > 0;
 

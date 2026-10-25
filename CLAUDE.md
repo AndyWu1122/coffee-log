@@ -35,11 +35,11 @@ js/cloud.js        # 唯一存取 Supabase 的地方（角色和 db.js 一樣）
 js/sync.js         # 好友紀錄的同步（本機 friends 紀錄 → shared_brews），只由 models.js 使用
 js/push.js         # 推播通知的瀏覽器那一邊（Notification、PushManager、iOS 主畫面判斷），只由 models.js 使用
 js/vendor/         # 第三方檔案原封不動（supabase-js UMD、qrcode-generator），來源與 SRI 見 js/vendor/README.md
-js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, dripperList, dripperForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, changelog（更新內容）, settings（設定與關於）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, profile（個人檔案）, stats（統計：SVG 圖表）, privacy（隱私說明）, feedback（意見回饋）, notifications（通知設定）, admin（開發者後台）, ui（共用 DOM 工具）
+js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, dripperList, dripperForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, changelog（更新內容）, settings（設定與關於）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, profile（個人檔案）, stats（統計：SVG 圖表）, privacy（隱私說明）, feedback（意見回饋）, notifications（通知設定）, admin（開發者後台）, tour（新手教學：遮罩＋說明卡片，不是路由）, ui（共用 DOM 工具）
 icons/
 docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟、部署指令）、overnight-report.md（2026-10-26 通宵工作的報告）
 supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）、functions/admin-delete-user（開發者刪別人的帳號）、functions/_shared/account.ts（兩者共用的刪除流程）、functions/feedback（意見回饋：存檔＋寄 Email 給站長；mail.ts 是設定檢查與錯誤說明的純函式）、functions/send-push（推播通知）、functions/_shared/webpush.ts（VAPID 簽章與 RFC 8291 加密，只用 Web Crypto）
-scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs、webpush-test.mjs（最後六個不需要 Supabase）、supabase-push-test.mjs、social-push-test.mjs、push-helpers.mjs（推播測試共用：解密、假推播伺服器）、vapid-keys.mjs（站長產生正式金鑰用，不是測試）
+scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs、webpush-test.mjs、onboarding-test.mjs（最後七個不需要 Supabase）、supabase-push-test.mjs、social-push-test.mjs、push-helpers.mjs（推播測試共用：解密、假推播伺服器）、vapid-keys.mjs（站長產生正式金鑰用，不是測試）
 tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mjs 用 headless Chrome 開；不屬於 App、不放進 ASSETS）
 ```
 
@@ -52,7 +52,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 **grinders**：id, name(必填), notes(選填，例如刻度說明), archived(bool), createdAt
 **drippers**（DB v6 加入）：id, name(必填，≤ 100 字), notes(選填), archived(bool), createdAt
 **brews**：id, beanId, grinderId(選填，'' ＝未指定；v1 舊紀錄沒有這個欄位), dripperId(選填，'' ＝未指定), brewedAt, dripper(舊版自由輸入的濾杯文字，轉換後保留作為保險；新紀錄是 ''，畫面一律用 dripperId), grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes, visibility(private/friends，舊資料沒有這個欄位＝private)
-**meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil、社群登入狀態 `auth:*`、社群通知看到哪 `feedSeenAt`／`commentsSeenAt`／`repliesSeenAt`、看過哪一版的更新內容 `changelogSeen`、濾杯轉換做過了 `dripperMigration`）；**不匯出、匯入取代全部時也不清除**（token 不會進備份檔，匯入也不會被登出）
+**meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil、社群登入狀態 `auth:*`、社群通知看到哪 `feedSeenAt`／`commentsSeenAt`／`repliesSeenAt`、看過哪一版的更新內容 `changelogSeen`、看過新手教學 `onboardingSeen`、濾杯轉換做過了 `dripperMigration`）；**不匯出、匯入取代全部時也不清除**（token 不會進備份檔，匯入也不會被登出）
 **photos**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 1600px、品質 0.8，約 200KB), width, height, createdAt；每筆紀錄最多 1 張，跟 brews 分開存
 **thumbs**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 300px)；列表只讀這個，不載入原圖；不匯出，匯入時由照片重新產生
 **sync**（DB v5 加入，keyPath brewId）：brewId, userId, row(上次同步的 shared_brews 內容 JSON), photoAt(上次同步的照片 createdAt), error(''/rate_limited/invalid/failed/removed), failedRow, failedOn；**不匯出、匯入取代全部時也不清除**
@@ -74,7 +74,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 
 ## 介面配置
 - 底部分頁列：紀錄｜豆子｜社群（只放每天會用的頁面）；「社群 💬」是動態牆，有 `data-social`，`js/config.js` 沒設定時隱藏
-- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**；☰ 只放比較常用的：帳號、好友管理（`data-social`）｜統計、磨豆機、濾杯、備份｜🔧 設定與關於（375×667 要整個放得下，menu-alerts-test 會量；`.menu-list` 有 `max-height` 捲動作保險）
+- **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**；☰ 只放比較常用的：帳號、好友管理（`data-social`）｜統計、磨豆機、濾杯、備份｜📖 使用教學（`#menu-tour`，按鈕不是連結）、🔧 設定與關於（375×667 要整個放得下，menu-alerts-test 會量；`.menu-list` 有 `max-height` 捲動作保險）
 - **更少用的放「設定與關於」**（`#/settings`，`js/views/settings.js`），不要加回 ☰：外觀、通知設定、隱私說明、更新內容、意見回饋、開發者後台、版本號
   - 通知設定、意見回饋只在 `js/config.js` 有設定時顯示；開發者後台（`[data-admin]`）只有 `models.isAdmin()` 為 true 時顯示，問完在 `.settings` 記 `data-admin-checked`（測試用）
 - ☰ 選單和設定頁裡的頁面不屬於任何分頁，路由設 `tab: null`，底部分頁都不亮
@@ -91,6 +91,15 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
   - 歸零：讀社群頁第一頁時記下；「全部」三種都記，「我的」只記留言的兩種
   - 檢查時機和同步一樣（啟動、`online`、切回前景），views 操作完用 `notifyBadgesChanged()` 發事件；沒登入不載入 supabase-js
   - 數字不即時更新；即時的提醒是推播通知（見「推播通知」），點通知打開 App 時數字跟著更新
+
+## 新手教學（`js/views/tour.js`）
+- **新增主要功能時，要考慮是否更新教學步驟**（`tour.js` 的 `STEPS`；`onboarding-test.mjs` 的 `TARGETS` 要一致）
+- 自動顯示：app.js 的 `setupOnboarding` 只在打開的頁面是首頁（`#/`）時問 `models.claimOnboarding()`；meta `onboardingSeen` 沒有值、也沒有任何豆子和紀錄才顯示，**一顯示就記成看過**（看完、略過、中途關掉都算；升版不再跳）；有資料的人直接記成看過；從 QR code、Google 登入回來等其他頁面打開時不顯示也不記
+- ☰「📖 使用教學」隨時重看，不讀也不寫 meta
+- 步驟：歡迎｜豆子分頁｜首頁的 ＋（`route: '#/'`，換頁後用 MutationObserver 等元素出現，最多 3 秒）｜☰｜社群分頁（`socialAvailable` 才有）｜備份與完成（「新增第一支豆子」→ `#/beans/new`）；元素不存在或被隱藏時改用畫面中央的卡片
+- 首頁沒有紀錄時也顯示 ＋（教學要標示它）
+- 形式：`.tour-blocker` 擋住底下的點擊、`.tour-spot` 用大 box-shadow（`--tour-dim`）把其他地方變暗、`.tour-card` 是 `role="dialog" aria-modal`；卡片放在上方或下方放得下的那邊，都放不下就放旁邊（手機橫放），再不行才縮短、在卡片裡捲動，絕不蓋住標示；resize、旋轉、捲動、換頁時重新定位
+- 焦點留在卡片裡（Tab 循環）、Esc＝略過、結束時焦點還回去；不用 `inert`（舊測試用 `el.click()` 操作畫面）
 
 ## 主題（深色／淺色）
 - ☰ →「設定與關於」的「外觀」：自動（跟系統）｜淺色｜深色；結果寫在 `<html data-theme="dark|light">`
@@ -314,6 +323,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - `node scripts/social-feedback-test.mjs`：意見回饋的畫面、Edge Function 權限、寄給站長的 Email（假 Resend）、寄信失敗仍存檔、function log 寫出看得懂的原因且不含金鑰（讀 `docker logs`）、每天 5 則、誰都讀不到
 - `node scripts/feedback-mail-test.mjs`：不需要 Supabase；Node 直接載入 `functions/feedback/mail.ts` 測設定檢查與 Resend 錯誤說明
 - `node scripts/drippers-test.mjs`：不需要 Supabase；Node 測 `js/drippers.js`，headless Chrome 用 1.7.0 的舊版 db.js（`git show 9b2c4c8:js/db.js`）建出 v5 的資料再開新版：升級轉換、重新整理不重複、表單預設與「再沖一杯」、封存與刪除、卡片／分享卡片／統計／上傳的列用濾杯名稱、v1／v3／v4 備份匯入
+- `node scripts/onboarding-test.mjs`：不需要 Supabase；headless Chrome 測新手教學：全新使用者自動顯示、略過／Esc 後不再出現、有資料的人不顯示、從 QR code 打開不顯示也不記、☰ 重看不影響設定、沒有社群功能（`coffee.test`）少一步、每一步卡片在畫面內且不蓋住標示（390px、橫放）、深淺色截圖、CSP
 - `node scripts/menu-alerts-test.mjs`：不需要 Supabase；headless Chrome 測 ☰ 選單的項目與 375×667 放得下、設定頁（版本號、外觀切換與跟著系統）、☰ 的「!」（該備份了、更新內容）、「已更新」提示、更新內容頁，並檢查 `js/changelog.js` 第一段＝`APP_VERSION`
 - **改了 Edge Function 之後要 `docker restart supabase_edge_runtime_coffee-log`**，本機才會載入新程式
 - `node scripts/supabase-comments-test.mjs`：留言的權限從 API 層測（A、B 好友，C 非好友，D 被封鎖）：兩層、回覆對象、內容、每日上限、封鎖、解除好友、改回只有我、刪除帳號（delete-account）

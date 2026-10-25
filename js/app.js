@@ -2,8 +2,10 @@
 import { esc, toast, appVersion, BADGES_EVENT, applyTheme, themePref } from './views/ui.js';
 import {
   socialAvailable, completeSignIn, requestSync, getSocialBadges, badgeText,
-  getBackupStatus, getChangelogStatus, markChangelogSeen, isPushRoute,
+  getBackupStatus, getChangelogStatus, markChangelogSeen, isPushRoute, claimOnboarding,
 } from './models.js';
+
+const startTour = (options) => import('./views/tour.js').then((m) => m.startTour(options));
 
 // 各 view 用動態 import 延遲載入；每個 view 匯出 render(container, params)
 const routes = [
@@ -125,6 +127,8 @@ function setupMenu() {
     }
   });
   window.addEventListener('hashchange', () => setOpen(false));
+  // 使用教學：隨時重看，不影響「看過了」（選單的點擊處理會先關掉選單）
+  document.getElementById('menu-tour').addEventListener('click', () => startTour({ returnFocus: btn }));
 }
 
 /* ===== 外觀：自動（跟系統）／淺色／深色 ===== */
@@ -198,6 +202,19 @@ async function start() {
   navigate();
   setupSync();
   setupBadges();
+  setupOnboarding();
+}
+
+/* ===== 新手教學：全新裝置第一次打開首頁時自動顯示一次 ===== */
+// 從好友的 QR code、Google 登入回來等其他頁面打開時不打斷（也不記成看過），等下次打開首頁
+
+async function setupOnboarding() {
+  if (parseHash().path !== '/') return;
+  try {
+    if (await claimOnboarding()) await startTour();
+  } catch (err) {
+    console.warn('新手教學檢查失敗', err);
+  }
 }
 
 /* ===== 提示：☰ 選單的「!」、底部「社群」分頁的數字 ===== */
