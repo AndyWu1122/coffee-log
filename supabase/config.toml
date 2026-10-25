@@ -395,6 +395,10 @@ deno_version = 2
 [functions.delete-account]
 verify_jwt = true
 
+# 開發者刪除別人的帳號：閘道先驗證 JWT，函式裡再用呼叫者的 JWT 讓資料庫確認是開發者（private.admins）
+[functions.admin-delete-user]
+verify_jwt = true
+
 # 意見回饋：閘道先驗證 JWT，函式裡用呼叫者的 JWT 寫入資料表（RLS、每日上限照常生效）
 [functions.feedback]
 verify_jwt = true
