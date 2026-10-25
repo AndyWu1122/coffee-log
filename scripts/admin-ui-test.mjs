@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process';
 import {
   call, check, summary, setupUsers, realSession, cleanup, rest, rows, insertBrew, serviceKey,
 } from './supabase-local.mjs';
-import { startServer, launchChrome, prepare, visit, fill, submit, text, noInjection, signIn, sleep } from './chrome.mjs';
+import { startServer, launchChrome, prepare, visit, fill, submit, text, toast, noInjection, signIn, sleep } from './chrome.mjs';
 
 const XSS_NICK = '"><svg onload=pwn()>'; // 暱稱上限 20 字
 const XSS_BODY = '<img src=x onerror=pwn()> 好喝 <b>粗體</b>';
@@ -125,8 +125,16 @@ try {
   await pm.waitFor(`document.querySelector('.admin-reason .error').textContent === '請填寫原因'`, { label: '沒填原因' });
   check('沒填原因：擋下、沒有送出', (await adminRows(`comments?id=eq.${bComment.id}`)).length === 1);
   await fill(pm, '.admin-reason textarea', '不友善的留言');
+  // 第一次送出失敗（斷網）：表單留著、按鈕恢復，同一個表單再按一次就能刪
+  await pm.setOffline(true);
   await submit(pm, '.admin-reason');
-  await pm.waitFor(`!document.querySelector('[data-comment="${bComment.id}"]')`, { label: '留言從畫面消失' });
+  await toast(pm, '連不上伺服器');
+  await pm.setOffline(false);
+  check('刪除失敗：表單還在、按鈕可以再按、留言沒刪',
+    await pm.eval(`Boolean(document.querySelector('.admin-reason')) && !document.querySelector('.admin-reason [type="submit"]').disabled`)
+    && (await adminRows(`comments?id=eq.${bComment.id}`)).length === 1);
+  await submit(pm, '.admin-reason');
+  await pm.waitFor(`!document.querySelector('[data-comment="${bComment.id}"]')`, { label: '重試後留言從畫面消失' });
   check('刪留言前確認', (await pm.eval('window.__confirm')).includes('確定刪除'));
   check('留言從雲端刪除', (await adminRows(`comments?id=eq.${bComment.id}`)).length === 0);
 
@@ -187,8 +195,11 @@ try {
   // A 的手機：同步時重新上傳被移除的那一筆，資料庫回 400（預期中，之後就不再送），瀏覽器會記一筆資源載入失敗
   const removedUpload = (e) => e.includes('status of 400') && e.includes('/rest/v1/shared_brews');
   check('A：被移除的那筆只被擋下一次（之後不再送）', pa.errors.filter(removedUpload).length === 1, pa.errors.join(' / '));
+  // M 的頁面：刪留言時故意斷網一次，瀏覽器會記一筆斷網的載入失敗
+  const offlineDelete = (e) => e.includes('ERR_INTERNET_DISCONNECTED') && e.includes('/rpc/admin_delete_comment');
+  check('M：斷網的刪除只送了一次', pm.errors.filter(offlineDelete).length === 1, pm.errors.join(' / '));
   for (const [name, page] of [['M', pm], ['A', pa], ['U', pu]]) {
-    const errors = page.errors.filter((e) => page !== pa || !removedUpload(e));
+    const errors = page.errors.filter((e) => !(page === pa && removedUpload(e)) && !(page === pm && offlineDelete(e)));
     check(`${name}：pwn() 從未被呼叫`, !(await page.eval('window.__pwned')));
     check(`${name}：沒有 CSP 違規`, (await violations(page)).length === 0, (await violations(page)).join(' / '));
     check(`${name}：沒有 JavaScript 錯誤`, errors.length === 0, errors.join(' / '));

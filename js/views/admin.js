@@ -213,8 +213,11 @@ function threadOrder(comments) {
 
 /* ===== 刪除：填原因 → confirm → 送出 ===== */
 
-/** 在 anchor 後面顯示填原因的表單；送出且確認後回傳原因，取消回傳 null */
-function askReason(anchor, confirmText) {
+/**
+ * 在 anchor 後面顯示填原因的表單；送出且確認後執行 action(reason)
+ * 成功：關掉表單、onDone()；失敗：留在表單、按鈕恢復，可以直接再按一次
+ */
+function runDelete(anchor, confirmText, action, onDone) {
   anchor.closest('.admin')?.querySelector('.admin-reason')?.remove(); // 一次只開一個
   anchor.insertAdjacentHTML('afterend', `<form class="admin-reason form" novalidate>
     <div class="field" data-field="reason">
@@ -228,36 +231,26 @@ function askReason(anchor, confirmText) {
     </div>
   </form>`);
   const form = anchor.nextElementSibling;
+  const submit = form.querySelector('[type="submit"]');
   form.reason.focus();
-  return new Promise((resolve) => {
-    form.querySelector('[data-action="cancel"]').addEventListener('click', () => {
+  form.querySelector('[data-action="cancel"]').addEventListener('click', () => form.remove());
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (submit.disabled) return;
+    const error = validateAdminReason(form.reason.value);
+    form.querySelector('.error').textContent = error;
+    if (error || !confirm(confirmText)) return;
+    submit.disabled = true;
+    try {
+      await action(form.reason.value);
       form.remove();
-      resolve(null);
-    });
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const error = validateAdminReason(form.reason.value);
-      form.querySelector('.error').textContent = error;
-      if (error || !confirm(confirmText)) return;
-      const reason = form.reason.value;
-      form.querySelector('[type="submit"]').disabled = true;
-      resolve({ reason, done: () => form.remove(), fail: () => { form.querySelector('[type="submit"]').disabled = false; } });
-    });
+      toast('已刪除');
+      onDone();
+    } catch (err) {
+      submit.disabled = false;
+      toast(adminErrorMessage(err));
+    }
   });
-}
-
-async function runDelete(anchor, confirmText, action, onDone) {
-  const answer = await askReason(anchor, confirmText);
-  if (!answer) return;
-  try {
-    await action(answer.reason);
-    answer.done();
-    toast('已刪除');
-    onDone();
-  } catch (err) {
-    answer.fail();
-    toast(adminErrorMessage(err));
-  }
 }
 
 /** 刪除留言的按鈕（用戶詳細頁、貼文詳細頁共用） */
