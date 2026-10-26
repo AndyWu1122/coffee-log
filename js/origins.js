@@ -6,6 +6,7 @@
 export const ORIGIN_GROUPS = { africa: '非洲・中東', americas: '美洲', asia: '亞洲・大洋洲' };
 
 // view：放大到這個國家時的範圍 [西, 南, 東, 北]（經緯度）；沒寫就用地圖資料裡最大那塊陸地加上產區的範圍
+// short：地圖上的國名太長、會擋住鄰國時用的短名（沒寫就用 zh）
 export const COUNTRIES = [
   { code: 'ET', group: 'africa', zh: '衣索比亞', en: 'Ethiopia', aliases: ['衣索比亞', '衣索匹亞', '依索比亞', '埃塞俄比亞', 'ethiopia'] },
   { code: 'KE', group: 'africa', zh: '肯亞', en: 'Kenya', aliases: ['肯亞', '肯尼亞', 'kenya'] },
@@ -13,7 +14,7 @@ export const COUNTRIES = [
   { code: 'RW', group: 'africa', zh: '盧安達', en: 'Rwanda', aliases: ['盧安達', '盧旺達', 'rwanda'] },
   { code: 'BI', group: 'africa', zh: '蒲隆地', en: 'Burundi', aliases: ['蒲隆地', '布隆迪', 'burundi'] },
   { code: 'UG', group: 'africa', zh: '烏干達', en: 'Uganda', aliases: ['烏干達', 'uganda'] },
-  { code: 'CD', group: 'africa', zh: '剛果民主共和國', en: 'DR Congo', aliases: ['剛果', 'congo', 'drc'] },
+  { code: 'CD', group: 'africa', zh: '剛果民主共和國', short: '民主剛果', en: 'DR Congo', aliases: ['剛果', 'congo', 'drc'] },
   { code: 'YE', group: 'africa', zh: '葉門', en: 'Yemen', aliases: ['葉門', '也門', 'yemen'] },
   { code: 'CO', group: 'americas', zh: '哥倫比亞', en: 'Colombia', aliases: ['哥倫比亞', 'colombia'] },
   { code: 'PA', group: 'americas', zh: '巴拿馬', en: 'Panama', aliases: ['巴拿馬', 'panama'] },

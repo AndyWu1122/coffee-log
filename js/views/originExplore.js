@@ -7,7 +7,7 @@ import {
 } from '../models.js';
 import { esc, toast } from './ui.js';
 import {
-  WORLD, WORLD_W, WORLD_H, WORLD_PX, cupsText, score, toMap, scrollWorldTo, countryHits, countrySvg, markSelected,
+  cupsText, score, toMap, countryHits, landPath, worldMapHtml, bindWorldMap, bindWorldPick, countrySvg, bindCountryMap, markSelected,
   originHref, modeSwitchHtml, bindModeSwitch, hbarSvg, flavorTagsHtml, beansHtml,
 } from './originMapSvg.js';
 
@@ -34,13 +34,11 @@ const placeName = (key) => {
 function renderWorld(container, ctx, wishlist) {
   const { summary, map } = ctx;
   const drunkCountries = new Map(summary.countries.map((c) => [c.code, c]));
-  const paths = map.shapes.map((s) => (COUNTRY_BY_CODE.has(s.code)
-    ? `<path class="origin-land is-coffee is-link" d="${s.d}" data-code="${s.code}"></path>`
-    : `<path class="origin-land heat-0" d="${s.d}"></path>`)).join('');
+  const paths = map.shapes.map((s, i) => landPath(map, i, COUNTRY_BY_CODE.has(s.code) ? 'is-coffee' : 'heat-0')).join('');
   // 所有產區的小圓點：喝過實心、沒喝過空心（只是標示，點擊用國家的範圍）
   const dots = [...REGIONS].sort((a, b) => Number(ctx.drunk.has(a.key)) - Number(ctx.drunk.has(b.key))).map((r) => {
     const [x, y] = toMap(map.scale, r.lat, r.lon);
-    return `<circle class="origin-dot is-small${ctx.drunk.has(r.key) ? ' is-drunk' : ''}" cx="${x}" cy="${y}" r="${3 * WORLD_PX}"></circle>`;
+    return `<circle class="origin-dot is-small${ctx.drunk.has(r.key) ? ' is-drunk' : ''}" cx="${x}" cy="${y}" data-px="3"></circle>`;
   }).join('');
   const explored = ctx.drunk.size;
 
@@ -48,11 +46,10 @@ function renderWorld(container, ctx, wishlist) {
     ${modeSwitchHtml('explore')}
     <section class="origin-card">
       <h2>世界的咖啡產地</h2>
-      <p class="hint">${COUNTRIES.length} 個國家・${REGIONS.length} 個主要產區・點國家看介紹</p>
-      <div class="chart-scroll origin-scroll">
-        <svg class="origin-map origin-world" width="${WORLD_W}" height="${WORLD_H}" viewBox="${WORLD.x} ${WORLD.y} ${WORLD.w} ${WORLD.h}"
-          role="img" aria-label="${esc(`世界的咖啡產地：${COUNTRIES.length} 個國家，你喝過其中 ${explored} 個產區`)}">${paths}${dots}${countryHits(map, COUNTRIES.map((c) => c.code))}</svg>
-      </div>
+      <p class="hint">${COUNTRIES.length} 個國家・${REGIONS.length} 個主要產區・兩指縮放、拖曳移動・點國家看介紹</p>
+      ${worldMapHtml(`世界的咖啡產地：${COUNTRIES.length} 個國家，你喝過其中 ${explored} 個產區`,
+        `${paths}${dots}${countryHits(map, COUNTRIES.map((c) => c.code))}`)}
+      <div class="origin-pick-bar" aria-live="polite"></div>
       ${dotLegendHtml()}
     </section>
     <section class="origin-card origin-progress">
@@ -81,12 +78,20 @@ function renderWorld(container, ctx, wishlist) {
 
   const page = container.querySelector('#origin-page');
   bindModeSwitch(page, '');
-  page.querySelector('.origin-world').addEventListener('click', (e) => {
-    const target = e.target.closest('[data-code]');
-    if (target) location.hash = originHref({ code: target.dataset.code, mode: 'explore' });
+  // 32 國都標國名（大國先放）；打開時衣索比亞（咖啡的發源地）在中間
+  const area = (code) => {
+    const [x0, y0, x1, y1] = map.shapes.find((s) => s.code === code).box;
+    return (x1 - x0) * (y1 - y0);
+  };
+  bindWorldMap(page, map, { primary: new Map(COUNTRIES.map((c) => [c.code, area(c.code)])), focus: 'ET' });
+  bindWorldPick(page, map, (code) => {
+    const all = regionsOf(code);
+    const n = all.filter((r) => ctx.drunk.has(r.key)).length;
+    return {
+      text: `${COUNTRY_BY_CODE.get(code).zh}・${n ? `喝過 ${n}／${all.length} 個產區` : `${all.length} 個產區`}`,
+      go: '看介紹 ›', href: originHref({ code, mode: 'explore' }),
+    };
   });
-  // 打開時捲到非洲（咖啡的發源地）
-  scrollWorldTo(page.querySelector('.origin-scroll'), map, 'ET');
 }
 
 function dotLegendHtml() {
@@ -132,6 +137,7 @@ function renderCountry(container, ctx, code, initialRegion) {
 
   const page = container.querySelector('#origin-page');
   bindModeSwitch(page, code);
+  bindCountryMap(page, ctx.map, code, ctx.drunk);
   const detailText = page.querySelector('.origin-detail');
   const detailBox = page.querySelector('.origin-region-detail');
   let current = '';

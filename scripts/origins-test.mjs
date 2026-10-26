@@ -1,5 +1,6 @@
 // 產地（js/origins.js、js/worldMap.js）：不需要 Supabase、不需要瀏覽器
-// 清單本身（代碼、key、別名不重複）、每個產區的點落在自己的國家裡、產地介紹的格式、從文字比對產地、顯示用的產地、產地地圖的統計
+// 清單本身（代碼、key、別名不重複）、每個產區的點落在自己的國家裡、地圖的國名與標字位置、產地介紹的格式、從文字比對產地、顯示用的產地、
+// 產地地圖的統計、地圖的放大拖曳與國名的擺放（js/mapView.js）
 //
 // 用法：node scripts/origins-test.mjs
 
@@ -9,6 +10,7 @@ const {
 const { COUNTRY_SHAPES, MAP_SCALE } = await import('../js/worldMap.js');
 const { COUNTRY_GUIDE, REGION_GUIDE, GUIDE_PROCESS } = await import('../js/originGuide.js');
 const { isFlavorNote } = await import('../js/flavorWheel.js');
+const { fitView, viewBox, clampView, zoomAt, panBy, placeLabels, toScreen } = await import('../js/mapView.js');
 
 let passed = 0;
 const failures = [];
@@ -85,6 +87,76 @@ const toMap = (lat, lon) => [(lon + 180) * MAP_SCALE, (90 - lat) * MAP_SCALE];
   check('南極洲不畫', !shapeOf.has('AQ'));
   const kb = Buffer.byteLength(JSON.stringify(COUNTRY_SHAPES)) / 1024;
   check(`地圖資料 ≤ 200KB（目前 ${kb.toFixed(0)}KB）`, kb <= 200);
+  const badLabel = COUNTRY_SHAPES.filter((sh) => typeof sh.zh !== 'string' || !(sh.label?.length === 2 && sh.label.every(Number.isFinite)));
+  check('每個國家都有國名（字串）和標字位置', badLabel.length === 0, badLabel.map((sh) => sh.code).join(', '));
+  const named = new Map(COUNTRY_SHAPES.filter((sh) => sh.zh).map((sh) => [sh.code, sh]));
+  check('產咖啡的國家都有標國名的那一塊', COUNTRIES.every((c) => named.has(c.code)));
+  const sameCode = COUNTRY_SHAPES.filter((sh) => sh.code && sh.zh).map((sh) => sh.code);
+  check('同一個代碼只標一次國名', new Set(sameCode).size === sameCode.length);
+  const zh = (code) => named.get(code)?.zh;
+  check('國名用台灣的寫法（台灣、中國、紐西蘭、澳洲）', zh('TW') === '台灣' && zh('CN') === '中國' && zh('NZ') === '紐西蘭' && zh('AU') === '澳洲',
+    [zh('TW'), zh('CN'), zh('NZ'), zh('AU')].join('、'));
+  // 標字位置在最大那塊陸地的外框裡（例外：產國的國名在 App 裡另外處理的美國→本土、印尼→群島中間，外框只是最大那塊）
+  const labelOutside = COUNTRIES.filter((c) => !['US', 'ID'].includes(c.code)).filter((c) => {
+    const { label: [x, y], box: [x0, y0, x1, y1] } = named.get(c.code);
+    return x < x0 || x > x1 || y < y0 || y > y1;
+  });
+  check('產國的標字位置落在那個國家', labelOutside.length === 0, labelOutside.map((c) => c.code).join(', '));
+}
+
+/* ===== 放大、拖曳（js/mapView.js） ===== */
+{
+  const size = { w: 400, h: 200 };
+  const limits = { bounds: { x: 0, y: 0, w: 4000, h: 2000 }, minK: 0.1, maxK: 2 };
+  const near = (a, b) => Math.abs(a - b) < 1e-9;
+  const fit = fitView({ x: 100, y: 100, w: 800, h: 200 }, size);
+  check('fitView：放得下整個範圍（取寬、高比較小的那個）、中心在範圍中間', near(fit.k, 0.5) && fit.cx === 500 && fit.cy === 200, q(fit));
+  const vb = viewBox({ cx: 500, cy: 200, k: 0.5 }, size);
+  check('viewBox：依地圖框大小和縮放', q(vb) === q({ x: 100, y: 0, w: 800, h: 400 }), q(vb));
+  check('toScreen：中心點在地圖框正中間', q(toScreen({ cx: 500, cy: 200, k: 0.5 }, size, 500, 200)) === q([200, 100]));
+  let v = clampView({ cx: -500, cy: 5000, k: 1 }, size, limits);
+  check('clampView：不能拖到範圍外', v.cx === 200 && v.cy === 1900, q(v));
+  v = clampView({ cx: 3000, cy: 300, k: 0.05 }, size, limits);
+  check('clampView：縮放有下限；比範圍大的那一邊置中', v.k === 0.1 && v.cx === 2000 && v.cy === 1000, q(v));
+  check('clampView：縮放有上限', clampView({ cx: 2000, cy: 1000, k: 9 }, size, limits).k === 2);
+  const before = { cx: 2000, cy: 1000, k: 0.5 };
+  const p = [300, 50];
+  const mapPoint = (view) => [view.cx + (p[0] - size.w / 2) / view.k, view.cy + (p[1] - size.h / 2) / view.k];
+  const zoomed = zoomAt(before, 2, p[0], p[1], size, limits);
+  check('zoomAt：放大 2 倍、手指下的那一點不動', zoomed.k === 1 && mapPoint(zoomed).every((n, i) => near(n, mapPoint(before)[i])), q(zoomed));
+  check('zoomAt：超過上限就停在上限', zoomAt(before, 100, 200, 100, size, limits).k === 2);
+  const panned = panBy(before, 50, -20, size, limits);
+  check('panBy：手指往右拖 50px，看的範圍往左（地圖跟著手指）', panned.cx === 1900 && panned.cy === 1040 && panned.k === 0.5, q(panned));
+}
+
+/* ===== 國名的擺放（js/mapView.js 的 placeLabels） ===== */
+{
+  const size = { w: 300, h: 200 };
+  const view = { cx: 150, cy: 100, k: 1 };
+  const L = (id, x, y, extra = {}) => ({ id, x, y, w: 60, h: 16, rank: 1, priority: 0, ...extra });
+  let shown = placeLabels([L('a', 100, 100), L('b', 120, 100, { priority: 5 }), L('c', 200, 100)], view, size);
+  check('重疊時 priority 大的先放，被擋住的不顯示；不重疊的照樣顯示', q([...shown.keys()].sort()) === q(['b', 'c']), q([...shown]));
+  shown = placeLabels([L('low', 100, 100, { rank: 2, priority: 99 }), L('high', 110, 100, { rank: 1 })], view, size);
+  check('rank 小的先放（不管 priority）', shown.has('high') && !shown.has('low'), q([...shown]));
+  shown = placeLabels([L('edge', 10, 100), L('out', 500, 100), L('ok', 150, 100)], view, size);
+  check('超出地圖框（含部分超出）的不顯示', q([...shown]) === q([['ok', 'middle']]), q([...shown]));
+  shown = placeLabels([L('dot', 150, 100)], view, size, { obstacles: [{ x: 150, y: 100, r: 6 }] });
+  check('會蓋住圓點的不顯示', shown.size === 0);
+  const side = (extra) => L('s', 150, 100, { anchor: 'side', dx: 10, ...extra });
+  shown = placeLabels([side()], view, size, { obstacles: [{ x: 150, y: 100, r: 6 }] });
+  check('產區名放在圓點右邊（不蓋住自己的圓點）', shown.get('s') === 'right', q([...shown]));
+  shown = placeLabels([side(), L('block', 200, 100, { rank: 0 })], view, size, { obstacles: [{ x: 150, y: 100, r: 6 }] });
+  check('右邊被擋住就放左邊', shown.get('s') === 'left' && shown.get('block') === 'middle', q([...shown]));
+  shown = placeLabels([side({ x: 40 }), L('block', 90, 100, { rank: 0 })], view, size);
+  check('兩邊都放不下就不顯示', !shown.has('s'), q([...shown]));
+  shown = placeLabels([L('btn', 260, 180), L('ok', 150, 100)], view, size, { reserved: [[250, 120, 300, 200]] });
+  check('reserved（放大按鈕）蓋住的地方不放字', q([...shown.keys()]) === q(['ok']), q([...shown]));
+  shown = placeLabels([L('a', 100, 100), L('b', 100, 117)], view, size);
+  check('上下貼太近（間隔 < 2px）也算重疊', shown.size === 1, q([...shown]));
+  shown = placeLabels([L('a', 100, 100), L('b', 100, 125)], view, size);
+  check('隔得夠遠就兩個都顯示', shown.size === 2, q([...shown]));
+  const zoomedIn = placeLabels([L('a', 100, 100), L('b', 110, 100)], { cx: 105, cy: 100, k: 8 }, size);
+  check('放大後原本擠在一起的都放得下', zoomedIn.size === 2, q([...zoomedIn]));
 }
 
 /* ===== 產地介紹（js/originGuide.js） ===== */

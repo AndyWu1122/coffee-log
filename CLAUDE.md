@@ -26,9 +26,10 @@ js/models.js       # 驗證、計算（粉水比、養豆天數）
 js/flavorWheel.js  # SCA 風味輪靜態資料（三層、中英、大類顏色），由 models.js 轉出給 views
 js/stats.js        # 統計頁的計算（純函式，不 import 任何東西，Node 可直接測），只由 models.js 使用
 js/heatmap.js      # 沖煮熱度圖的計算（純函式，只 import stats.js 的日期工具，Node 可直接測），由 models.js、sync.js 使用
-js/origins.js      # 產地：國家與主要產區清單（座標、別名）、從文字比對產地、顯示用的產地、產地地圖的統計（純函式，不 import 任何東西，Node 可直接測）；models.js、sync.js 使用
+js/origins.js      # 產地：國家與主要產區清單（座標、別名、地圖用的短名）、從文字比對產地、顯示用的產地、產地地圖的統計（純函式，不 import 任何東西，Node 可直接測）；models.js、sync.js 使用
 js/originGuide.js  # 產地介紹（國家全部、產區先 20 個）：海拔、處理法、依處理法的常見風味（風味輪 key）、文字；靜態內容，models.loadOriginGuide 用到才載入
-js/worldMap.js     # 產地地圖的國界（由 scripts/build-worldmap.mjs 從 Natural Earth 產生，不要手動改；約 180KB，models.loadWorldMap 用到才載入）
+js/worldMap.js     # 產地地圖的國界、國名、標字位置（由 scripts/build-worldmap.mjs 從 Natural Earth 產生，不要手動改；約 190KB，models.loadWorldMap 用到才載入）
+js/mapView.js      # 產地地圖的放大、拖曳計算與國名的擺放（純函式，不 import 任何東西，Node 可直接測），由 models.js 轉出給 views
 js/drippers.js     # 舊紀錄的濾杯文字 → drippers 的合併規則（純函式，Node 可直接測）；db.js 的 v6 升級與 models.js 匯入舊備份共用
 js/id.js           # newId()（db.js 升級轉換與 models.js 共用；models.js 轉出）
 js/changelog.js    # 更新內容（給使用者看的每版說明）與版本比較，由 models.js 轉出給 views
@@ -152,13 +153,24 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
   - 比對：去重音、轉小寫、「臺」→「台」；英文別名前面不能接英文字母；被更長的比對包住的不算（印度尼西亞 ≠ 印度、哈拉茲 ≠ 哈拉）；文字裡有國家時只採用那些國家的產區；產地文字先於名稱
   - 顯示（`originLabel`）：選了的國家、產區（文字裡已有就不重複）＋產地文字；**只用選了的，不用猜的**；豆子列表、分享卡片、上傳到社群的 `bean_origin` 都用它（雲端結構不變，合起來 ≤ 100 字在豆子表單就擋）
 - 清單（`js/origins.js`）：國家代碼＝ISO 3166-1 alpha-2、產區 key＝`<國家>.<小寫英文>`，**key 不能改名**（存在豆子上）；新增產區時 `origins-test` 會檢查別名不重複、點落在國家的地圖形狀裡
-- 世界地圖：等距圓柱、緯度 62°N～48°S、寬 760px 在自己的框裡橫向捲動（打開時喝最多的國家在中間）；國家依杯數 `--heat-1～4`（1–4、5–14、15–39、40+ 杯，`CUP_LEVELS`），沒喝過 `--heat-0`；喝過的國家另外畫圓點（小國點得到）；下面是國家的橫條清單（和統計同樣的 `.hbar-row`）、認不出產地的豆子（連到豆子頁）
+- 世界地圖：等距圓柱、緯度 62°N～48°S，在卡片寬、`min(260px, 60vh)` 高的框裡（打開時的縮放＝以前 760px 寬，喝最多的國家在中間）；國家依杯數 `--heat-1～4`（1–4、5–14、15–39、40+ 杯，`CUP_LEVELS`），沒喝過 `--heat-0`；喝過的國家另外畫圓點（小國點得到）；下面是國家的橫條清單（和統計同樣的 `.hbar-row`）、認不出產地的豆子（連到豆子頁）
 - 國家頁：放大到最大那塊陸地＋所有產區（美國用 `view` 放大到夏威夷）；產區圓點喝過實心 `--accent`、沒喝過空心；點圓點或清單顯示杯數、平均評分、最常選的風味、喝過的豆子（連到 `#/?bean=`）；產地是猜的豆子有「確認」連結到豆子頁
 - 國界：Natural Earth 1:50m（公有領域），`node scripts/build-worldmap.mjs <geojson>` 簡化後產生；要 ≤ 200KB（origins-test 檢查）
-- 測試：`origins-test.mjs`（Node：清單、點在國家裡、比對、統計）、`origin-map-ui-test.mjs`（headless Chrome 390px：顏色、清單、點擊、表單的套用、備份 v6／v5、XSS、離線、深淺色截圖、CSP）
+  - 國名用 `NAME_ZHT`，不是台灣寫法的在腳本的 `ZH_FIX` 改（台灣、中國、紐西蘭、澳洲…）；標字位置用 `LABEL_X`／`LABEL_Y`；同一個代碼只有最大那塊標國名
+  - 產國在地圖上一律用 `origins.js` 的名稱（`short` 是太長時的短名，例如「民主剛果」）
+- **放大、拖曳**（1.17.0，`originMapSvg.js` 的 `bindMap`，計算在 `js/mapView.js`）：世界和國家頁都可以；單指拖曳（`.origin-frame` 是 `touch-action: none`，手指放在地圖外捲動頁面）、雙指縮放、滾輪、右下角「＋」「－」「⟲」（44px）
+  - 世界：最多放大 16 倍、最小＝看得到整個世界；國家頁：最多再放大 8 倍、可以拖到鄰國（範圍是放大範圍的 2 倍）
+  - 圓點、點擊範圍的半徑寫在 `data-px`（px），放大時換算成地圖單位，大小不變；國界、外框用 `vector-effect: non-scaling-stroke`
+  - 手指移動 ≥ 8px 算拖曳；拖曳、縮放放開後緊接著的 click 在 `.origin-frame` 的 capture 擋下（只擋 80ms）
+  - 拖曳中只更新 viewBox（requestAnimationFrame），放開、按鈕、滾輪停下（150ms）、大小改變時才重新擺國名
+- **國名**（`placeLabels`）：依 rank、priority 一個一個放，和放好的字、產區圓點、放大按鈕重疊或超出地圖框就不顯示；字外圍描一圈 `--surface`（`paint-order: stroke`）
+  - 世界：我的足跡標喝過的國家（杯數多的先放）、認識產區標 32 國（面積大的先放）；其他國家放大到 2 倍以上才標淡色（`--text-dim`）的國名
+  - 國家頁：這個國家的國名（粗）→ 產區名（喝過的先放，放圓點右邊、放不下改左邊）→ 鄰國（淡色）
+- **點世界地圖上的國家**：外框加粗（`.origin-pick`）、地圖下面 `.origin-pick-bar` 顯示「國名・杯數／產區數　看產區 ›／看介紹 ›」，再點那一行才進國家；不是產國的只顯示「X（不在咖啡產地清單裡）」；點海上取消
+- 測試：`origins-test.mjs`（Node：清單、點在國家裡、國名與標字位置、比對、統計、放大拖曳的計算、國名的擺放）、`origin-map-ui-test.mjs`（headless Chrome 390px：顏色、清單、點擊、真的觸控事件拖曳與兩指縮放、滾輪、按鈕、拖曳不算點擊、國名不重疊、點國家顯示國名、橫放、表單的套用、備份 v6／v5、XSS、離線、深淺色截圖、CSP；從 `#/settings` 打開，首頁的新手教學會擋住真的觸控）
 - **兩個模式**（上方切換，`originMapSvg.originHref` 組網址；切換時留在同一個國家）：我的足跡（上面這些）｜認識產區（1.16.0，`js/views/originExplore.js`）
 - 認識產區：
-  - 世界：32 國都上色（`.is-coffee`＝`--heat-1`）、84 個產區都畫小圓點（喝過實心）、每國一個點擊範圍；產區圖鑑「已探索 n／84」（喝過的產區自動算）；想買清單；依 `ORIGIN_GROUPS` 分組的國家列（「喝過 a／b」）
+  - 世界：32 國都上色（`.is-coffee`＝`--heat-1`，國界 1.25px 的 `--surface` 隔開相鄰的產國）、84 個產區都畫小圓點（喝過實心）、每國一個點擊範圍；產區圖鑑「已探索 n／84」（喝過的產區自動算）；想買清單；依 `ORIGIN_GROUPS` 分組的國家列（「喝過 a／b」）
   - 國家：國家介紹（海拔、處理法、文字、常見風味）→ 地圖 → 所有產區的列（喝過幾杯、★ 想買）→ 點了顯示產區介紹；沒有詳細介紹的產區寫「之後補上」
   - 產區介紹下面接「你喝到的」：杯數、評分、豆子；你選過的風味和介紹（沒有詳細介紹時用國家的）一樣或是它的細項／大類就打勾（`related`）
   - 想買清單：產區介紹的「☆ 加入想買清單」（`models.setWishlistRegion`），世界頁列出、連回 `&region=`；我的足跡的產區詳細有「看這個產區的介紹 ›」

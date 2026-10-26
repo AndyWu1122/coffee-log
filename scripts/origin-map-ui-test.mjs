@@ -4,6 +4,8 @@
 // 點圓點／清單顯示風味和豆子，猜的產地有「確認」連結；認不出產地的豆子另外列（XSS）；豆子表單的「看起來是…［套用］」、
 // 選國家才有產區；列表顯示國家＋產區；備份 v7 帶著國家、產區、想買清單，v5、v6 照樣匯入；離線可用；沒有 CSP 違規、沒有 JavaScript 錯誤
 // 認識產區：所有產地都畫出來、國家與產區的介紹、「你喝到的」打勾對照、產區圖鑑、想買清單（加入、移除、連結）；從 DB v7 升級
+// 放大、拖曳（1.17.0）：真的觸控事件（CDP Input.dispatchTouchEvent）拖曳、兩指縮放，滾輪、按鈕；拖曳不算點擊；
+// 國名：放大後變多、畫面上的字互不重疊、都在地圖框裡；點國家先在下面顯示國名，再點那一行才進去；手機橫放
 //
 // 用法：node scripts/origin-map-ui-test.mjs
 
@@ -58,12 +60,14 @@ function fixtures() {
   return { beans, brews };
 }
 
+// 從設定頁打開：首頁會跳新手教學，遮罩會擋住真的觸控
 async function openPage(chrome, url) {
   const page = await chrome.newPage(null, { isolated: true });
   await page.cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await page.cdp('Page.addScriptToEvaluateOnNewDocument', {
     source: `window.__csp = []; document.addEventListener('securitypolicyviolation', (e) => window.__csp.push(e.effectiveDirective + ' ' + e.blockedURI));`,
   });
+  await page.cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   await page.goto(url);
   await prepare(page);
   return page;
@@ -100,6 +104,43 @@ const tap = (page, sel) => page.eval(`(() => {
   return true;
 })()`);
 
+/** 地圖框在畫面上的位置（先捲到畫面中間） */
+const frameRect = (page) => page.eval(`(() => {
+  const f = document.querySelector('.origin-frame');
+  f.scrollIntoView({ block: 'center' });
+  const r = f.getBoundingClientRect();
+  return { x: r.left, y: r.top, w: r.width, h: r.height };
+})()`);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** 真的觸控：paths 是每根手指的路徑 [[x, y], ...]（每根手指點數一樣），一步一步移動 */
+async function gesture(page, paths) {
+  const at = (i) => paths.map((p, id) => ({ x: p[i][0], y: p[i][1], id }));
+  await page.cdp('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: at(0) });
+  for (let i = 1; i < paths[0].length; i++) await page.cdp('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: at(i) });
+  await page.cdp('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await sleep(50);
+  await page.eval('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))');
+}
+const line = (x0, y0, x1, y1, n = 8) => Array.from({ length: n + 1 }, (_, i) => [x0 + ((x1 - x0) * i) / n, y0 + ((y1 - y0) * i) / n]);
+/** 元素中心在畫面上的位置 */
+const centerOf = (page, sel) => page.eval(`(() => { const r = document.querySelector(${q(sel)}).getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`);
+/** 地圖現在的縮放、viewBox，以及顯示中的國名：互相重疊、超出地圖框的有幾個 */
+const mapState = (page) => page.eval(`(() => {
+  const svg = document.querySelector('.origin-frame svg');
+  const box = svg.getBoundingClientRect();
+  const shown = [...svg.querySelectorAll('.map-label.is-shown')].map((t) => ({ text: t.textContent, rank: t.getAttribute('class').match(/rank-(\\d)/)[1], r: t.getBoundingClientRect() }));
+  let overlaps = 0;
+  for (let i = 0; i < shown.length; i++) for (let j = i + 1; j < shown.length; j++) {
+    const a = shown[i].r, b = shown[j].r;
+    if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) overlaps++;
+  }
+  const outside = shown.filter(({ r }) => r.left < box.left - 1 || r.right > box.right + 1 || r.top < box.top - 1 || r.bottom > box.bottom + 1).length;
+  return { k: Number(svg.dataset.k), vb: svg.getAttribute('viewBox').split(' ').map(Number), texts: shown.map((l) => l.text),
+    ranks: shown.map((l) => l.rank), overlaps, outside, picked: svg.dataset.picked ?? '', bar: document.querySelector('.origin-pick-bar')?.textContent.trim() ?? '',
+    zoomIn: document.querySelector('[data-zoom="in"]').disabled, zoomOut: document.querySelector('[data-zoom="out"]').disabled };
+})()`);
+const ET_REGIONS = ['耶加雪菲', '西達摩', '古吉', '西阿爾西', '哈拉', '利姆', '吉瑪', '卡法', '列坎提'];
+
 /** 版面：整頁不橫向捲動、橫條名稱不壓到數字、每列 ≥ 44px */
 const layout = (page) => page.eval(`(() => {
   const rows = [...document.querySelectorAll('#origin-page .hbar-row')];
@@ -118,7 +159,7 @@ try {
   const base = `http://127.0.0.1:${server.address().port}/`;
   chrome = await launchChrome();
 
-  const page = await openPage(chrome, base);
+  const page = await openPage(chrome, `${base}#/settings`);
   const data = fixtures();
   await page.eval(`import('/js/db.js').then((db) => db.bulkPut(${q(data)})).then(() => true)`);
   await page.waitFor('Boolean(navigator.serviceWorker.controller)', { label: 'Service Worker 接管' });
@@ -137,13 +178,23 @@ try {
   check('顏色依杯數：衣索比亞第 2 級、肯亞第 2 級、盧安達第 1 級、巴西（沒沖過）第 0 級',
     levels.ET.includes('heat-2') && levels.KE.includes('heat-2') && levels.RW.includes('heat-1') && levels.BR.includes('heat-0'), q(levels));
   check('不在清單裡的國家（日本）不能點', !(await page.eval(`Boolean(document.querySelector('.origin-world [data-code="JP"]'))`)));
-  const scroll = await page.eval(`(() => {
-    const s = document.querySelector('.origin-scroll');
+  const opened = await page.eval(`(() => {
+    const box = document.querySelector('.origin-frame').getBoundingClientRect();
     const m = document.querySelector('.origin-hit[data-code="ET"]').getBoundingClientRect();
-    const box = s.getBoundingClientRect();
-    return { scrollable: s.scrollWidth > s.clientWidth, left: s.scrollLeft, inView: m.left >= box.left && m.right <= box.right };
+    return { center: Math.abs((m.left + m.right) / 2 - (box.left + box.right) / 2) < 2, w: box.width, h: box.height };
   })()`);
-  check('世界地圖在框裡橫向捲動，打開時喝最多的國家（衣索比亞）在畫面裡', scroll.scrollable && scroll.inView, q(scroll));
+  check('世界地圖：打開時喝最多的國家（衣索比亞）在正中間', opened.center, q(opened));
+  let ms = await mapState(page);
+  check('世界地圖（我的足跡）：喝最多的衣索比亞標國名，只標喝過的國家（還沒放大時不標其他國家）',
+    ms.texts.includes('衣索比亞') && ms.texts.every((t) => ['衣索比亞', '肯亞', '哥倫比亞', '盧安達'].includes(t)), q(ms.texts));
+  check('國名互不重疊、都在地圖框裡', ms.overlaps === 0 && ms.outside === 0, q(ms));
+  const k0 = ms.k;
+  check('打開時「放大」「縮小」都可以按', !ms.zoomIn && !ms.zoomOut, q(ms));
+  check('放大、縮小、回到原本的範圍：按鈕 ≥ 44px、在地圖框裡', await page.eval(`(() => {
+    const f = document.querySelector('.origin-frame').getBoundingClientRect();
+    return [...document.querySelectorAll('.map-zoom-btn')].every((b) => { const r = b.getBoundingClientRect();
+      return r.width >= 44 && r.height >= 44 && r.left >= f.left && r.right <= f.right && r.top >= f.top && r.bottom <= f.bottom; });
+  })()`));
   const unknown = await page.eval(`[...document.querySelectorAll('.origin-unknown .origin-beans a')].map((a) => [a.getAttribute('href'), a.textContent])`);
   check('認不出產地的豆子另外列，連到豆子頁', q(unknown) === q([['#/beans/b-blend', ATTACK]]), q(unknown));
   check('豆子名稱的 HTML 不會執行（XSS）', await noInjection(page));
@@ -151,9 +202,69 @@ try {
   check('世界地圖：整頁不橫向捲動、橫條名稱不壓到數字、每列 ≥ 44px', l.pageWidth <= l.viewport && l.rowHits === 0 && l.shortRows === 0, q(l));
   const hitSize = await page.eval(`document.querySelector('.origin-hit[data-code="RW"]').getBoundingClientRect().width`);
   check('小國（盧安達）的圓點點擊範圍 ≥ 24px', hitSize >= 24, String(hitSize));
+
+  /* ----- 放大、拖曳 ----- */
+  await click(page, '[data-zoom="in"]');
+  ms = await mapState(page);
+  check('按「＋」：放大 2 倍，其他國家也開始標淡色的國名', Math.abs(ms.k / k0 - 2) < 1e-6 && ms.ranks.includes('2'), q({ k: ms.k / k0, texts: ms.texts }));
+  check('放大後國名照樣互不重疊、都在地圖框裡', ms.overlaps === 0 && ms.outside === 0, q(ms));
+  for (let i = 0; i < 5; i++) await click(page, '[data-zoom="in"]');
+  ms = await mapState(page);
+  check('最多放大 16 倍，到了「＋」就不能按', Math.abs(ms.k / k0 - 16) < 1e-6 && ms.zoomIn, q({ k: ms.k / k0 }));
+  await click(page, '[data-zoom="home"]');
+  ms = await mapState(page);
+  check('按「⟲」：回到打開時的範圍', Math.abs(ms.k - k0) < 1e-9 && !ms.zoomIn, q(ms.k));
+  for (let i = 0; i < 4; i++) await click(page, '[data-zoom="out"]');
+  ms = await mapState(page);
+  check('縮小到看得到整個世界就停，「－」不能按', ms.zoomOut && ms.vb[2] >= 36000 - 1, q(ms.vb));
+  await click(page, '[data-zoom="home"]');
+
+  let fr = await frameRect(page);
+  let before = await mapState(page);
+  const et = await centerOf(page, '.origin-hit[data-code="ET"]');
+  await gesture(page, [line(et[0], et[1], et[0] - 120, et[1] + 10)]);
+  ms = await mapState(page);
+  check('單指拖曳（從衣索比亞上開始）：地圖跟著手指往左，縮放不變', ms.vb[0] > before.vb[0] + 100 / k0 && ms.k === before.k, `${before.vb[0]} → ${ms.vb[0]}`);
+  check('拖曳不算點擊：沒有選到國家、沒有換頁', ms.picked === '' && ms.bar === '' && (await page.eval('location.hash')) === '#/origins', q(ms));
+  check('拖曳後國名重新擺放：互不重疊、都在地圖框裡', ms.overlaps === 0 && ms.outside === 0, q(ms));
+  fr = await frameRect(page);
+  const cx = fr.x + fr.w / 2;
+  const cy = fr.y + fr.h / 2;
+  before = await mapState(page);
+  await gesture(page, [line(cx - 20, cy, cx - 80, cy), line(cx + 20, cy, cx + 80, cy)]);
+  ms = await mapState(page);
+  check('兩指張開：放大（約 4 倍）', ms.k / before.k > 3.5 && ms.k / before.k < 4.5, String(ms.k / before.k));
+  check('兩指縮放後國名互不重疊、都在地圖框裡', ms.overlaps === 0 && ms.outside === 0, q(ms));
+  before = ms;
+  await gesture(page, [line(cx - 80, cy, cx - 30, cy), line(cx + 80, cy, cx + 30, cy)]);
+  ms = await mapState(page);
+  check('兩指捏合：縮小', ms.k < before.k * 0.5, String(ms.k / before.k));
+  before = ms;
+  await page.cdp('Input.dispatchMouseEvent', { type: 'mouseWheel', x: cx, y: cy, deltaX: 0, deltaY: -300 });
+  await page.waitFor(`Number(document.querySelector('.origin-frame svg').dataset.k) > ${before.k * 1.2}`, { label: '滾輪放大' });
+  check('滾輪（電腦）：放大', true);
+  check('在地圖上滑動不會捲動頁面（touch-action: none）', (await page.eval(`getComputedStyle(document.querySelector('.origin-frame')).touchAction`)) === 'none');
+  await click(page, '[data-zoom="home"]');
+
+  /* ----- 點國家：先顯示國名，再點那一行才進去 ----- */
   await tap(page, '.origin-hit[data-code="RW"]');
+  ms = await mapState(page);
+  check('點小國（盧安達）的圓點：外框標出來、下面顯示「盧安達・1 杯　看產區 ›」，還沒換頁',
+    ms.picked === 'RW' && ms.bar.replace(/\s+/g, '') === '盧安達・1杯看產區›' && (await page.eval('location.hash')) === '#/origins'
+      && (await page.eval(`document.querySelectorAll('.origin-pick').length`)) >= 1, q(ms));
+  check('國名那一行 ≥ 44px', (await page.eval(`document.querySelector('.origin-pick-link').getBoundingClientRect().height`)) >= 44);
+  await tap(page, '.origin-world path[data-code="BR"]');
+  check('點沒喝過的產國（巴西）：「巴西・還沒喝過」', (await mapState(page)).bar.replace(/\s+/g, '') === '巴西・還沒喝過看產區›');
+  await tap(page, '.origin-world path[data-shape]:not([data-code])');
+  ms = await mapState(page);
+  check('點不是產國的國家：只顯示國名、沒有連結', ms.bar.endsWith('（不在咖啡產地清單裡）') && !(await page.eval(`Boolean(document.querySelector('.origin-pick-link'))`)), ms.bar);
+  await tap(page, '.origin-world');
+  ms = await mapState(page);
+  check('點海上：取消', ms.picked === '' && ms.bar === '' && (await page.eval(`document.querySelectorAll('.origin-pick').length`)) === 0, q(ms));
+  await tap(page, '.origin-hit[data-code="RW"]');
+  await click(page, '.origin-pick-link');
   await page.waitFor(`location.hash === '#/origins/RW' && document.querySelector('.origin-country')`, { label: '點盧安達' });
-  check('點小國的圓點：進到那個國家', true);
+  check('再點國名那一行：進到那個國家', true);
   const rwDetail = await page.eval(`document.querySelector('.origin-detail').textContent`);
   check('盧安達：從名稱 Huye 猜到南部省，一打開就顯示', rwDetail.startsWith('南部省：1 杯'), rwDetail);
   await openWorld(page, base);
@@ -194,6 +305,53 @@ try {
   check('還沒喝過的產區列在下面', (await page.eval(`document.querySelector('.origin-untried').textContent`)).includes('哈拉'));
   l = await layout(page);
   check('國家頁：整頁不橫向捲動、橫條每列 ≥ 44px', l.pageWidth <= l.viewport && l.rowHits === 0 && l.shortRows === 0, q(l));
+  ms = await mapState(page);
+  const neighbors = ['肯亞', '索馬利亞', '南蘇丹', '蘇丹', '厄利垂亞', '吉布地', '索馬利蘭'];
+  check('國家頁：標出產區名稱（喝過的耶加雪菲優先）和鄰國的名稱', ms.texts.includes('耶加雪菲') && neighbors.some((t) => ms.texts.includes(t))
+    && ms.ranks.includes('1') && ms.ranks.includes('2'), q(ms.texts));
+  check('國家頁的名稱互不重疊、都在地圖框裡、不蓋住產區圓點和放大按鈕', ms.overlaps === 0 && ms.outside === 0 && (await page.eval(`(() => {
+    const dots = [...document.querySelectorAll('.origin-dot, .map-zoom')].map((d) => d.getBoundingClientRect());
+    return [...document.querySelectorAll('.map-label.is-shown')].every((t) => { const a = t.getBoundingClientRect();
+      return dots.every((b) => !(a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1)); });
+  })()`)), q(ms));
+  // 打開時擠在一起寫不下的產區：在那裡用滾輪放大，名稱就分得開
+  const hidden = ET_REGIONS.filter((t) => !ms.texts.includes(t));
+  check('國家頁打開時：大部分產區寫得下名稱', hidden.length <= 4, hidden.join('、'));
+  if (hidden.length) {
+    const key = (await page.eval(`import('/js/models.js').then((m) => m.REGIONS.filter((r) => r.country === 'ET').map((r) => [r.zh, r.key]))`))
+      .find(([zh]) => zh === hidden[0])[1];
+    await frameRect(page);
+    const [hx, hy] = await centerOf(page, `.origin-hit[data-region="${key}"]`);
+    // 連續的滾輪事件 Chrome 會合併，一次一格、等縮放好再滾下一格
+    for (let i = 1; i <= 4; i++) {
+      await page.cdp('Input.dispatchMouseEvent', { type: 'mouseWheel', x: hx, y: hy, deltaX: 0, deltaY: -300 });
+      await page.waitFor(`document.querySelector('.origin-frame svg').dataset.k > ${ms.k * 1.2 ** i}`, { label: '國家頁滾輪放大' });
+    }
+    await sleep(300);
+    const zoomed = await mapState(page);
+    check(`在擠在一起的地方放大：原本寫不下的「${hidden[0]}」寫得下了`, zoomed.texts.includes(hidden[0]) && zoomed.overlaps === 0 && zoomed.outside === 0,
+      q(zoomed.texts));
+    await click(page, '[data-zoom="home"]');
+  }
+  const k1 = ms.k;
+  await click(page, '[data-zoom="in"]');
+  await click(page, '[data-zoom="in"]');
+  ms = await mapState(page);
+  const dotSize = await page.eval(`document.querySelector('.origin-dot').getBoundingClientRect().width`);
+  check('國家頁放大 4 倍：圓點大小不變（12px）、名稱互不重疊',
+    Math.abs(ms.k / k1 - 4) < 1e-6 && ms.overlaps === 0 && ms.outside === 0 && Math.abs(dotSize - 12) < 1.5, `圓點 ${dotSize}px`);
+  for (let i = 0; i < 2; i++) await click(page, '[data-zoom="in"]');
+  check('國家頁最多放大 8 倍', (await mapState(page)).zoomIn);
+  await click(page, '[data-zoom="home"]');
+  await frameRect(page);
+  const gujiAt = await centerOf(page, '.origin-hit[data-region="ET.guji"]');
+  const selectedBefore = await page.eval(`document.querySelector('.origin-dot.is-selected')?.dataset.dot`);
+  before = await mapState(page);
+  await gesture(page, [line(gujiAt[0], gujiAt[1], gujiAt[0] - 60, gujiAt[1] - 40)]);
+  ms = await mapState(page);
+  check('國家頁：從產區圓點上開始拖曳，地圖跟著移動、不算點了那個產區',
+    ms.vb[0] !== before.vb[0] && (await page.eval(`document.querySelector('.origin-dot.is-selected')?.dataset.dot`)) === selectedBefore, q({ before: before.vb, after: ms.vb }));
+  await click(page, '[data-zoom="home"]');
   await openCountry(page, base, 'US');
   const kona = await page.eval(`(() => { const svg = document.querySelector('.origin-country').getBoundingClientRect(); const d = document.querySelector('.origin-dot[data-dot="US.kona"]').getBoundingClientRect();
     return { w: svg.width, inside: d.left >= svg.left && d.right <= svg.right && d.top >= svg.top && d.bottom <= svg.bottom }; })()`);
@@ -280,7 +438,23 @@ try {
   l = await layout(page);
   check('認識產區（世界）：整頁不橫向捲動', l.pageWidth <= l.viewport, q(l));
   check('國家的列 ≥ 44px', await page.eval(`[...document.querySelectorAll('.origin-row')].every((r) => r.getBoundingClientRect().height >= 44)`));
+  ms = await mapState(page);
+  check('認識產區（世界）：產國標國名（衣索比亞、印度…至少 5 個，都是產國），互不重疊、都在地圖框裡',
+    ['衣索比亞', '印度'].every((t) => ms.texts.includes(t)) && ms.texts.length >= 5 && ms.ranks.every((r) => r === '1')
+      && ms.overlaps === 0 && ms.outside === 0, q(ms.texts));
+  check('太長的國名用短名（剛果民主共和國 → 民主剛果）', ms.texts.includes('民主剛果') && !ms.texts.includes('剛果民主共和國'), q(ms.texts));
+  check('還沒放大時小國（盧安達、蒲隆地）擠不下、不標', !ms.texts.includes('盧安達') && !ms.texts.includes('蒲隆地'), q(ms.texts));
+  await click(page, '[data-zoom="in"]');
+  await click(page, '[data-zoom="in"]');
+  ms = await mapState(page);
+  check('放大 4 倍：小國的國名出現了（盧安達或蒲隆地）', ms.texts.includes('盧安達') || ms.texts.includes('蒲隆地'), q(ms.texts));
+  await click(page, '[data-zoom="home"]');
   await tap(page, '.origin-world .origin-hit[data-code="PA"]');
+  check('點巴拿馬：下面顯示「巴拿馬・2 個產區　看介紹 ›」', (await mapState(page)).bar.replace(/\s+/g, '') === '巴拿馬・2個產區看介紹›');
+  await tap(page, '.origin-world .origin-hit[data-code="ET"]');
+  check('點喝過的國家：「衣索比亞・喝過 2／9 個產區」', (await mapState(page)).bar.replace(/\s+/g, '') === '衣索比亞・喝過2／9個產區看介紹›');
+  await tap(page, '.origin-world .origin-hit[data-code="PA"]');
+  await click(page, '.origin-pick-link');
   await page.waitFor(`location.hash === '#/origins/PA?mode=explore' && document.querySelector('.origin-country')`, { label: '點巴拿馬' });
   const panama = await page.eval(`({ intro: document.querySelector('.origin-text')?.textContent ?? '', tags: document.querySelectorAll('.origin-card > .note-tags .note-tag').length,
     rows: [...document.querySelectorAll('.origin-row[data-region]')].map((r) => r.dataset.region), detail: document.querySelector('.origin-detail').textContent,
@@ -385,6 +559,28 @@ try {
   const afterImport = await page.eval(`[...document.querySelectorAll('[data-country]')].map((a) => a.dataset.country)`);
   check('匯入 v5 後地圖照樣從名稱猜（古吉又變回猜的）', q(afterImport) === q(['ET', 'KE', 'CO', 'RW']), q(afterImport));
 
+  /* ===== 手機橫放 ===== */
+  await page.cdp('Emulation.setDeviceMetricsOverride', { width: 844, height: 390, deviceScaleFactor: 2, mobile: true });
+  await openExplore('#/origins?mode=explore', '.origin-progress');
+  const land = await page.eval(`(() => {
+    const f = document.querySelector('.origin-frame').getBoundingClientRect();
+    const b = [...document.querySelectorAll('.map-zoom-btn')].map((x) => x.getBoundingClientRect());
+    return { pageWidth: document.documentElement.scrollWidth, viewport: innerWidth, h: f.height, vh: innerHeight,
+      buttons: b.every((r) => r.top >= f.top && r.bottom <= f.bottom) };
+  })()`);
+  ms = await mapState(page);
+  check('手機橫放：地圖不超過畫面高度的 60%、按鈕都在地圖框裡、整頁不橫向捲動、國名不重疊',
+    land.h <= land.vh * 0.6 + 1 && land.buttons && land.pageWidth <= land.viewport && ms.overlaps === 0 && ms.outside === 0, q(land));
+  {
+    await frameRect(page);
+    const { data } = await page.cdp('Page.captureScreenshot', { format: 'png' });
+    await writeFile(path.join(shotDir, 'explore-landscape.png'), Buffer.from(data, 'base64'));
+  }
+  await openCountry(page, base, 'ET');
+  ms = await mapState(page);
+  check('手機橫放（國家頁）：名稱不重疊、都在地圖框裡', ms.overlaps === 0 && ms.outside === 0, q(ms));
+  await page.cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+
   /* ===== 離線 ===== */
   await page.setOffline(true);
   await page.eval(`location.hash = '#/backup'; true`);
@@ -399,7 +595,7 @@ try {
   check('沒有 JavaScript 錯誤', errors.length === 0, errors.join(' / '));
 
   /* ===== 沒有資料 ===== */
-  const empty = await openPage(chrome, base);
+  const empty = await openPage(chrome, `${base}#/settings`);
   await openWorld(empty, base);
   const emptyState = await empty.eval(`({ hint: document.querySelector('.origin-card > .hint').textContent, rows: document.querySelectorAll('[data-country]').length,
     unknown: Boolean(document.querySelector('.origin-unknown')), map: document.querySelectorAll('.origin-world path').length })`);

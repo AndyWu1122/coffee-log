@@ -18,6 +18,7 @@ export { FLAVOR_WHEEL, flavorNote, sortFlavorNotes } from './flavorWheel.js';
 export { CHANGELOG } from './changelog.js';
 export { decodeImage, photoForUpload } from './image.js';
 export { coverCrop, radarPoints, wrapText, layoutChips } from './cardLayout.js';
+export { fitView, viewBox, clampView, zoomAt, panBy, placeLabels } from './mapView.js';
 export { cloudPhotoPath } from './sync.js';
 export { newId } from './id.js';
 export {

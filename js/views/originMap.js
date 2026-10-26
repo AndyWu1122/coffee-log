@@ -2,10 +2,11 @@
 // 我的足跡：只用這支手機的豆子和紀錄（models.getOriginMap → js/origins.js），不連網路、不上傳；豆子沒選國家時用名稱和產地文字猜
 // 地圖自己用 SVG 畫（國界：js/worldMap.js，用到才載入）；顏色只用主題變數：國家依杯數 --heat-1～4、產區圓點 --accent
 // 點國家、圓點、清單才顯示詳細（手機沒有 hover）；豆子名稱是使用者輸入：一律經過 esc()
+// 地圖可以放大、拖曳（originMapSvg.js 的 bindMap）；世界地圖點國家先在下面顯示國名，再點那一行才進去
 import { getOriginMap, loadWorldMap, COUNTRY_BY_CODE, REGION_BY_KEY, CUP_LEVELS, regionsOf } from '../models.js';
 import { esc, setTitle } from './ui.js';
 import {
-  WORLD, WORLD_W, WORLD_H, WORLD_PX, cupsText, score, countryCenter, scrollWorldTo, countryHits, countrySvg, markSelected,
+  cupsText, score, countryCenter, countryHits, landPath, worldMapHtml, bindWorldMap, bindWorldPick, countrySvg, bindCountryMap, markSelected,
   originHref, modeSwitchHtml, bindModeSwitch, hbarSvg, flavorTagsHtml, beansHtml,
 } from './originMapSvg.js';
 
@@ -33,15 +34,11 @@ function renderWorld(container, summary, map) {
   const regionCount = summary.countries.reduce((n, c) => n + c.regions.length, 0);
   const max = summary.countries[0]?.cups ?? 1;
 
-  const paths = map.shapes.map((s) => {
-    const c = byCode.get(s.code);
-    const known = COUNTRY_BY_CODE.has(s.code);
-    return `<path class="origin-land heat-${c?.level ?? 0}${known ? ' is-link' : ''}" d="${s.d}"${known ? ` data-code="${s.code}"` : ''}></path>`;
-  }).join('');
+  const paths = map.shapes.map((s, i) => landPath(map, i, `heat-${byCode.get(s.code)?.level ?? 0}`)).join('');
   // 喝過的國家加一個圓點：盧安達、薩爾瓦多這些小國在世界地圖上點不到
   const markers = summary.countries.map((c) => {
     const [x, y] = countryCenter(map, c.code);
-    return `<circle class="origin-marker" cx="${x}" cy="${y}" r="${4 * WORLD_PX}"></circle>`;
+    return `<circle class="origin-marker" cx="${x}" cy="${y}" data-px="4"></circle>`;
   }).join('') + countryHits(map, summary.countries.map((c) => c.code));
   const label = summary.countries.length
     ? `世界地圖：喝過 ${summary.countries.length} 個國家，${summary.countries.map((c) => `${COUNTRY_BY_CODE.get(c.code).zh} ${c.cups} 杯`).join('、')}`
@@ -54,10 +51,8 @@ function renderWorld(container, summary, map) {
       <p class="hint">${summary.countries.length
         ? `${summary.countries.length} 個國家・${regionCount} 個產區・共 ${summary.totalCups - summary.unknown.cups} 杯`
         : summary.totalCups ? '還認不出喝過的產地，到下面的豆子選一下國家' : '記下第一杯之後，喝過的產地會出現在這裡'}</p>
-      <div class="chart-scroll origin-scroll">
-        <svg class="origin-map origin-world" width="${WORLD_W}" height="${WORLD_H}" viewBox="${WORLD.x} ${WORLD.y} ${WORLD.w} ${WORLD.h}"
-          role="img" aria-label="${esc(label)}">${paths}${markers}</svg>
-      </div>
+      ${worldMapHtml(label, `${paths}${markers}`)}
+      <div class="origin-pick-bar" aria-live="polite"></div>
       ${legendHtml()}
       ${summary.countries.length ? `<div class="hbars">
         ${summary.countries.map((c) => `<a class="hbar-row" href="${originHref({ code: c.code })}" data-country="${c.code}"
@@ -67,19 +62,19 @@ function renderWorld(container, summary, map) {
           <span class="hbar-value">${cupsText(c.cups)}</span>
         </a>`).join('')}
       </div>` : ''}
-      <p class="hint">點國家看產區・顏色依杯數（${levelText()}）</p>
+      <p class="hint">兩指縮放、拖曳移動・點國家看產區・顏色依杯數（${levelText()}）</p>
     </section>
     ${unknownHtml(summary.unknown)}
   </div>`;
 
   const page = container.querySelector('#origin-page');
   bindModeSwitch(page, '');
-  page.querySelector('.origin-world').addEventListener('click', (e) => {
-    const target = e.target.closest('[data-code]');
-    if (target) location.hash = originHref({ code: target.dataset.code });
+  // 喝過的國家標國名（杯數多的先放）；打開時喝最多的國家在中間
+  bindWorldMap(page, map, { primary: new Map(summary.countries.map((c) => [c.code, c.cups])), focus: summary.countries[0]?.code });
+  bindWorldPick(page, map, (code) => {
+    const c = byCode.get(code);
+    return { text: `${COUNTRY_BY_CODE.get(code).zh}・${c ? cupsText(c.cups) : '還沒喝過'}`, go: '看產區 ›', href: originHref({ code }) };
   });
-  // 打開時把喝最多的國家捲到中間
-  scrollWorldTo(page.querySelector('.origin-scroll'), map, summary.countries[0]?.code);
 }
 
 const levelText = () => CUP_LEVELS.map((n, i) => (CUP_LEVELS[i + 1] ? `${n}–${CUP_LEVELS[i + 1] - 1}` : `${n}+`)).join('、') + ' 杯';
@@ -133,6 +128,7 @@ function renderCountry(container, summary, map, code) {
 
   const page = container.querySelector('#origin-page');
   bindModeSwitch(page, code);
+  bindCountryMap(page, map, code, drunk);
   const detailText = page.querySelector('.origin-detail');
   const detailBox = page.querySelector('.origin-region-detail');
   const select = (key) => {

@@ -4,10 +4,18 @@
 //   node scripts/build-worldmap.mjs ne_50m.geojson
 // 投影：等距圓柱（x = 經度 + 180、y = 90 − 緯度），單位 0.01°、一律整數，路徑用相對座標縮小檔案
 // 簡化：Douglas–Peucker（容許誤差 TOLERANCE），太小的島嶼（外框 < MIN_RING）略過；南極洲不畫
+// 國名：Natural Earth 的 NAME_ZHT（繁中），不是台灣慣用的寫法用 ZH_FIX 改；標字位置用 Natural Earth 建議的 LABEL_X／LABEL_Y
+//   同一個代碼有好幾塊（例如澳洲的屬地）時只有最大的那塊標國名
 import { readFile, writeFile } from 'node:fs/promises';
 
 const TOLERANCE = 4;  // 0.04°（產地地圖放大到單一國家時也看不出來）
 const MIN_RING = 20;  // 0.2°
+
+// 產咖啡的國家在 App 裡一律用 js/origins.js 的名稱，這裡只改其他國家
+const ZH_FIX = {
+  TW: '台灣', CN: '中國', KR: '南韓', KP: '北韓', NZ: '紐西蘭', AU: '澳洲', HR: '克羅埃西亞', CZ: '捷克', ML: '馬利', MN: '蒙古',
+  GY: '蓋亞那', MT: '馬爾他', PS: '巴勒斯坦', CG: '剛果共和國', '北賽普勒斯土耳其共和國': '北賽普勒斯', '錫亞琴冰川': '',
+};
 
 const input = process.argv[2];
 if (!input) {
@@ -71,16 +79,23 @@ for (const f of geo.features) {
         .replace(/ -/g, '-');
     }
   }
-  if (d) countries.push({ code, d, box: main.b });
+  if (!d) continue;
+  const name = String(p.NAME_ZHT ?? '').trim();
+  const zh = ZH_FIX[code] ?? ZH_FIX[name] ?? name;
+  countries.push({ code, d, box: main.b, size: main.a, zh, label: project([p.LABEL_X, p.LABEL_Y]) });
 }
-countries.sort((a, b) => a.code.localeCompare(b.code));
+countries.sort((a, b) => a.code.localeCompare(b.code) || b.size - a.size);
+for (const [i, c] of countries.entries()) {
+  if (c.code && countries[i - 1]?.code === c.code) c.zh = '';
+}
 
 const out = `// 由 scripts/build-worldmap.mjs 產生，不要手動修改
 // 國界：Natural Earth 1:50m（公有領域）；等距圓柱投影，x = (經度 + 180) × 100、y = (90 − 緯度) × 100
 // code：ISO 3166-1 alpha-2（沒有代碼的地區是 ''，只畫出來、不能點）；box：最大那塊陸地的外框 [minX, minY, maxX, maxY]
+// zh：繁中國名（'' ＝不標國名：同一個代碼較小的那幾塊）；label：標國名的位置 [x, y]
 export const MAP_SCALE = 100;
 export const COUNTRY_SHAPES = [
-${countries.map((c) => `  { code: '${c.code}', box: [${c.box.join(', ')}], d: '${c.d}' },`).join('\n')}
+${countries.map((c) => `  { code: '${c.code}', zh: '${c.zh}', label: [${c.label.join(', ')}], box: [${c.box.join(', ')}], d: '${c.d}' },`).join('\n')}
 ];
 `;
 await writeFile(new URL('../js/worldMap.js', import.meta.url), out);
