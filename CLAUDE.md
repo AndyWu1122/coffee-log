@@ -41,7 +41,7 @@ js/sync.js         # 好友紀錄的同步（本機 friends 紀錄 → shared_br
 js/push.js         # 推播通知的瀏覽器那一邊（Notification、PushManager、iOS 主畫面判斷），只由 models.js 使用
 js/vendor/         # 第三方檔案原封不動（supabase-js UMD、qrcode-generator），來源與 SRI 見 js/vendor/README.md
 js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, dripperList, dripperForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, changelog（更新內容）, settings（設定與關於）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, profile（個人檔案）, stats（統計：SVG 圖表）, originMap（產地地圖「我的足跡」＋路由）, originExplore（產地地圖「認識產區」：介紹、圖鑑、想買清單）, originMapSvg（兩個模式共用的座標、放大範圍、模式切換、風味標籤）, privacy（隱私說明）, feedback（意見回饋）, notifications（通知設定）, admin（開發者後台）, tour（新手教學：遮罩＋說明卡片，不是路由）, heatmap（沖煮熱度圖的 SVG，統計／帳號／個人檔案共用）, ui（共用 DOM 工具）
-icons/
+icons/             # icons/flags/<小寫國家代碼>.svg：產地地圖的國旗（只有 COUNTRIES 的 32 國，svgo 壓縮過，來源與壓縮方式見 icons/flags/README.md）
 docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟、部署指令）、overnight-report.md（2026-10-26 通宵工作的報告）、roadmap.md（之後要開發、還沒開始的功能）
 supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）、functions/admin-delete-user（開發者刪別人的帳號）、functions/_shared/account.ts（兩者共用的刪除流程）、functions/feedback（意見回饋：存檔＋寄 Email 給站長；mail.ts 是設定檢查與錯誤說明的純函式）、functions/send-push（推播通知）、functions/_shared/webpush.ts（VAPID 簽章與 RFC 8291 加密，只用 Web Crypto）、functions/_shared/local.ts（`isLocalSupabase`：只有已知的本機網址才用公開的測試金鑰，其他一律當正式環境）
 scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs、webpush-test.mjs、onboarding-test.mjs、bean-photo-test.mjs、heatmap-test.mjs、origins-test.mjs、origin-map-ui-test.mjs、brew-ui-test.mjs（最後十二個不需要 Supabase）、build-worldmap.mjs（產生 js/worldMap.js，不是測試）、supabase-activity-test.mjs、social-heatmap-test.mjs、supabase-push-test.mjs、social-push-test.mjs、push-helpers.mjs（推播測試共用：解密、假推播伺服器）、vapid-keys.mjs（站長產生正式金鑰用，不是測試）
@@ -166,6 +166,8 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - **國名**（`placeLabels`）：依 rank、priority 一個一個放，和放好的字、產區圓點、放大按鈕重疊或超出地圖框就不顯示；字外圍描一圈 `--surface`（`paint-order: stroke`）
   - 世界：我的足跡標喝過的國家（杯數多的先放）、認識產區標 32 國（面積大的先放）；其他國家放大到 2 倍以上才標淡色（`--text-dim`）的國名
   - 國家頁：這個國家的國名（粗）→ 產區名（喝過的先放，放圓點右邊、放不下改左邊）→ 鄰國（淡色）
+- **國旗**（1.19.0）：`originMapSvg.flagHtml(code)` → `<img class="flag" src="icons/flags/xx.svg" alt="">`（旁邊一定有國名，所以 alt 空白）；放在兩個模式的國家清單（我的足跡的橫條、認識產區的國家列）和國家頁的標題；不用 emoji（Windows 不顯示國旗 emoji）
+  - 新增產國時要加國旗並放進 `sw.js` 的 `ASSETS`（origins-test 檢查每國都有、都在 ASSETS、沒有 script／外部連結、總共 ≤ 300KB）
 - **點世界地圖上的國家**：外框加粗（`.origin-pick`）、地圖下面 `.origin-pick-bar` 顯示「國名・杯數／產區數　看產區 ›／看介紹 ›」，再點那一行才進國家；不是產國的只顯示「X（不在咖啡產地清單裡）」；點海上取消
 - 測試：`origins-test.mjs`（Node：清單、點在國家裡、國名與標字位置、比對、統計、放大拖曳的計算、國名的擺放）、`origin-map-ui-test.mjs`（headless Chrome 390px：顏色、清單、點擊、真的觸控事件拖曳與兩指縮放、滾輪、按鈕、拖曳不算點擊、國名不重疊、點國家顯示國名、橫放、表單的套用、備份 v6／v5、XSS、離線、深淺色截圖、CSP；從 `#/settings` 打開，首頁的新手教學會擋住真的觸控）
 - **兩個模式**（上方切換，`originMapSvg.originHref` 組網址；切換時留在同一個國家）：我的足跡（上面這些）｜認識產區（1.16.0，`js/views/originExplore.js`）
@@ -181,6 +183,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 ## 第三方內容的授權
 - 風味輪：SCA／World Coffee Research「Coffee Taster's Flavor Wheel」，**CC BY-NC-ND 4.0**（要標示來源、不能商用、不能改作；未經授權的翻譯不能散布）。App 用的是自己翻譯、重新排列的版本：個人使用沒問題，**要給更多人用或商用之前，先寫信問 SCA**。來源標示在「設定與關於」最下面（`.settings-credits`）
 - 國界：Natural Earth（公有領域，不用標示；設定頁寫了 Made with Natural Earth）
+- 國旗：flag-icons（MIT，授權全文在 `icons/flags/README.md`；設定頁有標示）
 
 ## 不做計時器
 使用者的秤本身有計時功能，App 不做計時器；總時間在表單手動輸入（分、秒兩欄）。

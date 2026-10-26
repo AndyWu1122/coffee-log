@@ -7,6 +7,7 @@
 // 放大、拖曳（1.17.0）：真的觸控事件（CDP Input.dispatchTouchEvent）拖曳、兩指縮放，滾輪、按鈕；拖曳不算點擊；
 // 國名：放大後變多、畫面上的字互不重疊、都在地圖框裡；點國家先在下面顯示國名，再點那一行才進去；手機橫放
 // 認識產區的國家頁（1.17.1）：產區介紹在地圖正下方；點圓點不捲動，點列表、直接打開產區時捲回地圖
+// 國旗（1.19.0）：兩個模式的國家清單、國家頁標題都有，載入成功、4:3，離線也在
 //
 // 用法：node scripts/origin-map-ui-test.mjs
 
@@ -73,6 +74,16 @@ async function openPage(chrome, url) {
   await prepare(page);
   return page;
 }
+
+/** 這一頁的國旗：哪些國家、是不是都載入成功（naturalWidth > 0）、大小（4:3）；sel 是範圍 */
+const flags = (page, sel) => page.eval(`(() => {
+  const imgs = [...document.querySelectorAll(${JSON.stringify(sel)} + ' img.flag')];
+  return { codes: imgs.map((i) => i.getAttribute('src').match(/flags\\/(\\w+)\\.svg$/)[1]),
+    broken: imgs.filter((i) => !i.complete || !i.naturalWidth).map((i) => i.getAttribute('src')),
+    ratioOk: imgs.every((i) => { const r = i.getBoundingClientRect(); return r.width >= 16 && Math.abs(r.width / r.height - 4 / 3) < 0.1; }),
+    alt: imgs.every((i) => i.getAttribute('alt') === '') };
+})()`);
+const flagsLoaded = (page, sel) => page.waitFor(`[...document.querySelectorAll(${JSON.stringify(sel)} + ' img.flag')].every((i) => i.complete)`, { label: `${sel} 的國旗載入` });
 
 async function screenshot(page, file) {
   const height = await page.eval('Math.ceil(document.documentElement.scrollHeight)');
@@ -280,8 +291,15 @@ try {
   check('點清單：進到那個國家', true);
   l = await layout(page);
   check('長名稱的豆子：國家頁不橫向捲動', l.pageWidth <= l.viewport, q(l));
+  await flagsLoaded(page, '.origin-card h2');
+  let f = await flags(page, '.origin-card h2');
+  check('我的足跡的國家頁：標題前面有國旗（哥倫比亞）、載入成功、4:3、alt 空白（旁邊有國名）', q(f.codes) === q(['co']) && !f.broken.length && f.ratioOk && f.alt, q(f));
 
   /* ===== 國家：衣索比亞 ===== */
+  await openWorld(page, base);
+  await flagsLoaded(page, '.hbars');
+  f = await flags(page, '.hbars');
+  check('我的足跡的國家橫條：每一國都有國旗、都載入成功', q(f.codes) === q(['et', 'ke', 'co', 'rw']) && !f.broken.length && f.ratioOk, q(f));
   await openCountry(page, base, 'ET');
   check('標題是國家名稱', (await page.eval(`document.getElementById('page-title').textContent`)) === '衣索比亞');
   const dots = await page.eval(`(() => {
@@ -445,6 +463,9 @@ try {
   l = await layout(page);
   check('認識產區（世界）：整頁不橫向捲動', l.pageWidth <= l.viewport, q(l));
   check('國家的列 ≥ 44px', await page.eval(`[...document.querySelectorAll('.origin-row')].every((r) => r.getBoundingClientRect().height >= 44)`));
+  await flagsLoaded(page, '.origin-rows');
+  f = await flags(page, '.origin-rows');
+  check('認識產區的國家列：32 國都有國旗、都載入成功、4:3', f.codes.length === 32 && new Set(f.codes).size === 32 && !f.broken.length && f.ratioOk && f.alt, q({ n: f.codes.length, broken: f.broken }));
   ms = await mapState(page);
   check('認識產區（世界）：產國標國名（衣索比亞、印度…至少 5 個，都是產國），互不重疊、都在地圖框裡',
     ['衣索比亞', '印度'].every((t) => ms.texts.includes(t)) && ms.texts.length >= 5 && ms.ranks.every((r) => r === '1')
@@ -466,6 +487,9 @@ try {
   const panama = await page.eval(`({ intro: document.querySelector('.origin-text')?.textContent ?? '', tags: document.querySelectorAll('.origin-card > .note-tags .note-tag').length,
     rows: [...document.querySelectorAll('.origin-row[data-region]')].map((r) => r.dataset.region), detail: document.querySelector('.origin-detail').textContent,
     mode: document.querySelector('.origin-modes .segmented').dataset.value })`);
+  await flagsLoaded(page, '.origin-card h2');
+  f = await flags(page, '.origin-card h2');
+  check('認識產區的國家介紹：標題前面有國旗（巴拿馬）', q(f.codes) === q(['pa']) && !f.broken.length && f.ratioOk, q(f));
   check('沒喝過的國家（巴拿馬）也有國家介紹、常見風味、所有產區', panama.intro.includes("藝伎") && panama.tags >= 3 && q(panama.rows) === q(["PA.boquete", "PA.volcan"]) && panama.mode === "explore", q(panama));
   // 點地圖上的圓點：畫面不捲動、介紹出現在地圖正下方
   await frameRect(page);
@@ -615,6 +639,10 @@ try {
   await page.eval(`location.hash = '#/origins/KE'; true`);
   await page.waitFor(`document.querySelector('#origin-page .origin-country')`, { label: '離線開產地地圖' });
   check('離線：產地地圖照常顯示', true);
+  await flagsLoaded(page, '.origin-card h2');
+  f = await flags(page, '.origin-card h2');
+  const cached = await page.eval(`(async () => { const all = await Promise.all(${q(['ke', 'mx', 'bo', 'tw'])}.map((c) => caches.match('icons/flags/' + c + '.svg'))); return all.every(Boolean); })()`);
+  check('離線：國旗照常顯示（Service Worker 的快取裡有）', q(f.codes) === q(['ke']) && !f.broken.length && cached, q({ f, cached }));
   await page.setOffline(false);
 
   check('沒有 CSP 違規', (await page.eval('window.__csp')).length === 0, (await page.eval('window.__csp')).join(' / '));

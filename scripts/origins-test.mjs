@@ -267,6 +267,26 @@ const toMap = (lat, lon) => [(lon + 180) * MAP_SCALE, (90 - lat) * MAP_SCALE];
   check('沒有資料', empty.totalCups === 0 && empty.countries.length === 0 && empty.unknown.cups === 0);
 }
 
+/* ===== 國旗（icons/flags，見 icons/flags/README.md） ===== */
+{
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const dir = new URL('../icons/flags/', import.meta.url);
+  const files = readdirSync(dir).filter((f) => f.endsWith('.svg'));
+  const wanted = COUNTRIES.map((c) => `${c.code.toLowerCase()}.svg`);
+  check('每個國家都有國旗、沒有多的', q([...files].sort()) === q([...wanted].sort()),
+    `少：${wanted.filter((f) => !files.includes(f)).join(',')} 多：${files.filter((f) => !wanted.includes(f)).join(',')}`);
+  const sw = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
+  const missing = files.filter((f) => !sw.includes(`'icons/flags/${f}'`));
+  check('國旗都在 sw.js 的 ASSETS（離線看得到）', missing.length === 0, missing.join(', '));
+  const unsafe = files.filter((f) => {
+    const svg = readFileSync(new URL(f, dir), 'utf8');
+    return !svg.startsWith('<svg') || /<script|<foreignObject|<image|\son\w+=|href="(?!#)/i.test(svg);
+  });
+  check('國旗是單純的 SVG（沒有 script、外部連結、內嵌圖片）', unsafe.length === 0, unsafe.join(', '));
+  const kb = files.reduce((sum, f) => sum + readFileSync(new URL(f, dir)).length, 0) / 1024;
+  check(`國旗總共 ≤ 300KB（目前 ${kb.toFixed(0)}KB）`, kb <= 300);
+}
+
 console.log(`\n${passed}/${passed + failures.length} 通過`);
 if (failures.length) {
   console.log(`失敗：\n- ${failures.join('\n- ')}`);

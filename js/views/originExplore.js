@@ -8,7 +8,7 @@ import {
 import { esc, toast } from './ui.js';
 import {
   cupsText, score, toMap, countryHits, landPath, worldMapHtml, bindWorldMap, bindWorldPick, countrySvg, bindCountryMap, markSelected,
-  originHref, modeSwitchHtml, bindModeSwitch, hbarSvg, flavorTagsHtml, beansHtml,
+  originHref, modeSwitchHtml, bindModeSwitch, hbarSvg, flavorTagsHtml, beansHtml, flagHtml,
 } from './originMapSvg.js';
 
 export async function render(container, { summary, map, code, region, isCurrent }) {
@@ -68,7 +68,7 @@ function renderWorld(container, ctx, wishlist) {
             const all = regionsOf(c.code);
             const n = all.filter((r) => ctx.drunk.has(r.key)).length;
             return `<a class="origin-row" href="${originHref({ code: c.code, mode: 'explore' })}" data-country="${c.code}">
-              <span class="origin-row-name">${esc(c.zh)}</span>
+              <span class="origin-row-name">${flagHtml(c.code)}${esc(c.zh)}</span>
               <span class="origin-row-status${n ? ' is-drunk' : ''}">${n ? `喝過 ${n}／${all.length}` : `${all.length} 個產區`}</span>
             </a>`;
           }).join('')}
@@ -123,7 +123,7 @@ function renderCountry(container, ctx, code, initialRegion) {
     <p class="origin-back"><a href="${originHref({ mode: 'explore' })}">‹ 世界地圖</a></p>
     ${modeSwitchHtml('explore')}
     <section class="origin-card">
-      <h2>${esc(country.zh)} <small class="hint">${esc(country.en)}</small></h2>
+      <h2>${flagHtml(code)}${esc(country.zh)} <small class="hint">${esc(country.en)}</small></h2>
       ${g ? `<p class="hint">${altitudeText(g.altitude)}・${processText(g.processes, ctx.guide.process)}</p>
         <p class="origin-text">${esc(g.text)}</p>
         <p class="origin-sub">常見風味</p>

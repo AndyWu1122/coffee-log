@@ -69,7 +69,7 @@ export function render(container, { isCurrent }) {
 
       <!-- 來源標示：風味輪是 SCA 的 CC BY-NC-ND 4.0（要標示來源）；國界是 Natural Earth（公有領域，標示是禮貌） -->
       <p class="settings-credits hint">風味輪：Coffee Taster's Flavor Wheel © SCA／World Coffee Research（CC BY-NC-ND 4.0），中文為本 App 自行翻譯<br>
-        地圖：Made with Natural Earth</p>
+        地圖：Made with Natural Earth・國旗：flag-icons（MIT）</p>
       <p class="settings-version" id="app-version" hidden><a href="#/changelog"></a></p>
     </div>`;
 

@@ -1,7 +1,7 @@
 // Service Worker：安裝時預先快取所有檔案，之後一律從快取讀取（離線可用）
 // ⚠ 修改任何前端檔案後，APP_VERSION 至少第三碼 +1，使用者才會收到新版本（規則見 CLAUDE.md「版本號」）
 // 它也是「設定與關於」頁顯示的版本號、意見回饋附的版本（app.js 用 'version' 訊息詢問）
-const APP_VERSION = '1.18.0';
+const APP_VERSION = '1.19.0';
 const CACHE_NAME = `coffee-log-v${APP_VERSION}`;
 
 const ASSETS = [
@@ -31,6 +31,38 @@ const ASSETS = [
   'js/originGuide.js',
   'js/vendor/supabase-js-2.117.3.js',
   'js/vendor/qrcode-generator-2.0.4.js',
+  'icons/flags/bi.svg',
+  'icons/flags/bo.svg',
+  'icons/flags/br.svg',
+  'icons/flags/cd.svg',
+  'icons/flags/cn.svg',
+  'icons/flags/co.svg',
+  'icons/flags/cr.svg',
+  'icons/flags/do.svg',
+  'icons/flags/ec.svg',
+  'icons/flags/et.svg',
+  'icons/flags/gt.svg',
+  'icons/flags/hn.svg',
+  'icons/flags/id.svg',
+  'icons/flags/in.svg',
+  'icons/flags/jm.svg',
+  'icons/flags/ke.svg',
+  'icons/flags/la.svg',
+  'icons/flags/mm.svg',
+  'icons/flags/mx.svg',
+  'icons/flags/ni.svg',
+  'icons/flags/pa.svg',
+  'icons/flags/pe.svg',
+  'icons/flags/pg.svg',
+  'icons/flags/rw.svg',
+  'icons/flags/sv.svg',
+  'icons/flags/th.svg',
+  'icons/flags/tw.svg',
+  'icons/flags/tz.svg',
+  'icons/flags/ug.svg',
+  'icons/flags/us.svg',
+  'icons/flags/vn.svg',
+  'icons/flags/ye.svg',
   'js/views/ui.js',
   'js/views/settings.js',
   'js/views/flavorPicker.js',

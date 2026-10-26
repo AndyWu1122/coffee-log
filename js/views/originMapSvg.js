@@ -11,6 +11,8 @@ const COUNTRY_ZOOM = 8;        // 國家頁最多再放大幾倍
 const TAP_SLOP = 8;            // 手指移動超過幾 px 就算拖曳，不算點擊
 
 export const cupsText = (n) => `${n} 杯`;
+/** 國旗（icons/flags，flag-icons 的 SVG）：旁邊一定寫了國名，所以只是裝飾，alt 留空；code 只來自 COUNTRIES */
+export const flagHtml = (code) => `<img class="flag" src="icons/flags/${code.toLowerCase()}.svg" alt="" width="4" height="3">`;
 export const score = (n) => (n == null ? '' : `・平均 ${n.toFixed(1)} 分`);
 
 /** 經緯度 → 地圖座標 */

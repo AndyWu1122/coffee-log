@@ -7,7 +7,7 @@ import { getOriginMap, loadWorldMap, COUNTRY_BY_CODE, REGION_BY_KEY, CUP_LEVELS,
 import { esc, setTitle } from './ui.js';
 import {
   cupsText, score, countryCenter, countryHits, landPath, worldMapHtml, bindWorldMap, bindWorldPick, countrySvg, bindCountryMap, markSelected,
-  originHref, modeSwitchHtml, bindModeSwitch, hbarSvg, flavorTagsHtml, beansHtml,
+  originHref, modeSwitchHtml, bindModeSwitch, hbarSvg, flavorTagsHtml, beansHtml, flagHtml,
 } from './originMapSvg.js';
 
 export async function render(container, { id, query, isCurrent }) {
@@ -57,7 +57,7 @@ function renderWorld(container, summary, map) {
       ${summary.countries.length ? `<div class="hbars">
         ${summary.countries.map((c) => `<a class="hbar-row" href="${originHref({ code: c.code })}" data-country="${c.code}"
             aria-label="${esc(`${COUNTRY_BY_CODE.get(c.code).zh}：${cupsText(c.cups)}，${c.regions.length} 個產區，看產區`)}">
-          <span class="hbar-name">${esc(COUNTRY_BY_CODE.get(c.code).zh)}</span>
+          <span class="hbar-name">${flagHtml(c.code)}${esc(COUNTRY_BY_CODE.get(c.code).zh)}</span>
           ${hbarSvg(c.cups, max)}
           <span class="hbar-value">${cupsText(c.cups)}</span>
         </a>`).join('')}
@@ -113,7 +113,7 @@ function renderCountry(container, summary, map, code) {
     <p class="origin-back"><a href="${originHref()}">‹ 世界地圖</a></p>
     ${modeSwitchHtml('mine')}
     <section class="origin-card">
-      <h2>${esc(country.zh)} <small class="hint">${esc(country.en)}</small></h2>
+      <h2>${flagHtml(code)}${esc(country.zh)} <small class="hint">${esc(country.en)}</small></h2>
       <p class="hint">${c ? `${cupsText(c.cups)}${score(c.avgRating)}・喝過 ${drunk.size}／${all.length} 個產區` : `還沒喝過${country.zh}的豆子`}</p>
       ${countrySvg(map, code, drunk, `${country.zh}的地圖，圓點是產區（實心＝喝過）`)}
       <p class="chart-detail origin-detail" aria-live="polite"></p>
