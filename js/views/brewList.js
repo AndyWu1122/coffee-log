@@ -6,9 +6,8 @@ import {
 import { esc, setTitle, toast } from './ui.js';
 import { exportBackup, errorReason } from './backup.js';
 
-const dateFmt = new Intl.DateTimeFormat('zh-TW', {
-  month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
-});
+const timeFmt = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false });
+const weekdayFmt = new Intl.DateTimeFormat('zh-TW', { weekday: 'narrow' });
 
 const RATING_FILTERS = [
   { value: '', label: '全部評分' },
@@ -95,7 +94,11 @@ export async function render(container, { query = {}, isCurrent }) {
       ${filtered ? '<button type="button" class="link-btn" id="clear-filter">清除篩選</button>' : ''}
     </div>
     ${brews.length
-      ? `<ul class="list">${brews.map(brewCard).join('')}</ul>`
+      ? groupByDay(brews).map(({ label, items }) => `
+          <section class="day-group">
+            <h2 class="list-date">${esc(label)}</h2>
+            <ul class="list">${items.map(brewCard).join('')}</ul>
+          </section>`).join('')
       : '<div class="empty"><p>沒有符合條件的紀錄</p></div>'}
     <a class="fab" href="#/brew/new" aria-label="新增紀錄">＋</a>
   `;
@@ -127,28 +130,55 @@ export async function render(container, { query = {}, isCurrent }) {
   return revokeThumbs;
 }
 
+const dayKey = (d) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+
+/** 依沖煮日（本機日期）分組，標題：今天、昨天、10/24（六）；不是今年的加年份 */
+export function groupByDay(brews, now = new Date()) {
+  const today = dayKey(now);
+  const yesterday = dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+  const groups = [];
+  for (const b of brews) {
+    const d = new Date(b.brewedAt);
+    const key = dayKey(d);
+    if (groups.at(-1)?.key !== key) {
+      const md = `${d.getMonth() + 1}/${d.getDate()}（${weekdayFmt.format(d)}）`;
+      const label = key === today ? '今天'
+        : key === yesterday ? '昨天'
+          : d.getFullYear() === now.getFullYear() ? md : `${d.getFullYear()}/${md}`;
+      groups.push({ key, label, items: [] });
+    }
+    groups.at(-1).items.push(b);
+  }
+  return groups;
+}
+
 function brewCard(b) {
   const stars = b.rating ? '★'.repeat(b.rating) + '☆'.repeat(5 - b.rating) : '';
-  const details = [
+  // 參數固定兩行：器材｜數字
+  const gear = [
     b.dripperName,
-    [b.grinderName, b.grindSetting].filter(Boolean).join(' '), // 例：C40 24 格
+    [b.grinderName, b.grindSetting ? `刻度 ${b.grindSetting}` : ''].filter(Boolean).join(' '), // 例：C40 刻度 24
+  ].filter(Boolean);
+  const numbers = [
     `${b.coffeeG}g → ${b.waterG}g`,
     formatRatio(b.ratio),
     b.tempC != null ? `${b.tempC}°C` : '',
     b.totalTimeS != null ? formatSeconds(b.totalTimeS) : '',
   ].filter(Boolean);
+  const row = (cls, items) => `<div class="card-row ${cls}">${items.map((d) => `<span>${esc(d)}</span>`).join('')}</div>`;
 
   return `
-    <li><a class="card${b.thumb ? ' has-thumb' : ''}" href="#/brew/${esc(b.id)}">
+    <li><a class="card brew-card${b.thumb ? ' has-thumb' : ''}" href="#/brew/${esc(b.id)}">
       <div class="card-body">
         <div class="card-head">
           <span class="card-title">${esc(b.beanName)}${b.visibility === 'friends'
             ? ' <span class="shared-badge" title="好友看得到" aria-label="好友看得到">👥</span>' : ''}</span>
           <span class="stars" aria-label="評分 ${b.rating ?? '未評'}">${stars}</span>
         </div>
-        <div class="card-row">${details.map((d) => `<span>${esc(d)}</span>`).join('')}</div>
-        <div class="card-row">
-          <span>${esc(dateFmt.format(new Date(b.brewedAt)))}</span>
+        ${gear.length ? row('card-gear', gear) : ''}
+        ${row('card-numbers', numbers)}
+        <div class="card-row card-time">
+          <span>${esc(timeFmt.format(new Date(b.brewedAt)))}</span>
           ${b.restDays != null ? `<span>養豆 ${b.restDays} 天</span>` : ''}
         </div>
         ${noteTags(b.flavorNotes)}

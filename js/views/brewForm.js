@@ -116,22 +116,28 @@ export async function render(container, { id, query, isCurrent }) {
         ${hasActiveDripper ? '' : '<a class="field-link" href="#/drippers/new">＋ 新增濾杯</a>'}
       </div>
 
+      <div class="field" data-field="grinderId">
+        <label for="grinderId">磨豆機</label>
+        <select id="grinderId" name="grinderId">
+          <option value="">未指定</option>
+          ${grinderOptions.map((g) => `
+            <option value="${esc(g.id)}" ${g.id === b.grinderId ? 'selected' : ''}>
+              ${esc(g.name)}${g.archived ? '（已封存）' : ''}
+            </option>`).join('')}
+        </select>
+        <div class="error"></div>
+        ${hasActiveGrinder ? '' : '<a class="field-link" href="#/grinders/new">＋ 新增磨豆機</a>'}
+      </div>
+
       <div class="field-row">
-        <div class="field" data-field="grinderId">
-          <label for="grinderId">磨豆機</label>
-          <select id="grinderId" name="grinderId">
-            <option value="">未指定</option>
-            ${grinderOptions.map((g) => `
-              <option value="${esc(g.id)}" ${g.id === b.grinderId ? 'selected' : ''}>
-                ${esc(g.name)}${g.archived ? '（已封存）' : ''}
-              </option>`).join('')}
-          </select>
-          <div class="error"></div>
-          ${hasActiveGrinder ? '' : '<a class="field-link" href="#/grinders/new">＋ 新增磨豆機</a>'}
-        </div>
         <div class="field" data-field="grindSetting">
           <label for="grindSetting">研磨度</label>
           <input id="grindSetting" name="grindSetting" value="${esc(b.grindSetting)}" placeholder="例：24 格" autocomplete="off">
+          <div class="error"></div>
+        </div>
+        <div class="field" data-field="tempC">
+          <label for="tempC">水溫 (°C)</label>
+          <input id="tempC" name="tempC" type="number" inputmode="numeric" min="70" max="100" value="${esc(b.tempC ?? '')}" placeholder="92">
           <div class="error"></div>
         </div>
       </div>
@@ -150,17 +156,17 @@ export async function render(container, { id, query, isCurrent }) {
       </div>
       <div class="ratio-display" id="ratio">粉水比 ${formatRatio(ratio(b))}</div>
 
-      <div class="field" data-field="tempC">
-        <label for="tempC">水溫 (°C)</label>
-        <input id="tempC" name="tempC" type="number" inputmode="numeric" min="70" max="100" value="${esc(b.tempC ?? '')}" placeholder="92">
-        <div class="error"></div>
-      </div>
-
       <div class="field" data-field="totalTimeS">
         <span class="label">總時間</span>
         <div class="field-row">
-          <input name="totalMin" type="number" inputmode="numeric" min="0" value="${esc(totalMin)}" placeholder="分" aria-label="分">
-          <input name="totalSec" type="number" inputmode="numeric" min="0" max="59" value="${esc(totalSec)}" placeholder="秒" aria-label="秒">
+          <label class="unit-input">
+            <input name="totalMin" type="number" inputmode="numeric" min="0" value="${esc(totalMin)}" placeholder="2" aria-label="分">
+            <span class="unit" aria-hidden="true">分</span>
+          </label>
+          <label class="unit-input">
+            <input name="totalSec" type="number" inputmode="numeric" min="0" max="59" value="${esc(totalSec)}" placeholder="30" aria-label="秒">
+            <span class="unit" aria-hidden="true">秒</span>
+          </label>
         </div>
         <div class="error"></div>
       </div>
@@ -171,12 +177,14 @@ export async function render(container, { id, query, isCurrent }) {
         <div class="error"></div>
       </div>
 
-      ${Object.entries(FLAVOR).map(([key, label]) => `
-        <div class="field" data-field="flavor.${key}">
-          <span class="label">${label}</span>
-          ${segmentedHtml(`flavor.${key}`, SCORE_OPTIONS, b.flavor?.[key], { allowEmpty: true })}
-          <div class="error"></div>
-        </div>`).join('')}
+      <div class="score-rows">
+        ${Object.entries(FLAVOR).map(([key, label]) => `
+          <div class="field score-row" data-field="flavor.${key}">
+            <span class="label">${label}</span>
+            ${segmentedHtml(`flavor.${key}`, SCORE_OPTIONS, b.flavor?.[key], { allowEmpty: true })}
+            <div class="error"></div>
+          </div>`).join('')}
+      </div>
 
       <div class="field" data-field="flavorNotes">
         <span class="label">風味輪</span>
@@ -201,8 +209,8 @@ export async function render(container, { id, query, isCurrent }) {
           <div class="error"></div>
         </div>` : ''}
 
+      <button class="btn btn-primary btn-block save-bar" type="submit">儲存</button>
       <div class="actions">
-        <button class="btn btn-primary btn-block" type="submit">儲存</button>
         <button class="btn btn-block" type="button" data-action="share">${isNew ? '儲存並分享' : '分享'}</button>
         ${isNew ? '' : `
           <a class="btn btn-block" href="#/brew/new?from=${esc(id)}">用這次參數再沖一杯</a>

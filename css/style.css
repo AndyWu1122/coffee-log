@@ -313,7 +313,13 @@ a { color: var(--accent); }
   object-fit: cover;
   background: var(--surface-2);
 }
-.stars { color: var(--accent); letter-spacing: 1px; white-space: nowrap; }
+.stars { color: var(--accent); letter-spacing: 1px; white-space: nowrap; font-size: 1.2rem; line-height: 1; }
+.brew-card .card-body { display: grid; gap: 4px; }
+.card-numbers { color: var(--text); }
+/* 首頁依日期分組 */
+.day-group { display: grid; gap: 8px; }
+.day-group + .day-group { margin-top: 18px; }
+.list-date { margin: 0; font-size: 0.9rem; font-weight: 600; color: var(--text-dim); }
 .badge {
   display: inline-block;
   padding: 0 8px;
@@ -538,6 +544,29 @@ input:focus, select:focus, textarea:focus {
 .btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
 .btn-block { width: 100%; }
 .actions { display: grid; gap: 12px; margin-top: 8px; }
+/* 紀錄表單的「儲存」：貼在分頁列上方，不用滑到最下面（要是 form 的直接子元素，sticky 只在父元素的範圍內移動） */
+.save-bar {
+  position: sticky;
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 8px);
+  z-index: 5;
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 8px var(--bg);
+}
+/* 酸甜苦醇：名稱在左、1–5 在右，一項一列 */
+.score-rows { display: grid; gap: 8px; }
+.score-row { display: grid; grid-template-columns: 3.5em 1fr; align-items: center; gap: 8px; }
+.score-row > .label { font-size: 0.95rem; }
+.score-row > .error { grid-column: 1 / -1; }
+/* 數字後面一直顯示單位（總時間的分、秒） */
+.unit-input { position: relative; }
+.unit-input input { padding-right: 2.4em; }
+.unit-input .unit {
+  position: absolute;
+  right: 12px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  pointer-events: none;
+}
 
 .filter-bar { display: grid; grid-template-columns: 3fr 2fr; gap: 10px; }
 .list-meta {
@@ -626,6 +655,7 @@ input:focus, select:focus, textarea:focus {
 .update-banner:not([hidden]) ~ #updated-banner { display: none; }
 /* 提示出現時，把 FAB 與 toast 往上移，避免被蓋住 */
 body:has(.update-banner:not([hidden])) .fab { bottom: calc(var(--tabbar-h) + 100px + var(--safe-bottom)); }
+body:has(.update-banner:not([hidden])) .save-bar { bottom: calc(var(--tabbar-h) + 96px + var(--safe-bottom)); }
 body:has(.update-banner:not([hidden])) .toast { bottom: calc(var(--tabbar-h) + 180px + var(--safe-bottom)); }
 
 /* ===== 咖啡社群：帳號、好友 ===== */

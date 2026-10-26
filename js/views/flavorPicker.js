@@ -68,6 +68,7 @@ export function createFlavorPicker(el, initialKeys = []) {
   const selected = new Set(initialKeys);
   let zoomed = null; // 目前放大的大類節點；null 為總覽
 
+  /** labelSize 為 null 時不畫字 */
   function sectorSvg(s, { labelSize, labelMin, dim }) {
     const { node } = s;
     const isSel = selected.has(node.key);
@@ -77,13 +78,14 @@ export function createFlavorPicker(el, initialKeys = []) {
       <path class="sector${isDim ? ' dim' : ''}${isSel ? ' is-selected' : ''}" d="${sectorPath(s.r0, s.r1, s.a0, s.a1)}"
         fill="${node.color}" data-key="${esc(node.key)}" tabindex="0" role="button"
         aria-label="${esc(flavorNote(node.key).path.join(' › '))}" aria-pressed="${isSel}"></path>
-      ${radialLabel(s, text, labelSize, labelMin, isDim ? null : node.ink)}`;
+      ${labelSize ? radialLabel(s, text, labelSize, labelMin, isDim ? null : node.ink) : ''}`;
   }
 
   function wheelSvg() {
     if (!zoomed) {
       const sectors = layout(FLAVOR_WHEEL, 0, TAU, OVERVIEW_RADII);
-      const size = { 1: [11, 8], 2: [8.5, 7], 3: [7, 6.5] };
+      // 最外圈（細項）的字在手機上只有 6–7px 讀不到：總覽不畫，放大後才顯示
+      const size = { 1: [11, 8], 2: [8.5, 7], 3: [null, null] };
       return `
         ${sectors.map((s) => sectorSvg(s, {
           labelSize: size[s.node.depth][0], labelMin: size[s.node.depth][1], dim: s.node.depth > 1,
