@@ -50,6 +50,16 @@ select throws_ok(tests.brew_with('dripper', quote_literal(repeat('x', 101))), '2
 select throws_ok(tests.brew_with('grinder_name', quote_literal(E'C40\r\nevil')), '23514', null, '磨豆機名稱含換行被拒絕');
 select throws_ok(tests.brew_with('grind_setting', quote_literal(repeat('x', 101))), '23514', null, '研磨度 101 字被拒絕');
 
+/* ========== shared_brews：沖煮方式（1.21.0） ========== */
+select throws_ok(tests.brew_with('method', quote_literal('french')), '23514', null, '不認得的沖煮方式被拒絕');
+select throws_ok(tests.brew_with('method', quote_literal('')), '23514', null, '沖煮方式空字串被拒絕');
+select lives_ok(tests.brew_with('method', quote_literal('siphon')), '賽風可以');
+select lives_ok($$ insert into public.shared_brews (id, bean_name, brewed_at, coffee_g, water_g)
+  values ('cccccccc-1111-0000-0000-000000000000', '舊版 App', now(), 15, 240) $$, '舊版 App 不帶 method 照常可以上傳');
+select is((select method from public.shared_brews where id = 'cccccccc-1111-0000-0000-000000000000'), 'pourover', '不帶 method＝手沖');
+select lives_ok($$ update public.shared_brews set method = 'siphon' where id = 'cccccccc-1111-0000-0000-000000000000' $$, '可以改沖煮方式');
+select is((select method from public.shared_brews where id = 'cccccccc-1111-0000-0000-000000000000'), 'siphon', '改成賽風');
+
 /* ========== shared_brews：評分與風味 ========== */
 select throws_ok(tests.brew_with('rating', '99'), '23514', null, '評分 99 被拒絕');
 select throws_ok(tests.brew_with('rating', '0'), '23514', null, '評分 0 被拒絕');

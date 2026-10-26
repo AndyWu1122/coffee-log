@@ -25,9 +25,9 @@ export {
   COUNTRIES, REGIONS, ORIGIN_GROUPS, COUNTRY_BY_CODE, REGION_BY_KEY, CUP_LEVELS, regionsOf, matchOrigin, beanPlace, originLabel,
 } from './origins.js';
 
-// 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos；v4 加入 drippers 與 brews.dripperId；v5 加入 beanPhotos；v6 加入 beans.country、region；v7 加入 wishlist。匯入時接受所有舊版
-export const SCHEMA_VERSION = 7;
-const IMPORTABLE_VERSIONS = [1, 2, 3, 4, 5, 6, 7];
+// 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos；v4 加入 drippers 與 brews.dripperId；v5 加入 beanPhotos；v6 加入 beans.country、region；v7 加入 wishlist；v8 加入 brews.method。匯入時接受所有舊版
+export const SCHEMA_VERSION = 8;
+const IMPORTABLE_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 export const PROCESS = { washed: '水洗', natural: '日曬', honey: '蜜處理', other: '其他' };
 // 由淺到深排列
@@ -37,6 +37,10 @@ export const ROAST_LEVEL = {
 export const FLAVOR = { acidity: '酸度', sweetness: '甜度', bitterness: '苦度', body: '醇厚度' };
 // 紀錄的可見度：private 只存在這支手機（預設）；friends 同步到雲端給好友看
 export const VISIBILITY = { private: '只有我', friends: '好友' };
+// 沖煮方式：舊紀錄沒有這個欄位＝手沖；賽風不用濾杯（dripperId 一律 ''）
+export const METHODS = { pourover: '手沖', siphon: '賽風' };
+/** 紀錄的沖煮方式（舊紀錄沒有 method＝手沖） */
+export const brewMethod = (brew) => brew?.method || 'pourover';
 
 /* ===== 日期工具（id 產生在 js/id.js） ===== */
 
@@ -130,6 +134,7 @@ export function validateBrew(b) {
   const errors = {};
   if (!b.beanId) errors.beanId = '請選擇豆子';
   if (!b.brewedAt || Number.isNaN(new Date(b.brewedAt).getTime())) errors.brewedAt = '請輸入沖煮時間';
+  if (!Object.hasOwn(METHODS, b.method)) errors.method = '不認得的沖煮方式';
   if (!(b.coffeeG > 0)) errors.coffeeG = '粉量需大於 0';
   if (!(b.waterG > 0)) errors.waterG = '水量需大於 0';
   if (b.tempC != null && !inRange(b.tempC, 70, 100)) errors.tempC = '水溫需介於 70–100°C';
@@ -205,11 +210,15 @@ function normalizeBean(input) {
 }
 
 function normalizeBrew(input) {
+  // 沒有值＝手沖（舊紀錄、v7 以前的備份）；不認得的值保留，交給驗證擋下
+  const method = input.method || 'pourover';
   return {
     id: input.id || newId(),
     beanId: input.beanId || '',
+    method,
     grinderId: input.grinderId || '', // 空字串＝未指定；舊紀錄沒有這個欄位
-    dripperId: input.dripperId || '', // 空字串＝未指定；v6 以前的紀錄由 dripper 文字轉換而來
+    // 空字串＝未指定；v6 以前的紀錄由 dripper 文字轉換而來；賽風不用濾杯
+    dripperId: method === 'siphon' ? '' : input.dripperId || '',
     brewedAt: toIso(input.brewedAt),
     dripper: String(input.dripper ?? '').trim(), // 舊版自由輸入的濾杯文字，轉換後保留作為保險；新紀錄是 ''
     grindSetting: String(input.grindSetting ?? '').trim(),
@@ -486,6 +495,13 @@ export async function defaultDripperId() {
   return defaultEquipmentId(brews, drippers, 'dripperId');
 }
 
+/** 新紀錄預設的沖煮方式：和最近一筆紀錄一樣，沒有紀錄是手沖 */
+export async function defaultBrewMethod() {
+  const brews = await db.getAll('brews');
+  const latest = brews.reduce((cur, b) => (!cur || b.brewedAt > cur.brewedAt ? b : cur), null);
+  return brewMethod(latest);
+}
+
 /* ===== 沖煮紀錄 ===== */
 
 /**
@@ -594,8 +610,9 @@ export const STATS_PERIODS = [
 /**
  * 統計頁的資料（只讀本機，已封存的豆子、磨豆機、濾杯也算）：{ stats, beanOptions }
  * beanOptions：有紀錄的豆子（篩選用），未封存在前；period：STATS_PERIODS 的 value；beanId：'' 為全部
+ * methodOptions：紀錄裡有的沖煮方式（只有一種時是空陣列，不顯示篩選）；method：'' 為全部
  */
-export async function getStats({ period = '30', beanId = '' } = {}) {
+export async function getStats({ period = '30', beanId = '', method = '' } = {}) {
   const [brews, beans, grinders, drippers] = await Promise.all([
     db.getAll('brews'), db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'),
   ]);
@@ -603,7 +620,14 @@ export async function getStats({ period = '30', beanId = '' } = {}) {
   const beanOptions = beans.filter((b) => used.has(b.id)).sort(byArchivedThenNewest)
     .map((b) => ({ id: b.id, name: b.name, archived: b.archived }));
   const known = beanOptions.some((b) => b.id === beanId);
-  return { stats: computeStats({ brews, beans, grinders, drippers, period, beanId: known ? beanId : '' }), beanOptions, beanId: known ? beanId : '' };
+  // 沖煮方式的篩選只在紀錄有兩種以上時出現
+  const methods = new Set(brews.map(brewMethod));
+  const methodOptions = methods.size > 1 ? Object.keys(METHODS).filter((m) => methods.has(m)).map((m) => ({ value: m, label: METHODS[m] })) : [];
+  const m = methodOptions.some((o) => o.value === method) ? method : '';
+  return {
+    stats: computeStats({ brews, beans, grinders, drippers, period, beanId: known ? beanId : '', method: m }),
+    beanOptions, beanId: known ? beanId : '', methodOptions, method: m,
+  };
 }
 
 /* ===== 產地地圖 ===== */
@@ -673,6 +697,7 @@ export async function getShareCardData(id) {
     ratio: ratio(brew),
     tempC: brew.tempC ?? null,
     totalTimeS: brew.totalTimeS ?? null,
+    method: brewMethod(brew),
     dripper: dripper?.name ?? '',
     grinderName: grinder?.name ?? '',
     grindSetting: brew.grindSetting ?? '',
@@ -1085,7 +1110,7 @@ export async function importData(text, { replace = false, onProgress } = {}) {
 /** 「再沖一杯」要複製的參數；評分、風味、筆記、總時間是每杯的結果，不複製；可見度一律回到預設（只有我） */
 export function brewTemplateFrom(brew) {
   const { beanId, grinderId = '', dripperId = '', grindSetting, coffeeG, waterG, tempC } = brew;
-  return { beanId, grinderId, dripperId, grindSetting, coffeeG, waterG, tempC };
+  return { beanId, method: brewMethod(brew), grinderId, dripperId, grindSetting, coffeeG, waterG, tempC };
 }
 
 /* ===== 咖啡社群（雲端；只透過 cloud.js 存取） ===== */
@@ -1462,6 +1487,7 @@ function toFeedItem(row, { myId, profiles, avatarUrls, photoUrls, likes, comment
     roastLevel: ROAST_LEVEL[row.roast_level] ?? '',
     restDays: restDays(row.brewed_at, row.roast_date),
     brewedAt: row.brewed_at,
+    method: row.method === 'siphon' ? 'siphon' : 'pourover',
     dripper: row.dripper,
     grinderName: row.grinder_name,
     grindSetting: row.grind_setting,

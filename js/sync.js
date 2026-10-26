@@ -33,6 +33,7 @@ export function toSharedRow(brew, bean, grinder, dripper, photoPath) {
     roast_level: bean?.roastLevel ?? null,
     roast_date: bean?.roastDate || null,
     brewed_at: brew.brewedAt,
+    method: brew.method || 'pourover', // 舊紀錄沒有 method＝手沖
     dripper: dripper?.name ?? '',
     grinder_name: grinder?.name ?? '',
     grind_setting: brew.grindSetting ?? '',
@@ -60,7 +61,10 @@ async function desired(brew, userId) {
     db.get('photos', brew.id),
   ]);
   const row = toSharedRow(brew, bean, grinder, dripper, photo ? cloudPhotoPath(userId, brew.id) : null);
-  return { row, json: JSON.stringify(row), photo, photoAt: photo?.createdAt ?? null };
+  // 手沖（雲端的預設值）不放進比對用的 json：1.21.0 以前同步過的紀錄 json 不變，不用全部重送；
+  // 從賽風改回手沖時 json 不同，照樣會送出 method: 'pourover'
+  const { method, ...rest } = row;
+  return { row, json: JSON.stringify(method === 'pourover' ? rest : row), photo, photoAt: photo?.createdAt ?? null };
 }
 
 /** 本機 session 的使用者 id（只讀 IndexedDB，不載入 supabase-js、不連網路）；沒登入回傳 null */

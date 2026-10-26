@@ -52,11 +52,11 @@ tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mj
 views → models → db／cloud，每層只呼叫下一層。views 不可直接碰 IndexedDB 或 Supabase。
 - view 的事件監聽器掛在這一頁自己的元素上，**不要掛在 `render` 收到的 container（`#app`）**：`#app` 換頁不會被替換，監聽器會殘留並帶著舊資料處理之後的點擊
 
-## 資料模型（備份 schemaVersion: 7／IndexedDB DB_VERSION: 8）
+## 資料模型（備份 schemaVersion: 8／IndexedDB DB_VERSION: 8）
 **beans**：id, name, origin(產地文字，表單上叫「莊園 / 批次」), country(國家代碼，選填，'' ＝沒選；v1.15.0 加入), region(產區 key 如 'ET.yirgacheffe'，選填，必須屬於 country), process(washed/natural/honey/other), roastLevel(light/light-medium/medium-light/medium/dark，即 淺/淺中/中淺/中/深焙), roastDate(YYYY-MM-DD), bagWeightG(整包重量 g，選填), archived(bool), createdAt
 **grinders**：id, name(必填), notes(選填，例如刻度說明), archived(bool), createdAt
 **drippers**（DB v6 加入）：id, name(必填，≤ 100 字), notes(選填), archived(bool), createdAt
-**brews**：id, beanId, grinderId(選填，'' ＝未指定；v1 舊紀錄沒有這個欄位), dripperId(選填，'' ＝未指定), brewedAt, dripper(舊版自由輸入的濾杯文字，轉換後保留作為保險；新紀錄是 ''，畫面一律用 dripperId), grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes, visibility(private/friends，舊資料沒有這個欄位＝private)
+**brews**：id, beanId, method(pourover/siphon＝手沖/賽風，1.21.0 加入；舊紀錄沒有這個欄位＝手沖，讀取一律用 `models.brewMethod`), grinderId(選填，'' ＝未指定；v1 舊紀錄沒有這個欄位), dripperId(選填，'' ＝未指定), brewedAt, dripper(舊版自由輸入的濾杯文字，轉換後保留作為保險；新紀錄是 ''，畫面一律用 dripperId), grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes, visibility(private/friends，舊資料沒有這個欄位＝private)
 **meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil、社群登入狀態 `auth:*`、社群通知看到哪 `feedSeenAt`／`commentsSeenAt`／`repliesSeenAt`、看過哪一版的更新內容 `changelogSeen`、看過新手教學 `onboardingSeen`、濾杯轉換做過了 `dripperMigration`、這台裝置的 id `deviceId`、這台負責上傳熱度圖 `activityShare`、首頁「加入主畫面」提示按了稍後 `homeScreenSnoozeUntil`）；**不匯出、匯入取代全部時也不清除**（token 不會進備份檔，匯入也不會被登出）
 **photos**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 1600px、品質 0.8，約 200KB), width, height, createdAt；每筆紀錄最多 1 張，跟 brews 分開存
 **thumbs**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 300px)；列表只讀這個，不載入原圖；不匯出，匯入時由照片重新產生
@@ -67,6 +67,8 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 **wishlist**（DB v8 加入，keyPath key）：key(`region:<產區 key>`), kind('region'), target(產區 key), createdAt；想買清單，只存在這支手機、**會匯出**（之後「好友的豆子推薦」也放這裡，用別的 kind）
 **sync**（DB v5 加入，keyPath brewId）：brewId, userId, row(上次同步的 shared_brews 內容 JSON), photoAt(上次同步的照片 createdAt), error(''/rate_limited/invalid/failed/removed), failedRow, failedOn；**不匯出、匯入取代全部時也不清除**
 - brews 建索引：beanId、brewedAt、grinderId（v2 加入）、dripperId（v6 加入）
+- **沖煮方式（1.21.0）**：表單最上面「手沖｜賽風」；賽風隱藏濾杯欄位、存檔時 `dripperId` 一律 ''（`normalizeBrew`）；新紀錄預設和最近一筆一樣（`defaultBrewMethod`），「帶入上次參數」「再沖一杯」也帶入；首頁卡片、分享卡片、社群的賽風紀錄在濾杯的位置標「賽風」，手沖不另外標；沒有加 DB 欄位索引，所以 DB_VERSION 不變
+  - 統計：紀錄有兩種以上才出現「沖煮方式」篩選（`getStats` 的 `methodOptions`）；濾杯比較只算手沖
 - 有紀錄引用的豆子、磨豆機、濾杯不能刪除，只能封存
 - **濾杯轉換（v6）**：在 `onupgradeneeded` 的升級交易裡完成（單一交易，open 成功前畫面讀不到轉換一半的資料）；規則在 `js/drippers.js`：去掉所有空白、忽略大小寫後合併（「V60」「v60」「V 60」同一支），名稱用出現最多次的寫法（同票取最近一杯），空白＝未指定；只加 dripperId、不動其他欄位；meta `dripperMigration` 記著做過就不再做（全新安裝也記）
 - **照片一律在前端重新編碼成 JPEG（移除 EXIF）後才儲存**（`models.preparePhoto` → `image.compressPhoto`，經 Canvas 重畫，GPS 等資訊不會留下）
@@ -200,7 +202,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 ## 備份
 - 匯出全部資料為 JSON（含 schemaVersion），可匯入還原
 - 匯入分「合併」（依 id 覆蓋）與「取代全部」；整份檔案驗證通過才在單一交易內寫入
-- 匯入接受 schemaVersion 1–7：v1–v6 沒有 wishlist（視為空陣列，「取代全部」會清空想買清單）；wishlist 只認得 kind 'region' 且產區在清單裡，否則整份不匯入；v1–v5 的豆子沒有 country、region（補成 ''）；不認得的國家、對不上的產區整份不匯入；v1 沒有 grinders（視為空陣列），brews 沒有 grinderId（補成 ''）；v1、v2 沒有 photos（視為空陣列）；v1–v4 沒有 beanPhotos（視為空陣列）
+- 匯入接受 schemaVersion 1–8：v1–v7 的紀錄沒有 method（補成手沖；不認得的值整份不匯入）；v1–v6 沒有 wishlist（視為空陣列，「取代全部」會清空想買清單）；wishlist 只認得 kind 'region' 且產區在清單裡，否則整份不匯入；v1–v5 的豆子沒有 country、region（補成 ''）；不認得的國家、對不上的產區整份不匯入；v1 沒有 grinders（視為空陣列），brews 沒有 grinderId（補成 ''）；v1、v2 沒有 photos（視為空陣列）；v1–v4 沒有 beanPhotos（視為空陣列）
 - v1–v3 沒有 drippers：用和 DB 升級同一套規則（`mergeDripperNames`）從紀錄的濾杯文字建立；「合併」時名稱相同的沿用本機已有的濾杯（含封存），「取代全部」時全部新建；v4 的紀錄指向不存在的濾杯就整份不匯入
 - 照片（v3）：匯出時可選「包含照片」（預設開），`photos: [{ brewId, width, height, createdAt, data(base64 JPEG) }]`，`photosIncluded` 記錄有沒有勾；匯出前顯示預估檔案大小
 - 豆子照片（v5）：`beanPhotos: [{ beanId, width, height, createdAt, data }]`，跟著同一個「包含照片」；驗證規則和紀錄照片同一套（`parseImportPhotos` 的 kind `bean`）；備份頁、匯入結果的「n 張照片」是兩種合計
@@ -264,6 +266,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 profiles、friendships、blocks、shared_brews、likes、reports（public，API 公開、RLS 保護）；rate_events（private，每日／每小時上限的計數）
 - 加好友只能透過 `send_friend_request(code)`，不能直接新增 friendships；沒有「搜尋所有使用者」
 - shared_brews 主鍵 `(owner, id)`，id 沿用本機紀錄 id；雲端只放 friends 紀錄，所以不存可見度
+- `shared_brews.method`（`20261101100000_brew_method.sql`）：pourover／siphon，預設 pourover（舊版 App 不帶）；`sync.js` 比對用的 json 在手沖時不含 method（1.21.0 以前同步過的不用重送）；**前端讀動態牆會選這個欄位，部署時 migration 一定要先上**
 - 上限：每天 20 個好友邀請、30 筆上傳、10 次檢舉、5 則意見回饋、100 則留言（台灣時間日曆日，只算新增，刪掉不還）；每小時打錯代碼 10 次；推播訂閱每人 10 台裝置
 
 ### 照片 Storage（階段 2）

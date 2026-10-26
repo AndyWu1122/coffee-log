@@ -3,7 +3,7 @@
 // ?comments=1（從卡片上的留言數點進來）：捲到留言區
 // 這頁的內容大多來自他人：文字、網址一律經過 esc() 才放進 innerHTML
 import {
-  getSocialState, socialErrorMessage, getFeedBrew, FLAVOR, flavorNote, formatSeconds,
+  getSocialState, socialErrorMessage, getFeedBrew, FLAVOR, flavorNote, formatSeconds, METHODS,
   REPORT_REASONS, REPORT_DETAIL_MAX, reportBrew, blockUser,
 } from '../models.js';
 import { esc, setTitle, toast, showMessage, showErrors, segmentedHtml, bindSegmented, segmentedValue } from './ui.js';
@@ -42,7 +42,7 @@ export async function render(container, { params: [owner, id], query = {}, isCur
   const bean = [item.origin, item.process, item.roastLevel, item.restDays != null ? `養豆 ${item.restDays} 天` : '']
     .filter(Boolean);
   const rows = [
-    ['濾杯', item.dripper],
+    item.method === 'siphon' ? ['沖煮方式', METHODS.siphon] : ['濾杯', item.dripper],
     ['磨豆機', [item.grinderName, item.grindSetting].filter(Boolean).join(' ')],
     ['粉量／水量', `${item.coffeeG}g／${item.waterG}g`],
     ['水溫', item.tempC != null ? `${item.tempC}°C` : ''],

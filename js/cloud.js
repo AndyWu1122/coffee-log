@@ -290,7 +290,7 @@ export const brewPhotoUrls = (paths) => run(async (sb) => {
 
 const BREW_COLUMNS = [
   'owner', 'id', 'bean_name', 'bean_origin', 'bean_process', 'roast_level', 'roast_date', 'brewed_at',
-  'dripper', 'grinder_name', 'grind_setting', 'coffee_g', 'water_g', 'temp_c', 'total_time_s',
+  'method', 'dripper', 'grinder_name', 'grind_setting', 'coffee_g', 'water_g', 'temp_c', 'total_time_s',
   'rating', 'acidity', 'sweetness', 'bitterness', 'body', 'flavor_notes', 'notes', 'photo_path',
 ].join(', ');
 

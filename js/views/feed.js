@@ -2,7 +2,7 @@
 // 上方切換「全部｜我的」（#/social?mine=1 只看自己的）；卡片顯示讚數、留言數，有新留言的留言數會標示
 // 這頁的內容大多來自他人：文字、網址一律經過 esc() 才放進 innerHTML
 import {
-  getSocialState, socialErrorMessage, listFeed, setLike, formatRatio, formatSeconds, flavorNote,
+  getSocialState, socialErrorMessage, listFeed, setLike, formatRatio, formatSeconds, flavorNote, METHODS,
 } from '../models.js';
 import {
   esc, setTitle, toast, avatarHtml, showMessage, notifyBadgesChanged, segmentedHtml, bindSegmented, profileHref,
@@ -104,7 +104,7 @@ export async function render(container, { query = {}, isCurrent }) {
  */
 export function feedCardHtml(item, { detail = false, linkPerson = true } = {}) {
   const params = [
-    item.dripper,
+    item.method === 'siphon' ? METHODS.siphon : item.dripper, // 賽風不用濾杯；手沖不另外標
     [item.grinderName, item.grindSetting].filter(Boolean).join(' '),
     `${item.coffeeG}g → ${item.waterG}g`,
     formatRatio(item.ratio),

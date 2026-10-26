@@ -139,10 +139,10 @@ export function drawCard(canvas, data, { size = 'post', photo = null, includeNot
   const grinderText = data.grinderName
     ? `磨豆機 ${data.grinderName}${data.grindSetting ? `・${data.grindSetting}` : ''}`
     : data.grindSetting ? `研磨度 ${data.grindSetting}` : '';
-  // 濾杯、磨豆機各一行（太長各自截斷），不會出現「磨豆機」和名稱被拆到兩行
+  // 濾杯（賽風寫「賽風」）、磨豆機各一行（太長各自截斷），不會出現「磨豆機」和名稱被拆到兩行
   const EQUIP_F = font(30);
   const EQUIP_LH = 42;
-  const equipLines = [data.dripper && `濾杯 ${data.dripper}`, grinderText]
+  const equipLines = [data.method === 'siphon' ? '賽風' : data.dripper && `濾杯 ${data.dripper}`, grinderText]
     .filter(Boolean)
     .map((t) => wrapText(t, leftW, measureWith(EQUIP_F), 1)[0]);
   const STAR = 44;

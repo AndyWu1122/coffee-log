@@ -1,7 +1,7 @@
 // #/brew/new、#/brew/<id> 新增 / 編輯沖煮紀錄
 import {
   getBrew, saveBrew, deleteBrew, listBeans, latestBrewByBean, brewTemplateFrom,
-  listGrinders, defaultGrinderId, listDrippers, defaultDripperId, formatStock, ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
+  listGrinders, defaultGrinderId, listDrippers, defaultDripperId, defaultBrewMethod, brewMethod, METHODS, formatStock, ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
   getPhoto, preparePhoto, PHOTO_ACCEPT, VISIBILITY, socialAvailable, getShareStatus,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors, photoFieldHtml, bindPhotoField } from './ui.js';
@@ -9,12 +9,13 @@ import { createFlavorPicker } from './flavorPicker.js';
 
 const SCORE_OPTIONS = [1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n) }));
 const VISIBILITY_ICON = { private: '🔒', friends: '👥' };
+const METHOD_OPTIONS = Object.entries(METHODS).map(([value, label]) => ({ value, label }));
 const VISIBILITY_OPTIONS = Object.entries(VISIBILITY).map(([value, label]) => ({ value, label: `${VISIBILITY_ICON[value]} ${label}` }));
 const shortDate = new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric' });
 
 export async function render(container, { id, query, isCurrent }) {
   const isNew = id === null;
-  const [brew, photo, beans, grinders, drippers, latestByBean, source, defaultGrinder, defaultDripper, shareStatus] = await Promise.all([
+  const [brew, photo, beans, grinders, drippers, latestByBean, source, defaultGrinder, defaultDripper, defaultMethod, shareStatus] = await Promise.all([
     isNew ? null : getBrew(id),
     isNew ? null : getPhoto(id),
     listBeans({ includeArchived: true }),
@@ -24,6 +25,7 @@ export async function render(container, { id, query, isCurrent }) {
     isNew && query.from ? getBrew(query.from) : null,
     isNew ? defaultGrinderId() : '',
     isNew ? defaultDripperId() : '',
+    isNew ? defaultBrewMethod() : '',
     isNew || !socialAvailable ? null : getShareStatus(id),
   ]);
   if (!isCurrent()) return;
@@ -55,6 +57,7 @@ export async function render(container, { id, query, isCurrent }) {
 
   const b = brew ?? {
     beanId: beanOptions[0].id,
+    method: defaultMethod,
     grinderId: defaultGrinder,
     brewedAt: new Date().toISOString(),
     dripperId: defaultDripper,
@@ -85,6 +88,12 @@ export async function render(container, { id, query, isCurrent }) {
   container.innerHTML = `
     <form class="form" novalidate>
       ${notice ? `<div class="notice">${esc(notice)}</div>` : ''}
+      <div class="field" data-field="method">
+        <span class="label">沖煮方式</span>
+        ${segmentedHtml('method', METHOD_OPTIONS, brewMethod(b))}
+        <div class="error"></div>
+      </div>
+
       <div class="field" data-field="beanId">
         <label for="beanId">豆子 *</label>
         <select id="beanId" name="beanId">
@@ -103,7 +112,7 @@ export async function render(container, { id, query, isCurrent }) {
         <div class="error"></div>
       </div>
 
-      <div class="field" data-field="dripperId">
+      <div class="field" data-field="dripperId" ${brewMethod(b) === 'siphon' ? 'hidden' : ''}>
         <label for="dripperId">濾杯</label>
         <select id="dripperId" name="dripperId">
           <option value="">未指定</option>
@@ -238,7 +247,12 @@ export async function render(container, { id, query, isCurrent }) {
     }
   };
   updateVisibility(b.visibility ?? 'private');
-  bindSegmented(form, (name, value) => { if (name === 'visibility') updateVisibility(value); });
+  // 賽風不用濾杯：隱藏濾杯欄位（選擇保留，切回手沖時還在；存檔時賽風一律不存濾杯）
+  const dripperField = form.querySelector('[data-field="dripperId"]');
+  bindSegmented(form, (name, value) => {
+    if (name === 'visibility') updateVisibility(value);
+    if (name === 'method') dripperField.hidden = value === 'siphon';
+  });
   const flavorPicker = createFlavorPicker(form.querySelector('#flavor-picker'), b.flavorNotes ?? []);
 
   // 粉水比即時更新
@@ -298,6 +312,7 @@ export async function render(container, { id, query, isCurrent }) {
     return saveBrew({
       id: brew?.id,
       beanId: f.beanId.value,
+      method: segmentedValue(form, 'method'),
       grinderId: f.grinderId.value,
       brewedAt: fromLocalInputValue(f.brewedAt.value),
       dripperId: f.dripperId.value,

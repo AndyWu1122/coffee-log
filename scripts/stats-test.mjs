@@ -157,6 +157,20 @@ check('粉水比前 3 名（次數多→值小）', q(params.ratios) === q([{ fr
 check('水溫以 1°C 分組（92.5 算 92）、沒填的不算、前 3 名', q(params.temps) === q([{ temp: 92, count: 2 }, { temp: 90, count: 1 }, { temp: 93, count: 1 }]),
   q(params.temps));
 
+/* ===== 沖煮方式（1.21.0） ===== */
+const methods = [
+  brew('2026-10-20T08:00', { rating: 4 }),                                       // 舊紀錄沒有 method＝手沖
+  brew('2026-10-21T08:00', { rating: 3, method: 'pourover' }),
+  brew('2026-10-22T08:00', { rating: 5, method: 'siphon', dripperId: '' }),
+  brew('2026-10-23T08:00', { rating: 5, method: 'siphon', dripperId: 'd-v60' }), // 就算有 dripperId，賽風也不算進濾杯
+];
+const mAll = computeStats({ brews: methods, beans, grinders, drippers, now: NOW });
+const mPour = computeStats({ brews: methods, beans, grinders, drippers, method: 'pourover', now: NOW });
+const mSiphon = computeStats({ brews: methods, beans, grinders, drippers, method: 'siphon', now: NOW });
+check('沖煮方式：全部 4 杯、手沖 2 杯（含沒有 method 的舊紀錄）、賽風 2 杯', mAll.cups === 4 && mPour.cups === 2 && mSiphon.cups === 2);
+check('濾杯比較只算手沖', mAll.drippers.length === 1 && mAll.drippers[0].cups === 2 && mSiphon.drippers.length === 0, q(mAll.drippers));
+check('賽風的平均評分', mSiphon.overview.avgRating === 5);
+
 console.log(`\n${passed}/${passed + failures.length} 通過`);
 if (failures.length) {
   console.log(`失敗：\n- ${failures.join('\n- ')}`);

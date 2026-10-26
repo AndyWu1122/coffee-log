@@ -188,6 +188,24 @@ try {
   await sleep(1500);
   check('好友只是修改舊紀錄：「社群」分頁不出現數字', !(await pb.eval(feedBadge)));
 
+  /* ===== 沖煮方式（1.21.0）：賽風跟著上傳，好友看得到；改回手沖也會同步 ===== */
+  check('手沖、沒改過：再同步一次不重送', (await m(pa, 'm.syncNow()')).uploaded === 0);
+  check('手沖的紀錄：雲端 method 是 pourover', (await sharedRow(B, brewId))?.[0]?.method === 'pourover');
+  await m(pa, `m.getBrew(${q(brewId)}).then((b) => m.saveBrew({ ...b, method: 'siphon' }))`);
+  await m(pa, 'm.syncNow()');
+  const siphonRow = (await sharedRow(B, brewId))?.[0];
+  check('改成賽風：雲端 method siphon、沒有濾杯', siphonRow?.method === 'siphon' && siphonRow?.dripper === '', q(siphonRow));
+  await pb.eval(`location.hash = '#/social/${A.id}/${brewId}'`);
+  await pb.waitFor(`document.querySelector('#feed-detail-page')`, { label: '好友看賽風紀錄' });
+  check('好友的卡片和詳細頁標「賽風」',
+    await pb.eval(`document.querySelector('#feed-detail-page .feed-card').textContent.includes('賽風')
+      && [...document.querySelectorAll('#feed-detail-page dt')].some((dt) => dt.textContent === '沖煮方式' && dt.nextElementSibling.textContent === '賽風')
+      && ![...document.querySelectorAll('#feed-detail-page dt')].some((dt) => dt.textContent === '濾杯')`));
+  check('賽風：再同步一次不重送', (await m(pa, 'm.syncNow()')).uploaded === 0);
+  await m(pa, `m.getBrew(${q(brewId)}).then((b) => m.saveBrew({ ...b, method: 'pourover' }))`);
+  await m(pa, 'm.syncNow()'); // saveBrew 自己會觸發同步，這裡只是等它結束
+  check('改回手沖（比對用的 json 不同）：雲端 method 改回 pourover', (await sharedRow(B, brewId))?.[0]?.method === 'pourover');
+
   /* ===== 離線時新增，恢復網路後自動上傳 ===== */
   await pa.setOffline(true);
   check('（模擬離線）', await pa.eval('!navigator.onLine'));

@@ -74,13 +74,15 @@ function weeklyCounts(brews, fromDate, toDate) {
 /**
  * 統計頁的所有數字
  * brews、beans、grinders、drippers：全部資料（含已封存的豆子、磨豆機、濾杯）；period：PERIODS 的 key；beanId：'' 為全部
+ * method：'' 為全部，'pourover'／'siphon' 只算那一種（舊紀錄沒有 method＝手沖）
  * 回傳 { cups, enough, overview, ratingTrend, beans, ratios, temps, drippers, grinders, weeks }
  */
-export function computeStats({ brews = [], beans = [], grinders = [], drippers = [], period = 'all', beanId = '', now = new Date() } = {}) {
+export function computeStats({ brews = [], beans = [], grinders = [], drippers = [], period = 'all', beanId = '', method = '', now = new Date() } = {}) {
   const days = PERIODS[period] ?? null;
   const since = days == null ? null : now.getTime() - days * DAY;
   const selected = brews
     .filter((b) => !beanId || b.beanId === beanId)
+    .filter((b) => !method || (b.method || 'pourover') === method)
     .filter((b) => since == null || new Date(b.brewedAt).getTime() >= since)
     .sort((a, b) => a.brewedAt.localeCompare(b.brewedAt));
 
@@ -125,7 +127,8 @@ export function computeStats({ brews = [], beans = [], grinders = [], drippers =
     beans: rankByRating(selected, (b) => b.beanId, nameOfBean).map(({ key, ...rest }) => ({ id: key, ...rest })),
     ratios,
     temps,
-    drippers: rankByRating(selected, (b) => b.dripperId, (id) => dripperName.get(id) ?? '（已刪除的濾杯）')
+    // 賽風不用濾杯，只比手沖
+    drippers: rankByRating(selected.filter((b) => (b.method || 'pourover') === 'pourover'), (b) => b.dripperId, (id) => dripperName.get(id) ?? '（已刪除的濾杯）')
       .map(({ key, ...rest }) => ({ id: key, ...rest })),
     grinders: rankByRating(selected, (b) => b.grinderId, (id) => grinderName.get(id) ?? '（已刪除的磨豆機）')
       .map(({ key, ...rest }) => ({ id: key, ...rest })),

@@ -1,7 +1,7 @@
 // #/ 沖煮紀錄列表
 import {
   listBrews, listBeans, latestBrewByBean, formatRatio, formatSeconds, flavorNote, getBackupStatus, snoozeBackupReminder,
-  formatDaysAgo, getStorageStatus, snoozeHomeScreenHint,
+  formatDaysAgo, getStorageStatus, snoozeHomeScreenHint, METHODS,
 } from '../models.js';
 import { esc, setTitle, toast } from './ui.js';
 import { exportBackup, errorReason } from './backup.js';
@@ -182,7 +182,7 @@ function brewCard(b) {
   const stars = b.rating ? '★'.repeat(b.rating) + '☆'.repeat(5 - b.rating) : '';
   // 參數固定兩行：器材｜數字
   const gear = [
-    b.dripperName,
+    b.method === 'siphon' ? METHODS.siphon : b.dripperName, // 賽風不用濾杯；手沖不另外標
     [b.grinderName, b.grindSetting ? `刻度 ${b.grindSetting}` : ''].filter(Boolean).join(' '), // 例：C40 刻度 24
   ].filter(Boolean);
   const numbers = [

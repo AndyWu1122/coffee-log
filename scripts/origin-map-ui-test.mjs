@@ -575,7 +575,7 @@ try {
 
   /* ===== 備份 ===== */
   const exported = await page.eval(`import('/js/models.js').then((m) => m.exportData({ includePhotos: false })).then((d) => ({ v: d.schemaVersion, guji: d.beans.find((b) => b.id === 'b-guji'), wish: d.wishlist.length }))`);
-  check('匯出 schemaVersion 7，豆子帶著國家、產區', exported.v === 7 && exported.guji.country === 'ET' && exported.guji.region === 'ET.guji', q(exported));
+  check('匯出 schemaVersion 8，豆子帶著國家、產區', exported.v === 8 && exported.guji.country === 'ET' && exported.guji.region === 'ET.guji', q(exported));
   const v5 = await page.eval(`import('/js/models.js').then(async (m) => {
     const d = await m.exportData({ includePhotos: false });
     const { wishlist, ...rest } = d; // v5 沒有想買清單

@@ -6,7 +6,7 @@ import { esc, setTitle, segmentedHtml, bindSegmented } from './ui.js';
 import { heatmapHtml, bindHeatmap } from './heatmap.js';
 
 // 篩選條件在切頁後保留（和紀錄列表一樣）；熱度圖固定是近一年，不受期間、豆子篩選影響
-const filter = { period: '30', beanId: '', heatMode: 'cups' };
+const filter = { period: '30', beanId: '', method: '', heatMode: 'cups' };
 
 const md = (dateStr) => { const [, m, d] = dateStr.split('-').map(Number); return `${m}/${d}`; };
 const mdOf = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}`; };
@@ -16,9 +16,10 @@ const ratioRange = (from, to) => `1:${from}–1:${to}`;
 
 export async function render(container, { isCurrent }) {
   setTitle('統計');
-  const [{ stats, beanOptions, beanId }, heatmap] = await Promise.all([getStats(filter), getMyHeatmap(filter.heatMode)]);
+  const [{ stats, beanOptions, beanId, methodOptions, method }, heatmap] = await Promise.all([getStats(filter), getMyHeatmap(filter.heatMode)]);
   if (!isCurrent()) return;
   filter.beanId = beanId;
+  filter.method = method;
 
   container.innerHTML = `<div id="stats-page" class="stats">
     ${heatmapHtml(heatmap, { modes: true, mode: filter.heatMode })}
@@ -29,6 +30,10 @@ export async function render(container, { isCurrent }) {
         ${beanOptions.map((b) => `<option value="${esc(b.id)}" ${b.id === filter.beanId ? 'selected' : ''}>
           ${esc(b.name)}${b.archived ? '（已封存）' : ''}</option>`).join('')}
       </select>
+      ${methodOptions.length ? `<select id="stats-method" aria-label="依沖煮方式篩選">
+        <option value="">全部沖煮方式</option>
+        ${methodOptions.map((o) => `<option value="${o.value}" ${o.value === filter.method ? 'selected' : ''}>${o.label}</option>`).join('')}
+      </select>` : ''}
     </div>
     ${stats.enough ? chartsHtml(stats) : `<div class="empty stats-empty">
       <p>${stats.cups ? `這段期間只有 ${stats.cups} 杯，` : '這段期間還沒有紀錄，'}多記幾杯就能看到趨勢</p>
@@ -41,6 +46,7 @@ export async function render(container, { isCurrent }) {
   bindHeatmap(page, heatmap, { mode: filter.heatMode, onMode: (mode) => { filter.heatMode = mode; rerender(); } });
   bindSegmented(page.querySelector('.stats-filters'), (name, value) => { filter.period = value || filter.period; rerender(); });
   page.querySelector('#stats-bean').addEventListener('change', (e) => { filter.beanId = e.target.value; rerender(); });
+  page.querySelector('#stats-method')?.addEventListener('change', (e) => { filter.method = e.target.value; rerender(); });
   if (!stats.enough) return;
   bindRatingChart(page, stats.ratingTrend);
   bindDetails(page);
@@ -208,8 +214,8 @@ function equipmentHtml({ drippers, grinders }) {
     detail: `${kind} ${e.name}：平均 ${score(e.avg)} 分，${e.cups} 杯${e.small ? '（樣本少，參考就好）' : ''}`,
   })).join('');
   return `
-    <h3 class="stats-sub">濾杯</h3>
-    ${drippers.length ? `<div class="hbars">${rows(drippers, '濾杯')}${scoreAxis()}</div>` : notEnough('沒有指定濾杯、或都沒有評分')}
+    ${filter.method === 'siphon' ? '' : `<h3 class="stats-sub">濾杯</h3>
+    ${drippers.length ? `<div class="hbars">${rows(drippers, '濾杯')}${scoreAxis()}</div>` : notEnough('沒有指定濾杯、或都沒有評分')}`}
     <h3 class="stats-sub">磨豆機</h3>
     ${grinders.length ? `<div class="hbars">${rows(grinders, '磨豆機')}${scoreAxis()}</div>` : notEnough('沒有指定磨豆機、或都沒有評分')}`;
 }

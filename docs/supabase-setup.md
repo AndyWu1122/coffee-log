@@ -337,6 +337,24 @@ git push                                    # 合併到 main 之後；GitHub Pag
 2. ☰ →「設定與關於」打開「讓好友看到我的熱度圖」（1.14.1 起；1.14.0 在帳號頁）→ 請好友打開你的個人檔案，看得到熱度圖（沒有平均評分的切換）
 3. 關掉開關 → 好友重新整理後看不到熱度圖；Supabase 後台的 Table Editor 裡 `brew_activity` 沒有你的資料
 
+## 5-9. 部署沖煮方式（手沖／賽風，1.21.0）
+
+只有一個 migration，**沒有新的 Edge Function、沒有新的 secret**。**一定要後端先上、前端最後**：1.21.0 讀動態牆時會讀 `method` 欄位，資料庫還沒有這個欄位時動態牆會讀不出來
+
+```sh
+npx supabase@2.120.0 db push --dry-run      # 應該只列出 20261101100000_brew_method.sql
+npx supabase@2.120.0 db push                # 套用（確認後輸入 Y）
+git push                                    # 之後才推前端；GitHub Pages 部署成 1.21.0
+```
+
+- migration：`shared_brews` 加 `method`（`pourover`／`siphon`，預設 `pourover`，check 限定這兩種），開放 insert／update 這個欄位
+- 舊版 App 上傳時不帶這個欄位＝手沖，照常運作；已經分享的紀錄都算手沖，不會重新上傳
+
+### 實機確認（你）
+
+1. 新增一筆紀錄選「賽風」→ 濾杯欄位消失；存檔後首頁卡片標「賽風」
+2. 把它設成「👥 好友」→ 請好友打開，卡片和詳細頁都寫「賽風」
+
 ## 6. 實際登入一次（你）
 
 1. 手機用 Safari／Chrome 開 <https://andywu1122.github.io/coffee-log/> → ☰ →「帳號」→「用 Google 登入」→ 設定暱稱

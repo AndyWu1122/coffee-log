@@ -2,7 +2,7 @@
 // 手機直向 390px：首頁依日期分組（今天、昨天、10/24（六）、不是今年的加年份）、卡片的器材／數字各一行、研磨度加「刻度」、星星變大；
 // 表單：「儲存」一打開就在畫面內、不被分頁列與「已更新」提示蓋住；酸甜苦醇一項一列（≤ 52px、按鈕 ≥ 44px）；
 // 總時間的「分」「秒」一直顯示且不壓到數字；磨豆機獨佔一行、名稱不被截掉；風味輪總覽沒有最外圈的字、放大後才有；
-// 存檔的值正確、編輯時帶回；深色、淺色的首頁與表單各截一張圖（存到暫存資料夾，路徑印在最後）；不會橫向捲動；沒有 CSP 違規、沒有 JavaScript 錯誤
+// 存檔的值正確、編輯時帶回；沖煮方式（手沖／賽風：濾杯隱藏、預設跟上一杯、再沖一杯、卡片標示、統計篩選、備份 v8／v7）；深色、淺色的首頁與表單各截一張圖（存到暫存資料夾，路徑印在最後）；不會橫向捲動；沒有 CSP 違規、沒有 JavaScript 錯誤
 //
 // 用法：node scripts/brew-ui-test.mjs
 
@@ -292,6 +292,98 @@ try {
   check('編輯：值都帶回表單', q(back) === q({ min: '2', sec: '40', acidity: '4', body: '2', grinder: 'g-1', setting: '22', temp: '93' }), q(back));
   const edit = await formLayout(page);
   check('編輯頁：「儲存」一打開就在畫面內', edit.saveInView && edit.saveAboveTabbar);
+
+  /* ===== 沖煮方式（1.21.0）：手沖／賽風 ===== */
+  const methodState = () => page.eval(`({
+    method: document.querySelector('.segmented[data-name="method"]').dataset.value,
+    dripperHidden: document.querySelector('[data-field="dripperId"]').hidden
+      && getComputedStyle(document.querySelector('[data-field="dripperId"]')).display === 'none',
+  })`);
+  check('舊紀錄沒有 method：讀出來算手沖', saved.method === 'pourover'
+    && await page.eval(`import('/js/models.js').then(async (m) => m.brewMethod(await m.getBrew('brew-older')) === 'pourover')`));
+  await openForm(page, base, '#/brew/new');
+  check('新紀錄：上一杯是手沖 → 預設手沖、濾杯顯示', q(await methodState()) === q({ method: 'pourover', dripperHidden: false }));
+  await click(page, '.segmented[data-name="method"] button[data-v="siphon"]');
+  check('選賽風：濾杯欄位隱藏', q(await methodState()) === q({ method: 'siphon', dripperHidden: true }));
+  await page.eval(`(document.querySelector('#dripperId').value = 'd-1', true)`); // 隱藏前選了濾杯，賽風也不存
+  await fill(page, '#coffeeG', '20');
+  await fill(page, '#waterG', '300');
+  // 上一杯（剛存的手沖）往前一小時，最近一杯一定是賽風（datetime-local 只到分鐘）
+  await page.eval(`import('/js/db.js').then(async (db) => { const b = await db.get('brews', ${q(saved.id)}); await db.put('brews', { ...b, brewedAt: new Date(Date.now() - 3600000).toISOString() }); return true; })`);
+  await click(page, '.save-bar');
+  await page.waitFor(`location.hash === '#/' && document.querySelector('.day-group')`, { label: '賽風存檔後回首頁' });
+  const siphon = await page.eval(`import('/js/db.js').then((db) => db.getAll('brews')).then((all) => all.find((b) => b.method === 'siphon'))`);
+  check('存檔：method siphon、濾杯不存', siphon && siphon.dripperId === '' && siphon.coffeeG === 20, q(siphon));
+  const siphonGear = await page.eval(`[...document.querySelectorAll('a[href="#/brew/${siphon?.id}"] .card-gear span')].map((s) => s.textContent)`);
+  check('首頁卡片：器材那行標「賽風」（取代濾杯）', siphonGear[0] === '賽風' && !siphonGear.includes('Hario V60'), q(siphonGear));
+  const pourGear = await page.eval(`document.querySelector('a[href="#/brew/brew-today-1"] .card-gear').textContent`);
+  check('手沖的卡片不另外標「手沖」', !pourGear.includes('手沖'), pourGear);
+  const card = await page.eval(`import('/js/models.js').then((m) => m.getShareCardData(${q(siphon.id)})).then((d) => ({ method: d.method, dripper: d.dripper }))`);
+  check('分享卡片的資料：method siphon、沒有濾杯', q(card) === q({ method: 'siphon', dripper: '' }), q(card));
+
+  await openForm(page, base, `#/brew/${siphon.id}`);
+  check('編輯賽風：帶回賽風、濾杯隱藏', q(await methodState()) === q({ method: 'siphon', dripperHidden: true }));
+  await openForm(page, base, '#/brew/new');
+  check('新紀錄：上一杯是賽風 → 預設賽風', (await methodState()).method === 'siphon');
+  await openForm(page, base, '#/brew/new?from=brew-older');
+  check('「再沖一杯」手沖的紀錄 → 手沖、濾杯帶入', q(await methodState()) === q({ method: 'pourover', dripperHidden: false })
+    && await page.eval(`document.querySelector('#dripperId').value === 'd-1'`));
+  await openForm(page, base, `#/brew/new?from=${siphon.id}`);
+  check('「再沖一杯」賽風的紀錄 → 賽風', (await methodState()).method === 'siphon');
+
+  // 賽風改回手沖：濾杯出現、可以選
+  await openForm(page, base, `#/brew/${siphon.id}`);
+  await click(page, '.segmented[data-name="method"] button[data-v="pourover"]');
+  check('改回手沖：濾杯欄位出現', (await methodState()).dripperHidden === false);
+  await page.eval(`(document.querySelector('#dripperId').value = 'd-1', true)`);
+  await click(page, '.save-bar');
+  await page.waitFor(`location.hash === '#/'`, { label: '改回手沖存檔' });
+  const back2 = await page.eval(`import('/js/db.js').then((db) => db.get('brews', ${q(siphon.id)}))`);
+  check('改回手沖：method pourover、濾杯存下', back2.method === 'pourover' && back2.dripperId === 'd-1', q(back2));
+  await page.eval(`import('/js/db.js').then(async (db) => { await db.put('brews', { ...(await db.get('brews', ${q(siphon.id)})), method: 'siphon', dripperId: '' }); return true; })`);
+
+  // 統計：兩種都有才出現篩選；只看賽風時沒有濾杯比較
+  await visit(page, base, '#/stats');
+  await page.waitFor(`document.querySelector('#stats-page')`, { label: '統計' });
+  const statsFilter = await page.eval(`[...document.querySelectorAll('#stats-method option')].map((o) => o.textContent.trim())`);
+  check('統計：有兩種沖煮方式時出現篩選', q(statsFilter) === q(['全部沖煮方式', '手沖', '賽風']), q(statsFilter));
+  const byMethod = await page.eval(`import('/js/models.js').then(async (m) => {
+    const all = await m.getStats({ period: 'all' });
+    const s = await m.getStats({ period: 'all', method: 'siphon' });
+    const p = await m.getStats({ period: 'all', method: 'pourover' });
+    const bad = await m.getStats({ period: 'all', method: 'french' });
+    return { all: all.stats.cups, siphon: s.stats.cups, pour: p.stats.cups, sDrippers: s.stats.drippers.length, bad: bad.method, badCups: bad.stats.cups };
+  })`);
+  check('統計：依沖煮方式篩選杯數；只看賽風沒有濾杯比較；不認得的值當全部',
+    byMethod.siphon === 1 && byMethod.pour === byMethod.all - 1 && byMethod.sDrippers === 0 && byMethod.bad === '' && byMethod.badCups === byMethod.all, q(byMethod));
+  await page.eval(`(() => { const s = document.querySelector('#stats-method'); s.value = 'siphon'; s.dispatchEvent(new Event('change')); return true; })()`);
+  await page.waitFor(`document.querySelector('#stats-method')?.value === 'siphon'`, { label: '只看賽風' });
+  check('統計只看賽風：不顯示濾杯比較', !(await page.eval(`[...document.querySelectorAll('.stats-sub')].some((h) => h.textContent === '濾杯')`)));
+  await page.eval(`(() => { const s = document.querySelector('#stats-method'); s.value = ''; s.dispatchEvent(new Event('change')); return true; })()`);
+  await page.waitFor(`document.querySelector('#stats-method')?.value === ''`, { label: '統計回到全部' });
+
+  // 備份：v8 匯出帶 method；v7 舊檔補成手沖；不認得的值整份不匯入
+  const backup = await page.eval(`import('/js/models.js').then(async (m) => {
+    const d = await m.exportData({ includePhotos: false });
+    const exported = { v: d.schemaVersion, method: d.brews.find((b) => b.id === ${q(siphon.id)}).method };
+    const v7 = { ...d, schemaVersion: 7, brews: d.brews.map(({ method, ...b }) => b) };
+    const r7 = await m.importData(JSON.stringify(v7), { replace: true });
+    const after7 = await m.getBrew(${q(siphon.id)});
+    const bad = { ...d, brews: d.brews.map((b) => (b.id === ${q(siphon.id)} ? { ...b, method: 'french' } : b)) };
+    const rBad = await m.importData(JSON.stringify(bad), { replace: true });
+    const r8 = await m.importData(JSON.stringify(d), { replace: true });
+    const after8 = await m.getBrew(${q(siphon.id)});
+    return { exported, r7: r7.ok, after7: after7.method, rBad: rBad.ok, r8: r8.ok, after8: after8.method, after8Dripper: after8.dripperId };
+  })`);
+  check('備份：匯出 schemaVersion 8、帶 method', backup.exported.v === 8 && backup.exported.method === 'siphon', q(backup));
+  check('備份：v7 舊檔匯入後算手沖', backup.r7 && backup.after7 === 'pourover', q(backup));
+  check('備份：不認得的沖煮方式整份不匯入', backup.rBad === false, q(backup));
+  check('備份：v8 匯入還原賽風', backup.r8 && backup.after8 === 'siphon' && backup.after8Dripper === '', q(backup));
+  for (const theme of ['dark', 'light']) {
+    await reload(page, `localStorage.setItem('theme', ${q(theme)})`);
+    await openForm(page, base, `#/brew/${siphon.id}`);
+    await screenshot(page, path.join(shotDir, `form-siphon-${theme}.png`));
+  }
 
   /* ===== 「已更新」提示出現時，「儲存」往上讓開 ===== */
   await page.eval(`import('/js/db.js').then((db) => db.remove('meta', 'changelogSeen')).then(() => true)`);
