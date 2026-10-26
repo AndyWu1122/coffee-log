@@ -11,7 +11,7 @@ export function esc(value) {
 }
 
 export function setTitle(title) {
-  document.title = title === '手沖紀錄' ? title : `${title}｜手沖紀錄`;
+  document.title = title === '咖啡紀錄' ? title : `${title}｜咖啡紀錄`;
   document.getElementById('page-title').textContent = title;
 }
 

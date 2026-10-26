@@ -44,7 +44,7 @@ function renderNotReady(container, state, code) {
         <h2>好友邀請</h2>
         <div class="friend-code">${esc(formatFriendCode(code))}</div>
         <button type="button" class="btn btn-block" data-action="copy">複製代碼</button>
-        <p class="hint">如果你平常是從 iPhone 主畫面的「手沖紀錄」使用，請複製代碼後回到那個 App，
+        <p class="hint">如果你平常是從 iPhone 主畫面的「咖啡紀錄」使用，請複製代碼後回到那個 App，
           在 ☰ →「好友管理」貼上（主畫面的 App 和 Safari 的登入狀態是分開的）。</p>
       </section>` : ''}
     <div class="empty">

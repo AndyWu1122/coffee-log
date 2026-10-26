@@ -1,6 +1,6 @@
 {
-  "name": "手沖咖啡紀錄",
-  "short_name": "手沖紀錄",
+  "name": "咖啡紀錄",
+  "short_name": "咖啡紀錄",
   "description": "記錄手沖咖啡沖煮參數與風味",
   "lang": "zh-Hant",
   "start_url": "./",

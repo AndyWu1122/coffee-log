@@ -1,4 +1,4 @@
-# 手沖咖啡紀錄 App（coffee-log）
+# 咖啡紀錄 App（coffee-log）
 
 記錄手沖咖啡沖煮參數與風味的 PWA，主要在手機上使用。回覆與註解請用繁體中文。
 
@@ -331,7 +331,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - **trigger ↔ function 的驗證**：vault 的 `push_webhook_secret` ＝ secrets 的 `PUSH_WEBHOOK_SECRET`；trigger 送 `x-push-signature`（body 的 HMAC-SHA256），body 有 `sent_at`，function 只收 2 分鐘內的；**密鑰本身不送出**（pg_net 的 `net.*` 表是 Supabase 預設的 PUBLIC 權限，雖然沒從 API 公開也不放密鑰）
   - function 的網址也在 vault（`send_push_url`）；沒設定就不送；推播出錯一律 `exception when others`，**絕不影響留言寫入**
   - `send-push` 的 `verify_jwt = false`（呼叫者是資料庫），身分只靠簽章
-- **推播內容只有 `{ v, kind, nickname, owner, brewId }`**（kind：comment／reply／post／like；post 多 `bean`，post、like 多 `others`、`quiet`），不含留言原文、筆記；send-push 檢查每種 kind 的人數上限（留言 3、新貼文 200、讚 1）、不能混在一起；sw.js 只當文字顯示（`cleanText`：去掉控制字元與改變方向的字元，暱稱 ≤ 20 字、豆子 ≤ 30 字），標題「手沖紀錄」、內容「<暱稱> 留言了你的貼文／回覆了你的留言／說你的貼文讚／分享了一杯 <豆子>」；格式不對顯示通用的「有新的留言」（iOS 規定每則推播都要顯示）
+- **推播內容只有 `{ v, kind, nickname, owner, brewId }`**（kind：comment／reply／post／like；post 多 `bean`，post、like 多 `others`、`quiet`），不含留言原文、筆記；send-push 檢查每種 kind 的人數上限（留言 3、新貼文 200、讚 1）、不能混在一起；sw.js 只當文字顯示（`cleanText`：去掉控制字元與改變方向的字元，暱稱 ≤ 20 字、豆子 ≤ 30 字），標題「咖啡紀錄」、內容「<暱稱> 留言了你的貼文／回覆了你的留言／說你的貼文讚／分享了一杯 <豆子>」；格式不對顯示通用的「有新的留言」（iOS 規定每則推播都要顯示）
   - tag／Topic：留言、回覆 `post:<owner>/<id>`；讚 `like:<owner>/<id>`（不蓋掉留言的）；新貼文 `friend:<owner>`
 - **點通知**：sw.js 用驗證過的 uuid 自己組 `#/social/<owner>/<id>?comments=1`（留言、回覆）或 `#/social/<owner>/<id>`（讚、新貼文）（`PUSH_ROUTE`，和 `models.isPushRoute` 一致），不合格一律 `#/social`；App 開著就 `postMessage` 讓那個視窗換頁（app.js 再檢查一次）＋`focus()`，沒開才 `openWindow`
 - 金鑰：VAPID 公鑰在 `js/config.js`（`vapidPublicKey`；空字串＝還沒開放）；私鑰、`VAPID_SUBJECT`、`PUSH_WEBHOOK_SECRET` 只在 Supabase secrets；站長用 `scripts/vapid-keys.mjs` 在自己電腦產生（寫出 `.env.push`、`.env.push.sql`，被 `.env.*` 排除），**私鑰不貼給 Claude**

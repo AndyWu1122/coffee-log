@@ -108,7 +108,7 @@ try {
   check('用 Resend 的 API key、寄到站長的信箱', email?.auth === 'Bearer local-test-key' && email?.body?.to?.[0] === 'developer@test.local',
     JSON.stringify({ auth: email?.auth, to: email?.body?.to }));
   check('寄件人是 onboarding@resend.dev（免費方案不用自己的網域）', email?.body?.from?.includes('<onboarding@resend.dev>'), email?.body?.from);
-  check('主旨：類型＋內容開頭（換行改成空白）', email?.body?.subject?.startsWith('[手沖紀錄] 問題回報：<script>alert(1)</script>')
+  check('主旨：類型＋內容開頭（換行改成空白）', email?.body?.subject?.startsWith('[咖啡紀錄] 問題回報：<script>alert(1)</script>')
     && !/[\r\n]/.test(email?.body?.subject ?? ''), email?.body?.subject);
   check('內容是純文字（不是 HTML）：有暱稱、版本號、完整回饋', !email?.body?.html && email?.body?.text?.includes('暱稱：A')
     && email.body.text.includes(`App 版本：${swVersion}`) && email.body.text.includes(XSS));

@@ -33,7 +33,7 @@ const thumbUrl = (blob) => {
 };
 
 export async function render(container, { query = {}, isCurrent }) {
-  setTitle('手沖紀錄');
+  setTitle('咖啡紀錄');
   // #/?bean=<id>（統計頁點豆子的長條）：只看這支豆子的紀錄；套用後把網址改回 #/，之後照常保留篩選
   if (query.bean) {
     filter.beanId = query.bean;

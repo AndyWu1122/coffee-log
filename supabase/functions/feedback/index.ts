@@ -21,7 +21,7 @@ const MAIL = LOCAL
   ? mailConfig({ apiKey: 'local-test-key', to: 'developer@test.local', local: true })
   : mailConfig({ apiKey: Deno.env.get('RESEND_API_KEY'), to: Deno.env.get('FEEDBACK_TO') });
 // Resend 免費方案不用自己的網域：從 onboarding@resend.dev 只能寄給註冊 Resend 的那個 email（就是站長自己）
-const FROM = '手沖紀錄 <onboarding@resend.dev>';
+const FROM = '咖啡紀錄 <onboarding@resend.dev>';
 
 const CATEGORIES: Record<string, string> = { bug: '問題回報', idea: '功能建議', other: '其他' };
 const MESSAGE_MAX = 1000; // 和 public.feedback 的 check 一致
@@ -105,7 +105,7 @@ async function notify(f: { category: string; message: string; appVersion: string
       body: JSON.stringify({
         from: FROM,
         to: [MAIL.to],
-        subject: `[手沖紀錄] ${CATEGORIES[f.category]}：${subjectLine(f.message)}`,
+        subject: `[咖啡紀錄] ${CATEGORIES[f.category]}：${subjectLine(f.message)}`,
         text,
       }),
     });

@@ -101,7 +101,7 @@ function deviceHtml({ support, device }) {
     return `
       <div class="notice" id="push-ios-help">
         <p><strong>iPhone 要先加入主畫面才能收到通知</strong></p>
-        <p>請先按 Safari 下方的「分享」→「加入主畫面」，再從主畫面的「手沖紀錄」開啟，回到這一頁啟用通知。</p>
+        <p>請先按 Safari 下方的「分享」→「加入主畫面」，再從主畫面的「咖啡紀錄」開啟，回到這一頁啟用通知。</p>
       </div>`;
   }
   if (support === 'unsupported') {
@@ -114,7 +114,7 @@ function deviceHtml({ support, device }) {
         <p><strong>你已經拒絕了這個 App 的通知</strong></p>
         <p>要收到通知，請到系統設定開啟：</p>
         <ul>
-          <li>iPhone：設定 →「通知」→「手沖紀錄」→ 允許通知</li>
+          <li>iPhone：設定 →「通知」→「咖啡紀錄」→ 允許通知</li>
           <li>Android：Chrome → 右上角 ⋮ →「設定」→「網站設定」→「通知」</li>
         </ul>
         <p>開啟後回到這一頁，按「重新檢查」。</p>

@@ -223,7 +223,7 @@ function renderReady(container, { user, profile }, { isCurrent, rerender }) {
   // 好友代碼
   container.querySelector('[data-action="copy"]').addEventListener('click', () => copyText(code, '已複製好友代碼'));
   container.querySelector('[data-action="share"]').addEventListener('click', async () => {
-    const data = { title: '手沖紀錄：加我為好友', text: `我的好友代碼：${formatFriendCode(code)}`, url: inviteUrl };
+    const data = { title: '咖啡紀錄：加我為好友', text: `我的好友代碼：${formatFriendCode(code)}`, url: inviteUrl };
     if (navigator.share) {
       try { await navigator.share(data); } catch { /* 使用者取消 */ }
     } else {

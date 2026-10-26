@@ -1,7 +1,7 @@
 // Service Worker：安裝時預先快取所有檔案，之後一律從快取讀取（離線可用）
 // ⚠ 修改任何前端檔案後，APP_VERSION 至少第三碼 +1，使用者才會收到新版本（規則見 CLAUDE.md「版本號」）
 // 它也是「設定與關於」頁顯示的版本號、意見回饋附的版本（app.js 用 'version' 訊息詢問）
-const APP_VERSION = '1.14.1';
+const APP_VERSION = '1.14.2';
 const CACHE_NAME = `coffee-log-v${APP_VERSION}`;
 
 const ASSETS = [
@@ -146,7 +146,7 @@ self.addEventListener('push', (event) => {
   try { data = event.data?.json() ?? null; } catch { /* 不是 JSON：顯示通用的提示 */ }
   const n = notificationFor(data);
   // quiet：30 分鐘內合併的後續通知，只更新內容、不再響（iPhone 可能仍會響）
-  event.waitUntil(self.registration.showNotification('手沖紀錄', {
+  event.waitUntil(self.registration.showNotification('咖啡紀錄', {
     body: n.body, tag: n.tag, renotify: !n.quiet, silent: n.quiet, icon: 'icons/icon-192.png', data: { path: n.path },
   }));
 });

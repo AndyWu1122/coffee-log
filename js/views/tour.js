@@ -11,7 +11,7 @@ import { socialAvailable } from '../models.js';
 const STEPS = [
   {
     id: 'welcome',
-    title: '歡迎使用手沖紀錄 ☕',
+    title: '歡迎使用咖啡紀錄 ☕',
     body: '記下每一杯的豆子、粉量、水溫、時間和風味，慢慢找出自己最喜歡的沖法。資料存在這支手機上，不用登入也能用。',
   },
   {

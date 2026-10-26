@@ -356,9 +356,9 @@ export function drawCard(canvas, data, { size = 'post', photo = null, includeNot
     y += h;
   }
 
-  // 頁尾：左邊日期，右下角小字「手沖紀錄」
+  // 頁尾：左邊日期，右下角小字「咖啡紀錄」
   drawLines([data.date.replaceAll('-', '.')], font(28), C.dim, P, footerTop, FOOT_H);
-  drawLines(['手沖紀錄'], font(28, 600), C.dim, W - P, footerTop, FOOT_H, 'right');
+  drawLines(['咖啡紀錄'], font(28, 600), C.dim, W - P, footerTop, FOOT_H, 'right');
   box('footer', P, footerTop, CW, FOOT_H);
 
   return { width: W, height: H, boxes, noteLines, nameLines, chips };

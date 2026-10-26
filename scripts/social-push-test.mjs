@@ -243,7 +243,7 @@ try {
   const notifications = await pa.waitFor(`navigator.serviceWorker.ready.then((r) => r.getNotifications()).then((ns) => ns.length && ns.map((n) => ({
     title: n.title, body: n.body, tag: n.tag, path: n.data?.path })))`, { label: 'A 的通知' }).catch(() => []);
   const n = notifications[0];
-  check('通知：「B 留言了你的貼文」', notifications.length === 1 && n.title === '手沖紀錄' && n.body === 'B 留言了你的貼文', JSON.stringify(notifications));
+  check('通知：「B 留言了你的貼文」', notifications.length === 1 && n.title === '咖啡紀錄' && n.body === 'B 留言了你的貼文', JSON.stringify(notifications));
   check('通知沒有留言原文', !JSON.stringify(notifications).includes('只在 App'));
   check('通知的 tag 是這篇貼文（取代舊的）', n?.tag === `post:${A.id}/${post}`);
   check('通知記著點擊後要去的貼文', n?.path === `#/social/${A.id}/${post}?comments=1`, n?.path);
