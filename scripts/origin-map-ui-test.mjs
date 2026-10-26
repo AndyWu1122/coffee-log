@@ -2,14 +2,19 @@
 // 手機直向 390px：深色、淺色 × 世界地圖、單一國家各截一張圖（存到暫存資料夾，路徑印在最後）
 // 確認：國家依杯數上色、清單依杯數排；打開時捲到喝最多的國家；點小國的圓點、清單進到國家；國家頁的產區圓點都在地圖裡，
 // 點圓點／清單顯示風味和豆子，猜的產地有「確認」連結；認不出產地的豆子另外列（XSS）；豆子表單的「看起來是…［套用］」、
-// 選國家才有產區；列表顯示國家＋產區；備份 v6 帶著國家、產區，v5 照樣匯入；離線可用；沒有 CSP 違規、沒有 JavaScript 錯誤
+// 選國家才有產區；列表顯示國家＋產區；備份 v7 帶著國家、產區、想買清單，v5、v6 照樣匯入；離線可用；沒有 CSP 違規、沒有 JavaScript 錯誤
+// 認識產區：所有產地都畫出來、國家與產區的介紹、「你喝到的」打勾對照、產區圖鑑、想買清單（加入、移除、連結）；從 DB v7 升級
 //
 // 用法：node scripts/origin-map-ui-test.mjs
 
 import { mkdtemp, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { startServer, launchChrome, prepare, visit, click, fill, submit, toast, noInjection } from './chrome.mjs';
+import { root, startServer, launchChrome, prepare, visit, click, fill, submit, toast, noInjection } from './chrome.mjs';
+
+// 升級測試：1.15.0（commit 72279c0）的 db.js 是 DB v7（沒有 wishlist）
+const OLD_DB_SOURCE = execFileSync('git', ['show', '72279c0:js/db.js'], { cwd: root, encoding: 'utf8' });
 
 let passed = 0;
 const failures = [];
@@ -249,17 +254,127 @@ try {
   const tooLong = await page.eval(`import('/js/models.js').then((m) => m.saveBean({ name: 'x', process: 'washed', roastLevel: 'light', country: 'CR', region: 'CR.centralvalley', origin: 'a'.repeat(95) })).then((r) => r.errors)`);
   check('國家＋產區＋莊園超過 100 字（分享的限制）：存不進去', Boolean(tooLong?.origin), q(tooLong));
 
+  /* ===== 認識產區 ===== */
+  const openExplore = async (hash, sel) => {
+    await visit(page, base, hash);
+    await page.waitFor(`document.querySelector(${q(sel)})`, { label: hash });
+  };
+  await openWorld(page, base);
+  await click(page, '.origin-modes button[data-v="explore"]');
+  await page.waitFor(`location.hash === '#/origins?mode=explore' && document.querySelector('.origin-progress')`, { label: '切到認識產區' });
+  const world = await page.eval(`({
+    coffee: document.querySelectorAll('.origin-world .is-coffee').length,
+    dots: document.querySelectorAll('.origin-world .origin-dot').length,
+    drunkDots: document.querySelectorAll('.origin-world .origin-dot.is-drunk').length,
+    hits: document.querySelectorAll('.origin-world .origin-hit').length,
+    progress: document.querySelector('.origin-progress-text').textContent.replace(/\\s+/g, ''),
+    rows: document.querySelectorAll('.origin-row[data-country]').length,
+    groups: [...document.querySelectorAll('.origin-group')].map((h) => h.textContent),
+    et: document.querySelector('.origin-row[data-country="ET"] .origin-row-status').textContent,
+    wish: document.querySelector('.origin-wishlist').textContent,
+  })`);
+  check('認識產區：32 國都上色、84 個產區都畫出來（喝過 5 個實心）、每國都點得到', world.coffee >= 32 && world.dots === 84 && world.drunkDots === 5 && world.hits === 32, q(world));
+  check('產區圖鑑：已探索 5／84', world.progress === '已探索5／84個產區', world.progress);
+  check('國家依地區分組列出，衣索比亞「喝過 2／9」', world.rows === 32 && world.groups.join('|') === '非洲・中東|美洲|亞洲・大洋洲' && world.et === '喝過 2／9', q(world));
+  check('想買清單是空的：說明怎麼加', world.wish.includes('加入想買清單'));
+  l = await layout(page);
+  check('認識產區（世界）：整頁不橫向捲動', l.pageWidth <= l.viewport, q(l));
+  check('國家的列 ≥ 44px', await page.eval(`[...document.querySelectorAll('.origin-row')].every((r) => r.getBoundingClientRect().height >= 44)`));
+  await tap(page, '.origin-world .origin-hit[data-code="PA"]');
+  await page.waitFor(`location.hash === '#/origins/PA?mode=explore' && document.querySelector('.origin-country')`, { label: '點巴拿馬' });
+  const panama = await page.eval(`({ intro: document.querySelector('.origin-text')?.textContent ?? '', tags: document.querySelectorAll('.origin-card > .note-tags .note-tag').length,
+    rows: [...document.querySelectorAll('.origin-row[data-region]')].map((r) => r.dataset.region), detail: document.querySelector('.origin-detail').textContent,
+    mode: document.querySelector('.origin-modes .segmented').dataset.value })`);
+  check('沒喝過的國家（巴拿馬）也有國家介紹、常見風味、所有產區', panama.intro.includes("藝伎") && panama.tags >= 3 && q(panama.rows) === q(["PA.boquete", "PA.volcan"]) && panama.mode === "explore", q(panama));
+  await click(page, '.origin-row[data-region="PA.boquete"]');
+  const boquete = await page.eval(`({ text: document.querySelector('.origin-region-detail').textContent.replace(/\\s+/g, ' '),
+    subs: [...document.querySelectorAll('.origin-region-detail .origin-sub')].map((p) => p.textContent),
+    selected: document.querySelector('.origin-dot.is-selected')?.dataset.dot })`);
+  check('有詳細介紹的產區（波奎特）：海拔、處理法、各處理法的常見風味、介紹、還沒喝過',
+    boquete.text.includes('海拔約 1,200–1,900 公尺') && q(boquete.subs) === q(['水洗常見', '日曬常見', '你喝到的']) && boquete.text.includes('翡翠莊園')
+      && boquete.text.includes('還沒喝過這個產區的豆子') && boquete.selected === 'PA.boquete', q(boquete));
+  await click(page, '.origin-row[data-region="PA.volcan"]');
+  check('還沒寫詳細介紹的產區（沃肯）：說明之後補上', (await page.eval(`document.querySelector('.origin-region-detail').textContent`)).includes('詳細介紹之後補上'));
+  // 想買清單：加入 → 清單列標「★ 想買」→ 世界頁列出、連回這個產區 → 移除
+  await click(page, '[data-wish="PA.volcan"]');
+  await toast(page, '已加入想買清單');
+  const wished = await page.eval(`(async () => ({ btn: document.querySelector('[data-wish="PA.volcan"]').textContent.trim(), pressed: document.querySelector('[data-wish="PA.volcan"]').getAttribute('aria-pressed'),
+    row: document.querySelector('.origin-row[data-region="PA.volcan"] .origin-row-status').textContent, selected: document.querySelector('.origin-row.is-selected')?.dataset.region,
+    stored: await import('/js/db.js').then((db) => db.getAll('wishlist')) }))()`);
+  check('加入想買清單：按鈕、清單列都標示，存進 wishlist', wished.btn === '★ 在想買清單裡' && wished.pressed === 'true' && wished.row.includes('★ 想買')
+    && wished.selected === 'PA.volcan' && wished.stored.length === 1 && wished.stored[0].key === 'region:PA.volcan' && wished.stored[0].target === 'PA.volcan', q(wished));
+  await openExplore('#/origins?mode=explore', '.origin-wishlist');
+  const wishLinks = await page.eval(`[...document.querySelectorAll('.origin-wishlist a')].map((a) => [a.getAttribute('href'), a.textContent])`);
+  check('世界頁的想買清單：列出、連回那個產區', q(wishLinks) === q([['#/origins/PA?mode=explore&region=PA.volcan', '巴拿馬・沃肯']]), q(wishLinks));
+  await click(page, '.origin-wishlist a');
+  await page.waitFor(`document.querySelector('.origin-row.is-selected')?.dataset.region === 'PA.volcan'`, { label: '從想買清單打開產區' });
+  check('從想買清單點過去：直接打開那個產區', (await page.eval(`document.querySelector('.origin-region-detail h3').textContent`)).startsWith('沃肯'));
+  await click(page, '[data-wish="PA.volcan"]');
+  await toast(page, '已從想買清單移除');
+  check('移出想買清單', (await page.eval(`import('/js/db.js').then((db) => db.getAll('wishlist')).then((w) => w.length)`)) === 0);
+  await click(page, '.origin-row[data-region="PA.boquete"]');
+  await click(page, '[data-wish="PA.boquete"]');
+  await toast(page, '已加入想買清單');
+  // 喝過的產區：你喝到的、打勾對照
+  await openExplore('#/origins/ET?mode=explore&region=ET.yirgacheffe', '.origin-mine');
+  const yirga = await page.eval(`({ mine: document.querySelector('.origin-mine').textContent.replace(/\\s+/g, ' '),
+    matches: [...document.querySelectorAll('.origin-mine .note-tag.is-match')].map((t) => t.textContent.replace(/[✓\\d\\s]/g, '')),
+    others: [...document.querySelectorAll('.origin-mine .note-tag:not(.is-match)')].map((t) => t.textContent.replace(/[✓\\d\\s]/g, '')),
+    beans: [...document.querySelectorAll('.origin-mine .origin-beans li > a:first-child')].map((a) => a.getAttribute('href')),
+    row: document.querySelector('.origin-row[data-region="ET.yirgacheffe"] .origin-row-status').textContent })`);
+  check('喝過的產區（耶加雪菲）：你喝到的杯數、評分、豆子', yirga.mine.includes('8 杯・平均') && q(yirga.beans) === q(['#/?bean=b-yirga']) && yirga.row === '喝過 8 杯', q(yirga));
+  check('你喝到的風味：和介紹一樣的打勾（茉莉、檸檬，藍莓在日曬的介紹裡）',
+    q(yirga.matches.sort()) === q(['檸檬', '茉莉', '藍莓'].sort()) && yirga.others.length === 0, q(yirga));
+  await openExplore('#/origins/ET?mode=explore&region=ET.harrar', '.origin-mine');
+  check('沒喝過的產區（哈拉）：你喝到的寫「還沒喝過」', (await page.eval(`document.querySelector('.origin-mine').textContent`)).includes('還沒喝過'));
+  // 我的足跡 → 介紹；模式切換留在同一個國家
+  await openCountry(page, base, 'ET');
+  check('我的足跡的產區詳細：連到這個產區的介紹', (await page.eval(`document.querySelector('.origin-guide-link a').getAttribute('href')`)) === '#/origins/ET?mode=explore&region=ET.yirgacheffe');
+  await click(page, '.origin-modes button[data-v="explore"]');
+  await page.waitFor(`location.hash === '#/origins/ET?mode=explore' && document.querySelector('.origin-text')`, { label: '在國家頁切模式' });
+  check('在國家頁切到認識產區：留在同一個國家', true);
+  await click(page, '.origin-back a');
+  await page.waitFor(`location.hash === '#/origins?mode=explore' && document.querySelector('.origin-progress')`, { label: '回世界（認識產區）' });
+  check('「‹ 世界地圖」回到同一個模式的世界', true);
+  await openExplore('#/origins/ID?mode=explore&region=ID.mandheling', '.origin-mine');
+  check('濕剝法（曼特寧）顯示成「濕剝常見」', (await page.eval(`[...document.querySelectorAll('.origin-region-detail .origin-sub')].map((p) => p.textContent).join('|')`)) === '濕剝常見|你喝到的');
+  for (const theme of ['light', 'dark']) {
+    await setTheme(page, theme);
+    await openExplore('#/origins?mode=explore', '.origin-progress');
+    await screenshot(page, path.join(shotDir, `explore-${theme}-world.png`));
+    await openExplore('#/origins/ET?mode=explore&region=ET.yirgacheffe', '.origin-mine');
+    l = await layout(page);
+    check(`認識產區（衣索比亞・${theme === 'dark' ? '深色' : '淺色'}）：整頁不橫向捲動`, l.pageWidth <= l.viewport, q(l));
+    await screenshot(page, path.join(shotDir, `explore-${theme}-ethiopia.png`));
+  }
+
   /* ===== 備份 ===== */
-  const exported = await page.eval(`import('/js/models.js').then((m) => m.exportData({ includePhotos: false })).then((d) => ({ v: d.schemaVersion, guji: d.beans.find((b) => b.id === 'b-guji') }))`);
-  check('匯出 schemaVersion 6，豆子帶著國家、產區', exported.v === 6 && exported.guji.country === 'ET' && exported.guji.region === 'ET.guji', q(exported));
+  const exported = await page.eval(`import('/js/models.js').then((m) => m.exportData({ includePhotos: false })).then((d) => ({ v: d.schemaVersion, guji: d.beans.find((b) => b.id === 'b-guji'), wish: d.wishlist.length }))`);
+  check('匯出 schemaVersion 7，豆子帶著國家、產區', exported.v === 7 && exported.guji.country === 'ET' && exported.guji.region === 'ET.guji', q(exported));
   const v5 = await page.eval(`import('/js/models.js').then(async (m) => {
     const d = await m.exportData({ includePhotos: false });
-    const old = { ...d, schemaVersion: 5, beans: d.beans.map(({ country, region, ...b }) => b) };
+    const { wishlist, ...rest } = d; // v5 沒有想買清單
+    const old = { ...rest, schemaVersion: 5, beans: d.beans.map(({ country, region, ...b }) => b) };
     const r = await m.importData(JSON.stringify(old), { replace: true });
     const b = (await import('/js/db.js')).get('beans', 'b-guji');
     return { ok: r.ok, bean: await b };
   }).then(({ ok, bean }) => ({ ok, country: bean.country, region: bean.region }))`);
   check('v5 備份（沒有國家、產區）照樣匯入，補成空的', q(v5) === q({ ok: true, country: '', region: '' }), q(v5));
+  check('匯出帶著想買清單；「取代全部」匯入沒有想買清單的舊備份（v5）會清空', exported.wish === 1 && (await page.eval(`import('/js/db.js').then((db) => db.getAll('wishlist')).then((w) => w.length)`)) === 0, q(exported));
+  const v7 = await page.eval(`import('/js/models.js').then(async (m) => {
+    const d = await m.exportData({ includePhotos: false });
+    d.wishlist = [{ kind: 'region', target: 'KE.nyeri', createdAt: '2026-10-01T00:00:00.000Z', extra: 'x' }];
+    const r = await m.importData(JSON.stringify(d), { replace: false });
+    return { ok: r.ok, list: await m.listWishlist() };
+  })`);
+  check('v7 備份的想買清單匯入（只留規格內的欄位）', v7.ok && q(v7.list) === q([{ key: 'region:KE.nyeri', kind: 'region', target: 'KE.nyeri', createdAt: '2026-10-01T00:00:00.000Z' }]), q(v7));
+  const badWish = await page.eval(`import('/js/models.js').then(async (m) => {
+    const d = await m.exportData({ includePhotos: false });
+    d.wishlist = [{ kind: 'region', target: 'XX.nowhere' }];
+    return m.importData(JSON.stringify(d), { replace: true });
+  })`);
+  check('想買清單裡不認得的產區：整份不匯入', badWish.ok === false && badWish.errors.some((e) => e.includes('想買清單')), q(badWish.errors));
+
   const bad = await page.eval(`import('/js/models.js').then(async (m) => {
     const d = await m.exportData({ includePhotos: false });
     d.beans[0].country = 'XX';
@@ -291,6 +406,30 @@ try {
   check('沒有紀錄：照樣畫地圖、提示記下第一杯，沒有清單', emptyState.hint.includes('記下第一杯') && emptyState.rows === 0 && !emptyState.unknown && emptyState.map > 150, q(emptyState));
   await screenshot(empty, path.join(shotDir, 'origins-empty.png'));
   check('沒有資料的頁面：沒有 CSP 違規、沒有 JavaScript 錯誤', (await empty.eval('window.__csp')).length === 0 && empty.errors.length === 0, empty.errors.join(' / '));
+
+  /* ===== 從 DB v7（1.15.0）升級：多了 wishlist，舊資料都在 ===== */
+  const old = await chrome.newPage(null, { isolated: true });
+  await old.goto(`${base}manifest.json`); // 同網域、沒有 App 的頁面
+  const source = OLD_DB_SOURCE.replace(/from '\.\/([\w.]+\.js)'/g, (_, file) => `from '${base}js/${file}'`);
+  const wrote = await old.eval(`(async () => {
+    const db = await import(URL.createObjectURL(new Blob([${q(source)}], { type: 'text/javascript' })));
+    await db.bulkPut(${q({ beans: data.beans.slice(0, 2), brews: data.brews.slice(0, 3) })});
+    const conn = await db.openDB();
+    conn.close();
+    return { version: conn.version, stores: [...conn.objectStoreNames] };
+  })()`);
+  check('1.15.0 的 db.js 建出 DB v7（沒有 wishlist）', wrote.version === 7 && !wrote.stores.includes('wishlist'), q(wrote));
+  await old.goto(`${base}#/origins?mode=explore`);
+  await prepare(old);
+  await old.waitFor(`document.querySelector('.origin-progress')`, { label: '升級後打開認識產區' });
+  const upgraded = await old.eval(`import('/js/db.js').then(async (db) => { const conn = await db.openDB();
+    return { version: conn.version, wishlist: conn.objectStoreNames.contains('wishlist'), beans: (await db.getAll('beans')).length, brews: (await db.getAll('brews')).length }; })`);
+  check('升級到 DB v8：多了 wishlist，舊的豆子、紀錄都在', upgraded.version === 8 && upgraded.wishlist && upgraded.beans === 2 && upgraded.brews === 3, q(upgraded));
+  // 沒有 App 的頁面（manifest.json）瀏覽器會自己抓 /favicon.ico，和 App 無關
+  const oldErrors = old.errors.filter((e) => !e.includes('/favicon.ico'));
+  const progress = await old.eval(`document.querySelector('.origin-progress-text').textContent.replace(/\\s+/g, '')`);
+  check('升級後：圖鑑算得出來、沒有 JavaScript 錯誤', progress === '已探索1／84個產區' && oldErrors.length === 0, `${progress} ${oldErrors.join(' / ')}`);
+
 } catch (err) {
   console.error(err);
   failures.push(`例外：${err.message}`);

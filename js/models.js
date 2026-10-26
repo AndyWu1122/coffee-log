@@ -24,9 +24,9 @@ export {
   COUNTRIES, REGIONS, ORIGIN_GROUPS, COUNTRY_BY_CODE, REGION_BY_KEY, CUP_LEVELS, regionsOf, matchOrigin, beanPlace, originLabel,
 } from './origins.js';
 
-// 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos；v4 加入 drippers 與 brews.dripperId；v5 加入 beanPhotos；v6 加入 beans.country、region。匯入時接受所有舊版
-export const SCHEMA_VERSION = 6;
-const IMPORTABLE_VERSIONS = [1, 2, 3, 4, 5, 6];
+// 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos；v4 加入 drippers 與 brews.dripperId；v5 加入 beanPhotos；v6 加入 beans.country、region；v7 加入 wishlist。匯入時接受所有舊版
+export const SCHEMA_VERSION = 7;
+const IMPORTABLE_VERSIONS = [1, 2, 3, 4, 5, 6, 7];
 
 export const PROCESS = { washed: '水洗', natural: '日曬', honey: '蜜處理', other: '其他' };
 // 由淺到深排列
@@ -616,6 +616,31 @@ export async function getOriginMap() {
 
 /** 地圖的國界資料（約 180KB）：用到地圖頁才載入，其他頁面不用下載 */
 export const loadWorldMap = () => import('./worldMap.js');
+/** 產地介紹（「認識產區」）：用到才載入 */
+export const loadOriginGuide = () => import('./originGuide.js');
+
+/* ===== 想買清單（現在只有產區；之後好友的豆子推薦也放這裡） ===== */
+
+const wishKey = (regionKey) => `region:${regionKey}`;
+
+/** 想買清單：新→舊 */
+export async function listWishlist() {
+  return (await db.getAll('wishlist')).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+/** 加入或移出想買清單；回傳加入後是否在清單裡 */
+export async function setWishlistRegion(regionKey, wanted) {
+  if (!REGION_BY_KEY.has(regionKey)) throw new Error('不認得的產區');
+  if (wanted) await db.put('wishlist', { key: wishKey(regionKey), kind: 'region', target: regionKey, createdAt: new Date().toISOString() });
+  else await db.remove('wishlist', wishKey(regionKey));
+  return wanted;
+}
+
+/** 備份檔裡的想買清單 → 要存的列（只留規格內的欄位，key 由種類和對象產生）；格式不對回傳 null */
+function normalizeWish(input) {
+  if (input?.kind !== 'region' || !REGION_BY_KEY.has(input.target)) return null;
+  return { key: wishKey(input.target), kind: 'region', target: input.target, createdAt: toIso(input.createdAt) ?? new Date().toISOString() };
+}
 
 /* ===== 分享卡片 ===== */
 
@@ -771,8 +796,8 @@ const beanPhotoMeta = (p) => ({ beanId: p.beanId, width: p.width, height: p.heig
  * （之後匯入「取代全部」時可以提醒這份備份不含照片）
  */
 export async function exportData({ includePhotos = true } = {}) {
-  const [beans, grinders, drippers, brews, photoRows, beanPhotoRows] = await Promise.all([
-    db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'), db.getAll('brews'),
+  const [beans, grinders, drippers, brews, wishlist, photoRows, beanPhotoRows] = await Promise.all([
+    db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'), db.getAll('brews'), db.getAll('wishlist'),
     includePhotos ? db.getAll('photos') : [], includePhotos ? db.getAll('beanPhotos') : [],
   ]);
   const photos = [];
@@ -781,7 +806,7 @@ export async function exportData({ includePhotos = true } = {}) {
   for (const p of beanPhotoRows) beanPhotos.push({ ...beanPhotoMeta(p), data: await blobToBase64(p.blob) });
   return {
     schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), photosIncluded: includePhotos,
-    beans, grinders, drippers, brews, photos, beanPhotos,
+    beans, grinders, drippers, brews, wishlist, photos, beanPhotos,
   };
 }
 
@@ -790,10 +815,10 @@ export async function exportData({ includePhotos = true } = {}) {
  * photos 是紀錄和豆子的照片合計（beanPhotos 是其中豆子的）；只讀照片的 Blob.size，不讀圖片內容
  */
 export async function getBackupSummary() {
-  const [beans, grinders, drippers, brews, photoRows, beanPhotoRows] = await Promise.all([
-    db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'), db.getAll('brews'), db.getAll('photos'), db.getAll('beanPhotos'),
+  const [beans, grinders, drippers, brews, wishlist, photoRows, beanPhotoRows] = await Promise.all([
+    db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'), db.getAll('brews'), db.getAll('wishlist'), db.getAll('photos'), db.getAll('beanPhotos'),
   ]);
-  const base = { schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), photosIncluded: true, beans, grinders, drippers, brews };
+  const base = { schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), photosIncluded: true, beans, grinders, drippers, brews, wishlist };
   const bytes = (data) => new TextEncoder().encode(JSON.stringify(data, null, 2)).length; // 與 downloadJson 的格式一致
   const withoutPhotos = bytes({ ...base, photosIncluded: false, photos: [], beanPhotos: [] });
   const withPhotos = bytes({
@@ -859,7 +884,7 @@ function parseImportPhotos(rawPhotos, knownIds, kind = 'brew') {
  * 匯入備份 JSON 文字。整份檔案都通過驗證才寫入（單一交易），否則完全不動。
  * replace：true 先清空現有資料（含照片）；false 依 id 合併（同 id 以檔案為準）
  * v1 檔案沒有 grinders，視為空陣列；brews 沒有 grinderId 會補成 ''；v1、v2 沒有 photos，視為空陣列
- * v1–v4 沒有 beanPhotos，視為空陣列；v1–v5 的豆子沒有 country、region，補成 ''（顯示、地圖時從文字猜）
+ * v1–v4 沒有 beanPhotos，視為空陣列；v1–v5 的豆子沒有 country、region，補成 ''（顯示、地圖時從文字猜）；v1–v6 沒有 wishlist，視為空陣列
  * v1–v3 沒有 drippers：用和 DB 升級相同的規則（js/drippers.js）從紀錄的濾杯文字建立；
  *   合併時名稱相同的沿用本機已有的濾杯，取代全部時全部新建
  * onProgress(n, total)：正在處理第 n 張照片（選填，給畫面顯示進度）
@@ -881,6 +906,8 @@ export async function importData(text, { replace = false, onProgress } = {}) {
     return { ok: false, errors: ['檔案缺少 beans、grinders 或 brews 資料'] };
   }
   if (data.beanPhotos === undefined) data.beanPhotos = []; // v1–v4
+  if (data.wishlist === undefined) data.wishlist = []; // v1–v6
+  if (!Array.isArray(data.wishlist)) return { ok: false, errors: ['檔案的 wishlist 格式錯誤'] };
   if (!Array.isArray(data.photos)) return { ok: false, errors: ['檔案的 photos 格式錯誤'] };
   if (!Array.isArray(data.beanPhotos)) return { ok: false, errors: ['檔案的 beanPhotos 格式錯誤'] };
   const legacyDrippers = data.schemaVersion < 4;
@@ -946,6 +973,12 @@ export async function importData(text, { replace = false, onProgress } = {}) {
     return brew;
   });
 
+  const wishlist = data.wishlist.map((input, i) => {
+    const wish = normalizeWish(input);
+    if (!wish) errors.push(`想買清單第 ${i + 1} 項：不認得的產區`);
+    return wish;
+  });
+
   // 照片引用的紀錄必須在檔案裡；合併模式下也可以是資料庫裡已有的
   const knownBrewIds = new Set(brews.map((b) => b.id));
   if (!replace) for (const id of await db.getAllKeys('brews')) knownBrewIds.add(id);
@@ -988,7 +1021,7 @@ export async function importData(text, { replace = false, onProgress } = {}) {
   }
   if (errors.length) return fail();
 
-  await db.bulkPut({ beans, grinders, drippers, brews, photos, thumbs, beanPhotos, beanThumbs }, { clear: replace });
+  await db.bulkPut({ beans, grinders, drippers, brews, wishlist, photos, thumbs, beanPhotos, beanThumbs }, { clear: replace });
   requestSync(); // 本機為準：取代全部後，雲端上這台裝置分享過、現在不在的紀錄會被刪除
   return {
     ok: true, beans: beans.length, grinders: grinders.length, drippers: drippers.length, brews: brews.length,

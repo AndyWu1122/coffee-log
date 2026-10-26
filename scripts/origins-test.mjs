@@ -1,5 +1,5 @@
 // 產地（js/origins.js、js/worldMap.js）：不需要 Supabase、不需要瀏覽器
-// 清單本身（代碼、key、別名不重複）、每個產區的點落在自己的國家裡、從文字比對產地、顯示用的產地、產地地圖的統計
+// 清單本身（代碼、key、別名不重複）、每個產區的點落在自己的國家裡、產地介紹的格式、從文字比對產地、顯示用的產地、產地地圖的統計
 //
 // 用法：node scripts/origins-test.mjs
 
@@ -7,6 +7,8 @@ const {
   COUNTRIES, REGIONS, COUNTRY_BY_CODE, ORIGIN_GROUPS, matchOrigin, beanPlace, originLabel, normalizeText, cupLevel, summarizeOrigins,
 } = await import('../js/origins.js');
 const { COUNTRY_SHAPES, MAP_SCALE } = await import('../js/worldMap.js');
+const { COUNTRY_GUIDE, REGION_GUIDE, GUIDE_PROCESS } = await import('../js/originGuide.js');
+const { isFlavorNote } = await import('../js/flavorWheel.js');
 
 let passed = 0;
 const failures = [];
@@ -83,6 +85,33 @@ const toMap = (lat, lon) => [(lon + 180) * MAP_SCALE, (90 - lat) * MAP_SCALE];
   check('南極洲不畫', !shapeOf.has('AQ'));
   const kb = Buffer.byteLength(JSON.stringify(COUNTRY_SHAPES)) / 1024;
   check(`地圖資料 ≤ 200KB（目前 ${kb.toFixed(0)}KB）`, kb <= 200);
+}
+
+/* ===== 產地介紹（js/originGuide.js） ===== */
+{
+  const codes = COUNTRIES.map((c) => c.code);
+  check('每個國家都有介紹、沒有多出來的', codes.every((c) => COUNTRY_GUIDE[c]) && Object.keys(COUNTRY_GUIDE).every((c) => codes.includes(c)),
+    codes.filter((c) => !COUNTRY_GUIDE[c]).join(', '));
+  const regionKeys = Object.keys(REGION_GUIDE);
+  check(`產區的詳細介紹至少 20 個（目前 ${regionKeys.length}）`, regionKeys.length >= 20);
+  check('產區介紹的 key 都在產區清單裡', regionKeys.every((k) => REGIONS.some((r) => r.key === k)), regionKeys.filter((k) => !REGIONS.some((r) => r.key === k)).join(', '));
+  const entries = [...Object.entries(COUNTRY_GUIDE), ...Object.entries(REGION_GUIDE)];
+  const problems = [];
+  for (const [key, g] of entries) {
+    const [min, max] = g.altitude ?? [];
+    if (!(Number.isInteger(min) && Number.isInteger(max) && min > 0 && min < max && max <= 3000)) problems.push(`${key}：海拔`);
+    if (!g.processes?.length || !g.processes.every((p) => Object.hasOwn(GUIDE_PROCESS, p))) problems.push(`${key}：處理法`);
+    const flavors = Array.isArray(g.flavors) ? g.flavors : Object.values(g.flavors ?? {}).flat();
+    if (!flavors.length || !flavors.every(isFlavorNote)) problems.push(`${key}：風味 ${flavors.filter((f) => !isFlavorNote(f)).join(' ')}`);
+    if (!Array.isArray(g.flavors) && !Object.keys(g.flavors).every((p) => g.processes.includes(p))) problems.push(`${key}：風味的處理法不在 processes 裡`);
+    if (!(typeof g.text === 'string' && g.text.length >= 30 && g.text.length <= 200)) problems.push(`${key}：文字長度 ${g.text?.length}`);
+  }
+  check('介紹的格式：海拔、處理法、風味（都是風味輪的 key）、文字 30–200 字', problems.length === 0, problems.join('；'));
+  check('產區介紹的處理法都有寫風味', Object.entries(REGION_GUIDE).every(([, g]) => g.processes.every((p) => g.flavors[p]?.length)));
+  check('產區介紹裡的海拔在國家的範圍附近（±500m）', Object.entries(REGION_GUIDE).every(([k, g]) => {
+    const [cmin, cmax] = COUNTRY_GUIDE[k.split('.')[0]].altitude;
+    return g.altitude[0] >= cmin - 500 && g.altitude[1] <= cmax + 500;
+  }));
 }
 
 /* ===== 從文字比對產地 ===== */

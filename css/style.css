@@ -228,6 +228,7 @@ a { color: var(--accent); }
 .settings-toggle .btn { margin-top: 10px; }
 .account-heatmap-hint { margin: -8px 0 16px; font-size: 0.85rem; }
 .settings-version { margin: 0; text-align: center; font-size: 0.85rem; }
+.settings-credits { margin: 0; text-align: center; font-size: 0.8rem; line-height: 1.6; }
 .settings-version a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; color: var(--text-dim); }
 
 /* ===== 主內容：預留底部分頁列與 FAB 空間 ===== */
@@ -1050,3 +1051,41 @@ a.feed-body:active { background: var(--surface-2); }
 .origin-beans .origin-confirm { flex-basis: 100%; min-height: 32px; margin-top: -8px; color: var(--accent); }
 /* 豆子表單：「看起來是 衣索比亞・耶加雪菲［套用］」 */
 .origin-guess { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0 0; }
+/* 認識產區（js/views/originExplore.js）：產咖啡的國家用 --heat-1，產區圓點同上（喝過實心、沒喝過空心） */
+.origin-modes .segmented { width: 100%; }
+.origin-land.is-coffee { fill: var(--heat-1); }
+.origin-dot.is-small { stroke-width: 1px; }
+.origin-legend { justify-content: flex-start; }
+.origin-progress-text { margin: 0; }
+.origin-progress-text strong { font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+.origin-group { margin: 8px 0 0; font-size: 0.9rem; color: var(--text-dim); }
+.origin-rows { display: grid; gap: 2px; }
+.origin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.origin-row:active, .origin-row.is-selected { background: var(--surface-2); }
+.origin-row-name { min-width: 0; overflow-wrap: anywhere; }
+.origin-row-name small { margin-left: 6px; font-size: 0.8rem; }
+.origin-row-status { flex: none; font-size: 0.85rem; color: var(--text-dim); }
+.origin-row-status.is-drunk { color: var(--accent); font-weight: 600; }
+.origin-text { margin: 0; line-height: 1.6; }
+.origin-wish { margin: 6px 0; }
+.origin-wish.is-on { color: var(--accent); border-color: var(--accent); }
+.match-mark { margin-left: 4px; color: var(--accent); font-weight: 700; }
+.origin-mine { margin-top: 12px; padding-top: 4px; border-top: 1px solid var(--border); }
+.origin-guide-link { margin: 4px 0 0; }
+.origin-guide-link a { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent); }

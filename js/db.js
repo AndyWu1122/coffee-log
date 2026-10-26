@@ -10,7 +10,8 @@ const DB_NAME = 'coffee-log';
 // v5：新增 sync（咖啡社群：每筆紀錄上次同步到雲端的內容，keyPath brewId；不匯出）
 // v6：新增 drippers；brews 加 dripperId 索引，並把舊紀錄的濾杯文字轉成 drippers（只加 dripperId，dripper 文字保留）
 // v7：新增 beanPhotos（每支豆子的照片，keyPath beanId）與 beanThumbs（豆子列表用 300px 縮圖）
-const DB_VERSION = 7;
+// v8：新增 wishlist（想買清單，keyPath key，例如 'region:ET.guji'）
+const DB_VERSION = 8;
 
 // 濾杯轉換做過了沒（meta key）；記下時間與建立了幾支
 const DRIPPER_MIGRATION_KEY = 'dripperMigration';
@@ -62,6 +63,10 @@ export function openDB() {
       }
       if (!db.objectStoreNames.contains('beanThumbs')) {
         db.createObjectStore('beanThumbs', { keyPath: 'beanId' });
+      }
+      // 想買清單：key 是「種類:對象」，現在只有產區（region:<產區 key>），之後好友的豆子推薦也放這裡
+      if (!db.objectStoreNames.contains('wishlist')) {
+        db.createObjectStore('wishlist', { keyPath: 'key' });
       }
     };
     req.onsuccess = () => {
