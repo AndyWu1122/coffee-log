@@ -9,7 +9,7 @@
 
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { root, startServer, launchChrome, click, prepare } from './chrome.mjs';
+import { root, startServer, launchChrome, click, prepare, sleep } from './chrome.mjs';
 import { CHANGELOG, compareVersions } from '../js/changelog.js';
 
 let passed = 0;
@@ -195,6 +195,19 @@ try {
   await waitShown('#updated-banner', true, '「已更新」的提示');
   await page.eval(`document.getElementById('update-banner').hidden = false; true`);
   check('「有新版本可用」出現時不顯示「已更新」', !(await shown('#updated-banner')));
+
+  // 更新內容頁在等版本號（最多 1 秒）的時候換頁：不能蓋掉下一頁，也不算看過（1.20.0 修正）
+  // Service Worker 換成不回答的假物件，appVersion 一定等滿 1 秒
+  await page.eval(`Object.defineProperty(navigator.serviceWorker, 'controller', { configurable: true, get: () => ({ postMessage() {} }) }); true`);
+  await page.eval(`location.hash = '#/changelog'; true`);
+  await page.waitFor(`document.getElementById('page-title').textContent === '更新內容'`, { label: '開始打開更新內容' });
+  await page.eval(`location.hash = '#/settings'; true`);
+  await page.waitFor(`Boolean(document.querySelector('.settings'))`, { label: '換到設定頁' });
+  await sleep(1500);
+  check('更新內容還在等版本號時換頁：設定頁沒被蓋掉、不算看過',
+    Boolean(await page.eval(`document.querySelector('.settings')`)) && !(await page.eval(`document.querySelector('.changelog')`))
+      && (await db(`return db.getMeta('changelogSeen');`)) === '1.0.0');
+  await page.eval(`delete navigator.serviceWorker.controller; true`);
 
   check('頁面沒有 JavaScript 錯誤', page.errors.length === 0, page.errors.join(' / '));
 

@@ -367,6 +367,7 @@ export async function saveBean(input, { photo } = {}) {
     }
   });
   requestSync(); // 分享出去的紀錄帶著豆子名稱等資訊
+  ensurePersistentStorage();
   return { ok: true, bean };
 }
 
@@ -580,6 +581,7 @@ export async function saveBrew(input, { photo } = {}) {
     }
   });
   requestSync();
+  ensurePersistentStorage();
   return { ok: true, brew };
 }
 
@@ -701,6 +703,55 @@ export async function latestBrewByBean() {
   }
   return latest;
 }
+
+/* ===== 資料保存 ===== */
+// 資料只在這支手機的 IndexedDB：瀏覽器空間不夠時可能清掉（persist 可以要求不要清）；
+// iPhone 用 Safari 開時，超過 7 天沒打開就可能被清掉（從主畫面開的不會），而且主畫面的 App 和 Safari 的資料是分開的
+
+const HOME_SCREEN_SNOOZE_KEY = 'homeScreenSnoozeUntil'; // 首頁「加入主畫面」提示按「稍後」到什麼時候
+const HOME_SCREEN_SNOOZE_DAYS = 7;
+let persistRequested = false;
+
+/** iPhone、iPad 在 Safari（不是從主畫面）開啟 */
+export const needsHomeScreen = () => push.isIos() && !push.isStandalone();
+
+const hasLocalData = async () => {
+  const [beans, brews] = await Promise.all([db.getAllKeys('beans'), db.getAllKeys('brews')]);
+  return beans.length + brews.length > 0;
+};
+
+/**
+ * 有資料才請瀏覽器保留（沒資料時不問，Firefox 才不會一打開就跳詢問）；每次開啟 App 最多問一次，失敗不影響存檔
+ * 啟動時（app.js）、存豆子、存紀錄、匯入後呼叫
+ */
+export async function ensurePersistentStorage() {
+  if (persistRequested) return;
+  try {
+    if (!(await hasLocalData())) return;
+    persistRequested = true;
+    await db.persistStorage();
+  } catch (err) {
+    console.warn('無法要求保留資料', err);
+  }
+}
+
+/**
+ * 資料保存的狀態（設定頁、首頁的提示）：{ state, hasData, hint }
+ * state：'ios-browser'（iPhone 的 Safari，最容易被清）｜'persisted'（瀏覽器答應保留）｜'best-effort'（空間不夠時可能被清）
+ * hint：首頁要顯示「加入主畫面」的提示（iPhone 的 Safari、不在「稍後」期間）
+ */
+export async function getStorageStatus() {
+  const [persisted, hasData, snoozeUntil] = await Promise.all([
+    db.isStoragePersisted().catch(() => false), hasLocalData(), db.getMeta(HOME_SCREEN_SNOOZE_KEY),
+  ]);
+  const ios = needsHomeScreen();
+  const snoozed = snoozeUntil != null && new Date() < new Date(snoozeUntil);
+  return { state: ios ? 'ios-browser' : persisted ? 'persisted' : 'best-effort', hasData, hint: ios && !snoozed };
+}
+
+/** 首頁「加入主畫面」提示按「稍後」：7 天內不再提示 */
+export const snoozeHomeScreenHint = () =>
+  db.setMeta(HOME_SCREEN_SNOOZE_KEY, new Date(Date.now() + HOME_SCREEN_SNOOZE_DAYS * 86400000).toISOString());
 
 /* ===== 備份提醒 ===== */
 
@@ -1024,6 +1075,7 @@ export async function importData(text, { replace = false, onProgress } = {}) {
 
   await db.bulkPut({ beans, grinders, drippers, brews, wishlist, photos, thumbs, beanPhotos, beanThumbs }, { clear: replace });
   requestSync(); // 本機為準：取代全部後，雲端上這台裝置分享過、現在不在的紀錄會被刪除
+  ensurePersistentStorage();
   return {
     ok: true, beans: beans.length, grinders: grinders.length, drippers: drippers.length, brews: brews.length,
     photos: total, beanPhotos: beanPhotos.length,

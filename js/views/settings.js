@@ -1,10 +1,10 @@
 // #/settings 設定與關於（☰ 選單最下面一項）：所有設定都從這裡找得到，☰ 只放常用的
-// 外觀（存 localStorage，見 ui.setThemePref）；帳號與社群：帳號、我的個人檔案、通知設定、「讓好友看到我的熱度圖」開關；
+// 外觀（存 localStorage，見 ui.setThemePref）；資料保存（瀏覽器會不會清掉資料、怎麼避免）；帳號與社群：帳號、我的個人檔案、通知設定、「讓好友看到我的熱度圖」開關；
 // 關於：隱私說明、更新內容、意見回饋、開發者後台、版本號
 // 社群項目只在 js/config.js 有設定時顯示；開發者後台只有開發者看得到（權限在資料庫與 Edge Function）
 // 整頁先畫好（不等網路），登入狀態只讀本機；熱度圖開關的狀態讀到雲端才補上
 import {
-  socialAvailable, getChangelogStatus, isAdmin, signedInUserId, getActivityShare, setActivityShare, socialErrorMessage,
+  socialAvailable, getChangelogStatus, isAdmin, signedInUserId, getActivityShare, setActivityShare, socialErrorMessage, getStorageStatus,
 } from '../models.js';
 import { esc, setTitle, toast, appVersion, themePref, setThemePref, profileHref } from './ui.js';
 
@@ -13,6 +13,13 @@ const THEMES = [
   { value: 'light', label: '淺色' },
   { value: 'dark', label: '深色' },
 ];
+
+/** 資料保存的說明（models.getStorageStatus 的 state） */
+const STORAGE_TEXT = {
+  'ios-browser': '⚠ 在 Safari 開啟時，超過 7 天沒打開，iPhone 可能會清掉資料。按 Safari 的「分享」→「加入主畫面」，之後從主畫面打開；主畫面的 App 和 Safari 的資料是分開的，要先在這裡匯出備份，再到主畫面的 App 匯入。',
+  persisted: '✓ 瀏覽器不會自動清掉這個 App 的資料。換手機、刪掉 App 或清除瀏覽資料時還是會不見，記得定期備份。',
+  'best-effort': '手機空間不夠時，瀏覽器可能會清掉資料。把 App 加到主畫面（安裝）比較不會被清，也記得定期備份。',
+};
 
 const row = (href, icon, label, extra = '') =>
   `<a class="settings-row" href="${href}"${extra}><span aria-hidden="true">${icon}</span>${label}</a>`;
@@ -50,6 +57,12 @@ export function render(container, { isCurrent }) {
         </div>
       </section>
 
+      <section class="section" id="settings-storage">
+        <h2>🛡️ 資料保存</h2>
+        <p class="hint" id="storage-status" aria-live="polite"></p>
+        <nav class="settings-group">${row('#/backup', '💾', '備份與還原')}</nav>
+      </section>
+
       ${socialAvailable ? socialHtml() : ''}
 
       <section class="section">
@@ -82,6 +95,13 @@ export function render(container, { isCurrent }) {
       b.setAttribute('aria-checked', String(b === btn));
     }
   });
+
+  // 資料保存：讀完在 #settings-storage 記 data-state（測試用）
+  getStorageStatus().then(({ state }) => {
+    if (!isCurrent()) return;
+    root.querySelector('#storage-status').textContent = STORAGE_TEXT[state];
+    root.querySelector('#settings-storage').dataset.state = state;
+  }, (err) => console.warn('資料保存狀態讀取失敗', err));
 
   // 版本號與「更新內容」的「!」（沒有 Service Worker 時都不顯示）、開發者後台：問完才補上
   (async () => {

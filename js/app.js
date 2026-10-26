@@ -2,7 +2,7 @@
 import { esc, toast, appVersion, BADGES_EVENT, applyTheme, themePref } from './views/ui.js';
 import {
   socialAvailable, completeSignIn, requestSync, getSocialBadges, badgeText,
-  getBackupStatus, getChangelogStatus, markChangelogSeen, isPushRoute, claimOnboarding,
+  getBackupStatus, getChangelogStatus, markChangelogSeen, isPushRoute, claimOnboarding, ensurePersistentStorage,
 } from './models.js';
 
 const startTour = (options) => import('./views/tour.js').then((m) => m.startTour(options));
@@ -206,6 +206,7 @@ async function start() {
   setupSync();
   setupBadges();
   setupOnboarding();
+  ensurePersistentStorage(); // 有資料就請瀏覽器不要自動清掉（見 models「資料保存」）
 }
 
 /* ===== 新手教學：全新裝置第一次打開首頁時自動顯示一次 ===== */
@@ -319,5 +320,3 @@ start();
 setupMenu();
 setupTheme();
 setupServiceWorker();
-// 申請持久儲存，降低瀏覽器（特別是 iOS）自動清除資料的機會
-navigator.storage?.persist?.().catch(() => {});

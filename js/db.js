@@ -134,6 +134,17 @@ export const getAllByIndex = (store, index, value) =>
 export const countByIndex = (store, index, value) =>
   tx(store, 'readonly', (s) => s.index(index).count(value));
 
+/**
+ * 請瀏覽器不要在空間不夠時自動清掉這個網站的資料（StorageManager.persist）；回傳是否已受保護
+ * Chrome、Android 不會跳出詢問（由瀏覽器依安裝、使用頻率決定），Firefox 會問；不支援的瀏覽器回傳 false
+ */
+export async function persistStorage() {
+  if (!navigator.storage?.persist) return false;
+  if (await navigator.storage.persisted()) return true;
+  return navigator.storage.persist();
+}
+export const isStoragePersisted = async () => Boolean(await navigator.storage?.persisted?.());
+
 /** meta store：簡單的鍵值存取 */
 export const getMeta = async (key) => (await get('meta', key))?.value ?? null;
 export const setMeta = (key, value) => put('meta', { key, value });

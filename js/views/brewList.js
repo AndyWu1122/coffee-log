@@ -1,7 +1,7 @@
 // #/ 沖煮紀錄列表
 import {
   listBrews, listBeans, latestBrewByBean, formatRatio, formatSeconds, flavorNote, getBackupStatus, snoozeBackupReminder,
-  formatDaysAgo,
+  formatDaysAgo, getStorageStatus, snoozeHomeScreenHint,
 } from '../models.js';
 import { esc, setTitle, toast } from './ui.js';
 import { exportBackup, errorReason } from './backup.js';
@@ -39,8 +39,8 @@ export async function render(container, { query = {}, isCurrent }) {
     filter.minRating = '';
     history.replaceState(null, '', `${location.pathname}${location.search}#/`);
   }
-  const [beans, latestByBean, backup] = await Promise.all([
-    listBeans({ includeArchived: true }), latestBrewByBean(), getBackupStatus(),
+  const [beans, latestByBean, backup, storage] = await Promise.all([
+    listBeans({ includeArchived: true }), latestBrewByBean(), getBackupStatus(), getStorageStatus(),
   ]);
   // 豆子選項：未封存的，加上有紀錄的已封存豆子
   const beanOptions = beans.filter((b) => !b.archived || latestByBean.has(b.id));
@@ -50,8 +50,9 @@ export async function render(container, { query = {}, isCurrent }) {
   if (!isCurrent()) return;
   revokeThumbs();
 
+  const rerender = () => render(container, { isCurrent });
   if (latestByBean.size === 0) {
-    container.innerHTML = beans.length === 0
+    container.innerHTML = (storage.hint ? homeScreenHtml(storage) : '') + (beans.length === 0
       ? `<div class="empty">
            <p>歡迎！先新增一支豆子，再開始記錄沖煮</p>
            <a class="btn btn-primary" href="#/beans/new">新增豆子</a>
@@ -59,15 +60,16 @@ export async function render(container, { query = {}, isCurrent }) {
       : `<div class="empty">
            <p>還沒有沖煮紀錄</p>
            <a class="btn btn-primary" href="#/brew/new">新增第一筆</a>
-         </div>`;
+         </div>`);
     // 空白時也放 ＋（新手教學會標示它；沒有豆子時表單會請他先新增豆子）
     container.insertAdjacentHTML('beforeend', '<a class="fab" href="#/brew/new" aria-label="新增紀錄">＋</a>');
+    bindReminders(container, rerender);
     return;
   }
 
   const filtered = filter.beanId || filter.minRating;
   container.innerHTML = `
-    ${backup.remind ? `
+    ${storage.hint ? homeScreenHtml(storage) : backup.remind ? `
       <div class="notice backup-reminder" role="alert">
         <p><strong>⚠ ${backup.lastBackupAt ? `上次備份是 ${formatDaysAgo(backup.daysSince)}` : '還沒備份過資料'}</strong></p>
         <p class="hint">資料只存在這支手機上，建議定期匯出備份。</p>
@@ -103,12 +105,37 @@ export async function render(container, { query = {}, isCurrent }) {
     <a class="fab" href="#/brew/new" aria-label="新增紀錄">＋</a>
   `;
 
-  const rerender = () => render(container, { isCurrent });
   container.querySelector('#filter-bean').addEventListener('change', (e) => { filter.beanId = e.target.value; rerender(); });
   container.querySelector('#filter-rating').addEventListener('change', (e) => { filter.minRating = e.target.value; rerender(); });
   container.querySelector('#clear-filter')?.addEventListener('click', () => {
     filter.beanId = '';
     filter.minRating = '';
+    rerender();
+  });
+  bindReminders(container, rerender);
+  return revokeThumbs;
+}
+
+/**
+ * iPhone 的 Safari：提示加入主畫面（7 天沒打開可能被清掉資料）；顯示時取代備份提醒（有資料時一樣有「匯出備份」）
+ * 主畫面的 App 和 Safari 的資料是分開的，所以有資料時要說怎麼搬過去
+ */
+const homeScreenHtml = ({ hasData }) => `
+  <div class="notice home-screen-hint" role="alert">
+    <p><strong>📱 加入主畫面，資料比較安全</strong></p>
+    <p class="hint">在 Safari 開啟時，超過 7 天沒打開，iPhone 可能會清掉這個 App 的資料。按 Safari 的「分享」→「加入主畫面」，之後從主畫面打開。</p>
+    ${hasData ? '<p class="hint">主畫面的 App 和 Safari 的資料是分開的：先在這裡「匯出備份」，再到主畫面的 App 用 ☰ →「備份」匯入。</p>' : ''}
+    <div class="reminder-actions">
+      ${hasData ? '<button type="button" class="btn btn-primary" id="backup-now">匯出備份</button>' : ''}
+      <button type="button" class="btn" id="home-screen-later">稍後</button>
+    </div>
+  </div>`;
+
+/** 首頁提示卡片的按鈕（備份提醒、加入主畫面）：監聽器掛在卡片自己身上 */
+function bindReminders(container, rerender) {
+  container.querySelector('#home-screen-later')?.addEventListener('click', async () => {
+    await snoozeHomeScreenHint();
+    toast('7 天後再提醒');
     rerender();
   });
   container.querySelector('#backup-now')?.addEventListener('click', async () => {
@@ -127,7 +154,6 @@ export async function render(container, { query = {}, isCurrent }) {
     toast('3 天後再提醒');
     rerender();
   });
-  return revokeThumbs;
 }
 
 const dayKey = (d) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;

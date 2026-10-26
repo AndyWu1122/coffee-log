@@ -3,11 +3,12 @@
 import { CHANGELOG, getChangelogStatus, markChangelogSeen, isNewerThan } from '../models.js';
 import { esc, setTitle, appVersion, notifyBadgesChanged } from './ui.js';
 
-export async function render(container) {
+export async function render(container, { isCurrent }) {
   setTitle('更新內容');
-  const version = await appVersion();
+  const version = await appVersion(); // 沒有 Service Worker 時最多等 1 秒
   // 先記下上次看到哪一版，比它新的標「新」；之後才記成看過了
   const { seen } = await getChangelogStatus(version);
+  if (!isCurrent()) return; // 等的時候已經換頁：不要蓋掉下一頁，也不算看過
   if (version) {
     await markChangelogSeen(version);
     notifyBadgesChanged();

@@ -44,7 +44,7 @@ js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinde
 icons/             # icons/flags/<小寫國家代碼>.svg：產地地圖的國旗（只有 COUNTRIES 的 32 國，svgo 壓縮過，來源與壓縮方式見 icons/flags/README.md）
 docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟、部署指令）、overnight-report.md（2026-10-26 通宵工作的報告）、roadmap.md（之後要開發、還沒開始的功能）
 supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）、functions/admin-delete-user（開發者刪別人的帳號）、functions/_shared/account.ts（兩者共用的刪除流程）、functions/feedback（意見回饋：存檔＋寄 Email 給站長；mail.ts 是設定檢查與錯誤說明的純函式）、functions/send-push（推播通知）、functions/_shared/webpush.ts（VAPID 簽章與 RFC 8291 加密，只用 Web Crypto）、functions/_shared/local.ts（`isLocalSupabase`：只有已知的本機網址才用公開的測試金鑰，其他一律當正式環境）
-scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs、webpush-test.mjs、onboarding-test.mjs、bean-photo-test.mjs、heatmap-test.mjs、origins-test.mjs、origin-map-ui-test.mjs、brew-ui-test.mjs（最後十二個不需要 Supabase）、build-worldmap.mjs（產生 js/worldMap.js，不是測試）、supabase-activity-test.mjs、social-heatmap-test.mjs、supabase-push-test.mjs、social-push-test.mjs、push-helpers.mjs（推播測試共用：解密、假推播伺服器）、vapid-keys.mjs（站長產生正式金鑰用，不是測試）
+scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs、webpush-test.mjs、onboarding-test.mjs、bean-photo-test.mjs、heatmap-test.mjs、origins-test.mjs、origin-map-ui-test.mjs、brew-ui-test.mjs、storage-test.mjs（最後十三個不需要 Supabase）、build-worldmap.mjs（產生 js/worldMap.js，不是測試）、supabase-activity-test.mjs、social-heatmap-test.mjs、supabase-push-test.mjs、social-push-test.mjs、push-helpers.mjs（推播測試共用：解密、假推播伺服器）、vapid-keys.mjs（站長產生正式金鑰用，不是測試）
 tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mjs 用 headless Chrome 開；不屬於 App、不放進 ASSETS）
 ```
 
@@ -57,7 +57,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 **grinders**：id, name(必填), notes(選填，例如刻度說明), archived(bool), createdAt
 **drippers**（DB v6 加入）：id, name(必填，≤ 100 字), notes(選填), archived(bool), createdAt
 **brews**：id, beanId, grinderId(選填，'' ＝未指定；v1 舊紀錄沒有這個欄位), dripperId(選填，'' ＝未指定), brewedAt, dripper(舊版自由輸入的濾杯文字，轉換後保留作為保險；新紀錄是 ''，畫面一律用 dripperId), grindSetting, coffeeG, waterG, tempC, totalTimeS(手動輸入), rating(1–5), flavor{acidity, sweetness, bitterness, body}(1–5), flavorNotes(風味輪 key 陣列，如 "fruity.berry.blueberry"，任一層皆可；舊資料預設 []), notes, visibility(private/friends，舊資料沒有這個欄位＝private)
-**meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil、社群登入狀態 `auth:*`、社群通知看到哪 `feedSeenAt`／`commentsSeenAt`／`repliesSeenAt`、看過哪一版的更新內容 `changelogSeen`、看過新手教學 `onboardingSeen`、濾杯轉換做過了 `dripperMigration`、這台裝置的 id `deviceId`、這台負責上傳熱度圖 `activityShare`）；**不匯出、匯入取代全部時也不清除**（token 不會進備份檔，匯入也不會被登出）
+**meta**（DB v3 加入）：{ key, value }，App 自己的狀態（lastBackupAt、backupSnoozeUntil、社群登入狀態 `auth:*`、社群通知看到哪 `feedSeenAt`／`commentsSeenAt`／`repliesSeenAt`、看過哪一版的更新內容 `changelogSeen`、看過新手教學 `onboardingSeen`、濾杯轉換做過了 `dripperMigration`、這台裝置的 id `deviceId`、這台負責上傳熱度圖 `activityShare`、首頁「加入主畫面」提示按了稍後 `homeScreenSnoozeUntil`）；**不匯出、匯入取代全部時也不清除**（token 不會進備份檔，匯入也不會被登出）
 **photos**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 1600px、品質 0.8，約 200KB), width, height, createdAt；每筆紀錄最多 1 張，跟 brews 分開存
 **thumbs**（DB v4 加入，keyPath brewId）：brewId, blob(JPEG，最長邊 300px)；列表只讀這個，不載入原圖；不匯出，匯入時由照片重新產生
 **beanPhotos**／**beanThumbs**（DB v7 加入，keyPath beanId）：豆子的照片（每支最多 1 張，例如豆袋），格式、處理方式和 photos／thumbs 完全一樣；和紀錄的照片分開存（那邊的 key 是 brewId，現有的照片、備份、同步都不用動）
@@ -85,7 +85,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 ## 介面配置
 - 底部分頁列：紀錄｜豆子｜社群（只放每天會用的頁面）；「社群 💬」是動態牆，有 `data-social`，`js/config.js` 沒設定時隱藏
 - **不常調整的設定放右上角 ☰ 選單，不要加到底部分頁列**；☰ 只放比較常用的：帳號、好友管理（`data-social`）｜統計、產地地圖、磨豆機、濾杯、備份｜📖 使用教學（`#menu-tour`，按鈕不是連結）、🔧 設定與關於（375×667 要整個放得下，menu-alerts-test 會量；`.menu-list` 有 `max-height` 捲動作保險）
-- **所有設定都要能在「設定與關於」找到**（`#/settings`，`js/views/settings.js`），不要加回 ☰：外觀｜帳號與社群（帳號、我的個人檔案、通知設定、「讓好友看到我的熱度圖」開關）｜關於（隱私說明、更新內容、意見回饋、開發者後台、版本號）
+- **所有設定都要能在「設定與關於」找到**（`#/settings`，`js/views/settings.js`），不要加回 ☰：外觀｜資料保存（見「資料保存」）｜帳號與社群（帳號、我的個人檔案、通知設定、「讓好友看到我的熱度圖」開關）｜關於（隱私說明、更新內容、意見回饋、開發者後台、版本號）
   - 帳號頁（☰ →「帳號」）只放編輯身分的東西：熱度圖、頭像、暱稱、好友代碼與 QR code、好友與邀請、登出、刪除帳號；新增的設定放設定頁，不要放帳號頁
   - 設定頁整頁先畫好、不等網路；登入狀態用 `models.signedInUserId()`（只讀本機），讀完在 `#settings-social` 記 `data-signed-in`（測試用）；沒登入時「我的個人檔案」和熱度圖開關停用、寫「登入後才能使用」
   - 帳號與社群、意見回饋只在 `js/config.js` 有設定時顯示；開發者後台（`[data-admin]`）只有 `models.isAdmin()` 為 true 時顯示，問完在 `.settings` 記 `data-admin-checked`（測試用）
@@ -103,6 +103,15 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
   - 歸零：讀社群頁第一頁時記下；「全部」三種都記，「我的」只記留言的兩種
   - 檢查時機和同步一樣（啟動、`online`、切回前景），views 操作完用 `notifyBadgesChanged()` 發事件；沒登入不載入 supabase-js
   - 數字不即時更新；即時的提醒是推播通知（見「推播通知」），點通知打開 App 時數字跟著更新
+
+## 資料保存（1.20.0）
+資料只在這支手機的 IndexedDB，瀏覽器可能清掉：空間不夠時（可以用 `navigator.storage.persist()` 要求保留）、**iPhone 用 Safari 開時超過 7 天沒打開**（從主畫面開的不會）；而且 iPhone 主畫面的 App 和 Safari 的資料是分開的
+- 要求保留：`models.ensurePersistentStorage()`（`db.persistStorage()`）；**有豆子或紀錄才要求**（Firefox 會跳詢問，不在一打開就問）、已保留就不再要求、每次開啟最多一次；app.js 啟動時、`saveBean`、`saveBrew`、匯入後呼叫
+- iPhone 的 Safari（`models.needsHomeScreen()`＝`push.isIos() && !push.isStandalone()`）：
+  - 首頁 `.home-screen-hint`（有沒有紀錄都顯示）：加入主畫面的步驟；有資料時多一段「主畫面的 App 是另一份資料，先匯出備份再到那邊匯入」和「匯出備份」按鈕；顯示時取代備份提醒（一次只有一張卡片）；「稍後」7 天（meta `homeScreenSnoozeUntil`），沒有永久關閉
+  - 新手教學最後一步多一句「先加入主畫面再開始記錄」
+- 設定頁「🛡️ 資料保存」（`#settings-storage`，讀完記 `data-state`）：`models.getStorageStatus().state` 三種：`ios-browser`｜`persisted`｜`best-effort`，各一段說明，加「備份與還原」連結
+- 測試：`storage-test.mjs`（persist 換成假的、User-Agent 模擬 iPhone、`navigator.standalone` 模擬主畫面）
 
 ## 新手教學（`js/views/tour.js`）
 - **新增主要功能時，要考慮是否更新教學步驟**（`tour.js` 的 `STEPS`；`onboarding-test.mjs` 的 `TARGETS` 要一致）
@@ -400,6 +409,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - `node scripts/bean-photo-test.mjs`：不需要 Supabase；headless Chrome 用上一版的 db.js（`git show 3d9f2c2:js/db.js`，import 換成伺服器網址）建出 DB v6 再開新版：升級到 v7 資料都在；豆子表單選帶 EXIF／GPS 的照片 → 存下來沒有 EXIF（Canvas 自帶的 sRGB ICC 允許）、有縮圖、列表顯示；移除、封存、刪除；備份 v5 匯出、預估大小、取代全部／合併、v4 舊備份、壞掉的豆子照片整份擋下；紀錄表單的照片照常；深淺色截圖、CSP
 - `node scripts/heatmap-test.mjs`：不需要 Supabase；Node（`TZ=Asia/Taipei`）測 `js/heatmap.js`：空資料、跨年、閏年、23:59／00:01 不同天、53×7 與週一開始、月份標籤、5 級門檻、連續天數、近 365 天、50 杯上限
 - `node scripts/origins-test.mjs`、`node scripts/origin-map-ui-test.mjs`：不需要 Supabase；產地地圖（見「產地地圖」），UI 測試含認識產區、想買清單、備份 v7、從 DB v7（commit 72279c0 的 db.js）升級
+- `node scripts/storage-test.mjs`：不需要 Supabase；headless Chrome 測資料保存（見「資料保存」）：沒資料不要求保留、有資料時啟動與存檔各最多一次、設定頁三種狀態、iPhone 的 Safari 首頁提示（取代備份提醒、稍後 7 天、匯出備份）、從主畫面開啟沒有提示、新手教學多一句、深淺色截圖、CSP
 - `node scripts/brew-ui-test.mjs`：不需要 Supabase；headless Chrome（390px）測首頁紀錄卡片與紀錄表單：依日期分組的標題、器材／數字兩行、「儲存」固定在底部（不被分頁列和「已更新」提示蓋住）、酸甜苦醇一項一列、總時間的單位、磨豆機獨佔一行、風味輪總覽不畫最外圈的字、存檔與編輯帶回、深淺色截圖、CSP
 - `node scripts/supabase-activity-test.mjs`：熱度圖的權限從 API 層測（A、B 好友，C 非好友，D 封鎖）：沒開不能寫、好友讀得到、C／D 讀不到、不能寫別人的、cups 0／51／未來／超過一年被拒、不能改日期、讀不到別人的開關、換裝置、關閉清空、刪除帳號
 - `node scripts/social-heatmap-test.mjs`：headless Chrome（390px）：自己和好友看到的不同、點圓點、捲到最右邊、打開／關閉、C／D 看不到、新增／刪除／改日期後同步、第二台裝置不上傳與「改用這台」、沒登入／沒有社群功能也有、深淺色截圖、CSP

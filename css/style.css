@@ -383,9 +383,9 @@ input:focus, select:focus, textarea:focus {
 }
 .notice-error { border-left-color: var(--danger); }
 
-/* 首頁備份提醒 */
-.backup-reminder { margin-bottom: 14px; }
-.backup-reminder p { margin: 0 0 4px; }
+/* 首頁的提示卡片：備份提醒、iPhone 的「加入主畫面」（一次只顯示一張） */
+.backup-reminder, .home-screen-hint { margin-bottom: 14px; }
+.backup-reminder p, .home-screen-hint p { margin: 0 0 4px; }
 .reminder-actions { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-top: 10px; }
 .reminder-actions .btn { min-height: 48px; }
 .last-backup { margin: 0; font-weight: 600; }

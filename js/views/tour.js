@@ -1,7 +1,7 @@
 // 新手教學：在真實介面上逐步標示（畫面變暗、只亮出要介紹的按鈕，旁邊放說明卡片）
 // 全新裝置第一次打開首頁時自動顯示一次（app.js 問 models.claimOnboarding）；☰ →「使用教學」可以重看，重看不讀寫任何設定
 // ⚠ 新增主要功能時，想一下這裡的步驟要不要跟著改
-import { socialAvailable } from '../models.js';
+import { socialAvailable, needsHomeScreen } from '../models.js';
 
 /**
  * target：要標示的元素（找不到、或被隱藏時改成畫面中央的卡片）
@@ -43,7 +43,10 @@ const STEPS = [
   {
     id: 'done',
     title: '記得定期備份',
-    body: '資料只存在這支手機上，換手機或清除資料就會不見，記得到 ☰ →「備份」匯出檔案保存。想再看一次教學，在 ☰ →「使用教學」。',
+    body: `資料只存在這支手機上，換手機或清除資料就會不見，記得到 ☰ →「備份」匯出檔案保存。${needsHomeScreen()
+      // iPhone 的 Safari：7 天沒打開可能被清，主畫面的 App 又是另一份資料，所以要在開始記錄前加
+      ? '用 iPhone 的話，請先按 Safari 的「分享」→「加入主畫面」，之後從主畫面打開再開始記錄。'
+      : ''}想再看一次教學，在 ☰ →「使用教學」。`,
   },
 ];
 
