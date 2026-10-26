@@ -1,5 +1,5 @@
 // #/beans 豆子列表
-import { listBeans, formatStock, PROCESS, ROAST_LEVEL } from '../models.js';
+import { listBeans, formatStock, originLabel, PROCESS, ROAST_LEVEL } from '../models.js';
 import { esc, setTitle } from './ui.js';
 
 let showArchived = false; // 切頁後保留勾選狀態
@@ -53,7 +53,7 @@ function beanCard(b) {
           ${b.archived ? '<span class="badge">已封存</span>' : stockBadge(b.stock)}
         </div>
         <div class="card-row">
-          ${b.origin ? `<span>${esc(b.origin)}</span>` : ''}
+          ${originLabel(b) ? `<span>${esc(originLabel(b))}</span>` : ''}
           <span>${esc(PROCESS[b.process] ?? '')}</span>
           <span>${esc(ROAST_LEVEL[b.roastLevel] ?? '')}</span>
         </div>

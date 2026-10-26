@@ -1008,3 +1008,45 @@ a.feed-body:active { background: var(--surface-2); }
 .heatmap-stats div { min-width: 0; }
 .heatmap-stats dt { font-size: 0.8rem; color: var(--text-dim); }
 .heatmap-stats dd { margin: 0; font-size: 1.1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ===== 產地地圖（#/origins，js/views/originMap.js）===== */
+/* 國家依杯數用 --heat-1～4（沒喝過 --heat-0）；產區圓點：喝過 --accent 實心、沒喝過空心；國界用卡片底色隔開 */
+.origin-page { display: grid; gap: 16px; }
+.origin-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 12px 14px;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.origin-card h2 { margin: 0; font-size: 1.05rem; }
+.origin-card h2 small, .origin-region-detail h3 small { font-size: 0.8rem; font-weight: 400; }
+.origin-card > .hint { margin: 0; font-size: 0.85rem; }
+.origin-scroll { padding-bottom: 6px; }
+.origin-map { display: block; }
+.origin-country { width: 100%; height: auto; max-height: 60vh; }
+.origin-land { stroke: var(--surface); stroke-width: 0.75px; vector-effect: non-scaling-stroke; }
+.origin-land.is-link { cursor: pointer; }
+.origin-land.is-current { fill: var(--heat-0); stroke: var(--text-dim); stroke-width: 1.5px; }
+.origin-land.is-other { fill: var(--heat-0); opacity: 0.45; }
+.origin-marker { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.origin-hit { fill: transparent; cursor: pointer; }
+.origin-dot { fill: var(--surface); stroke: var(--text-dim); stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.origin-dot.is-drunk { fill: var(--accent); stroke: var(--surface); }
+.origin-dot.is-selected { stroke: var(--text); stroke-width: 3px; }
+.origin-back { margin: 0; }
+.origin-back a { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent); text-decoration: none; }
+.origin-untried { margin: 0; font-size: 0.85rem; }
+.origin-region-detail:empty { display: none; }
+.origin-region-detail h3 { margin: 4px 0 0; font-size: 1rem; }
+.origin-sub { margin: 10px 0 4px; font-size: 0.9rem; font-weight: 600; color: var(--text-dim); }
+.origin-region-detail .note-tag small { margin-left: 4px; color: var(--text-dim); }
+.origin-beans { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.origin-beans li { display: flex; flex-wrap: wrap; align-items: center; gap: 0 10px; min-width: 0; }
+.origin-beans a { display: inline-flex; align-items: center; min-height: 44px; min-width: 0; color: var(--text); overflow-wrap: anywhere; }
+.origin-beans .origin-confirm { flex-basis: 100%; min-height: 32px; margin-top: -8px; color: var(--accent); }
+/* 豆子表單：「看起來是 衣索比亞・耶加雪菲［套用］」 */
+.origin-guess { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0 0; }

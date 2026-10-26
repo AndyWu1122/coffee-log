@@ -1,11 +1,20 @@
 // #/beans/new、#/beans/<id> 新增 / 編輯豆子
 import {
   getBean, getBeanStock, getBeanPhoto, saveBean, setBeanArchived, deleteBean, todayLocal, formatGrams, formatStock, PROCESS, ROAST_LEVEL,
-  preparePhoto, PHOTO_ACCEPT,
+  preparePhoto, PHOTO_ACCEPT, COUNTRIES, ORIGIN_GROUPS, COUNTRY_BY_CODE, REGION_BY_KEY, regionsOf, matchOrigin,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors, photoFieldHtml, bindPhotoField } from './ui.js';
 
 const toOptions = (labels) => Object.entries(labels).map(([value, label]) => ({ value, label }));
+
+const countryOptions = (selected) => Object.entries(ORIGIN_GROUPS).map(([group, label]) => `
+  <optgroup label="${esc(label)}">
+    ${COUNTRIES.filter((c) => c.group === group)
+      .map((c) => `<option value="${esc(c.code)}"${c.code === selected ? ' selected' : ''}>${esc(c.zh)}</option>`).join('')}
+  </optgroup>`).join('');
+const regionOptions = (country, selected) => `<option value="">不指定</option>${regionsOf(country)
+  .map((r) => `<option value="${esc(r.key)}"${r.key === selected ? ' selected' : ''}>${esc(r.zh)}</option>`).join('')}`;
+const placeText = ({ country, region }) => [COUNTRY_BY_CODE.get(country)?.zh, REGION_BY_KEY.get(region)?.zh].filter(Boolean).join('・');
 
 export async function render(container, { id, isCurrent }) {
   const isNew = id === null;
@@ -19,7 +28,7 @@ export async function render(container, { id, isCurrent }) {
   }
   setTitle(isNew ? '新增豆子' : '編輯豆子');
 
-  const b = bean ?? { name: '', origin: '', process: 'washed', roastLevel: 'light', roastDate: '' };
+  const b = bean ?? { name: '', origin: '', country: '', region: '', process: 'washed', roastLevel: 'light', roastDate: '' };
 
   container.innerHTML = `
     <form class="form" novalidate>
@@ -28,9 +37,25 @@ export async function render(container, { id, isCurrent }) {
         <input id="name" name="name" value="${esc(b.name)}" placeholder="例：衣索比亞 耶加雪菲" autocomplete="off" maxlength="100">
         <div class="error"></div>
       </div>
+      <!-- 產地：國家、產區從清單選（產地地圖用），莊園、批次等其他資訊寫在文字欄 -->
+      <div class="field" data-field="country">
+        <label for="country">產地國家</label>
+        <select id="country" name="country">
+          <option value="">沒選</option>
+          ${countryOptions(b.country)}
+        </select>
+        <p class="hint origin-guess" hidden><span></span>
+          <button class="btn" type="button" data-action="apply-guess">套用</button></p>
+        <div class="error"></div>
+      </div>
+      <div class="field" data-field="region"${b.country ? '' : ' hidden'}>
+        <label for="region">產區</label>
+        <select id="region" name="region">${regionOptions(b.country, b.region)}</select>
+        <div class="error"></div>
+      </div>
       <div class="field" data-field="origin">
-        <label for="origin">產地 / 莊園</label>
-        <input id="origin" name="origin" value="${esc(b.origin)}" autocomplete="off" maxlength="100">
+        <label for="origin">莊園 / 批次</label>
+        <input id="origin" name="origin" value="${esc(b.origin)}" autocomplete="off" maxlength="100" placeholder="例：Konga 處理站 G1">
         <div class="error"></div>
       </div>
       <div class="field" data-field="process">
@@ -72,6 +97,26 @@ export async function render(container, { id, isCurrent }) {
   const photoField = bindPhotoField(form, { photo, prepare: preparePhoto, alt: '這支豆子的照片' });
   let saving = false;
 
+  // 產地：選了國家才顯示產區；沒選國家時，從名稱和文字猜到就提示「看起來是…」，按「套用」才填（不自動存猜的）
+  const f0 = form.elements;
+  const regionField = form.querySelector('[data-field="region"]');
+  const guessHint = form.querySelector('.origin-guess');
+  let guess = null;
+  const setCountry = (country, region = '') => {
+    f0.country.value = country;
+    f0.region.innerHTML = regionOptions(country, region);
+    regionField.hidden = !country;
+  };
+  const updateGuess = () => {
+    guess = f0.country.value ? null : matchOrigin(f0.origin.value, f0.name.value);
+    guessHint.hidden = !guess;
+    if (guess) guessHint.querySelector('span').textContent = `看起來是 ${placeText(guess)}`;
+  };
+  f0.country.addEventListener('change', () => { setCountry(f0.country.value); updateGuess(); });
+  f0.name.addEventListener('input', updateGuess);
+  f0.origin.addEventListener('input', updateGuess);
+  updateGuess();
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (photoField.busy()) return toast('照片處理中，請稍候');
@@ -82,6 +127,8 @@ export async function render(container, { id, isCurrent }) {
       id,
       name: f.name.value,
       origin: f.origin.value,
+      country: f.country.value,
+      region: f.region.value,
       process: segmentedValue(form, 'process'),
       roastLevel: segmentedValue(form, 'roastLevel'),
       roastDate: f.roastDate.value,
@@ -94,7 +141,11 @@ export async function render(container, { id, isCurrent }) {
 
   form.addEventListener('click', async (e) => {
     const action = e.target.closest('[data-action]')?.dataset.action;
-    if (action === 'archive') {
+    if (action === 'apply-guess' && guess) {
+      setCountry(guess.country, guess.region);
+      updateGuess();
+      f0.country.focus();
+    } else if (action === 'archive') {
       await setBeanArchived(id, !bean.archived);
       toast(bean.archived ? '已取消封存' : '已封存');
       location.hash = '#/beans';

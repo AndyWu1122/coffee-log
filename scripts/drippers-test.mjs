@@ -208,7 +208,7 @@ try {
 
   /* ===== 備份 ===== */
   const exported = await m(`return m.exportData({ includePhotos: false });`);
-  check('匯出 schemaVersion 5（≥ 4 才有 drippers）、含 drippers', exported.schemaVersion === 5 && exported.drippers.length === 2 && exported.brews.every((b) => 'dripperId' in b));
+  check('匯出 schemaVersion 6（≥ 4 才有 drippers）、含 drippers', exported.schemaVersion === 6 && exported.drippers.length === 2 && exported.brews.every((b) => 'dripperId' in b));
   const reimport = await m(`return m.importData(${q(JSON.stringify(exported))}, { replace: true });`);
   check('v4 備份「取代全部」匯入成功', reimport.ok && reimport.drippers === 2 && reimport.brews === 9, q(reimport));
   const after = await snapshot();

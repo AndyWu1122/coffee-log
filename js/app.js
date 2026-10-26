@@ -25,6 +25,9 @@ const routes = [
   // 設定與關於：外觀、通知設定、隱私說明、更新內容、意見回饋、開發者後台、版本號（☰ 只放常用的）
   { pattern: /^\/settings$/, tab: null, load: () => import('./views/settings.js') },
   { pattern: /^\/stats$/, tab: null, load: () => import('./views/stats.js') },
+  // 產地地圖：#/origins 世界、#/origins/<國家代碼> 放大到一個國家（代碼不在清單裡時 view 轉回 #/origins）
+  { pattern: /^\/origins$/, tab: null, load: () => import('./views/originMap.js') },
+  { pattern: /^\/origins\/([A-Z]{2})$/, tab: null, load: () => import('./views/originMap.js') },
   { pattern: /^\/backup$/, tab: null, load: () => import('./views/backup.js') },
   { pattern: /^\/privacy$/, tab: null, load: () => import('./views/privacy.js') },
   { pattern: /^\/changelog$/, tab: null, load: () => import('./views/changelog.js') },

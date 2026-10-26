@@ -7,6 +7,7 @@ import { CHANGELOG, compareVersions } from './changelog.js';
 import { computeStats } from './stats.js';
 import { summarize, fromActivity, buildHeatmap } from './heatmap.js';
 import { mergeDripperNames } from './drippers.js';
+import { COUNTRY_BY_CODE, REGION_BY_KEY, originLabel, summarizeOrigins } from './origins.js';
 import { newId } from './id.js';
 import * as cloud from './cloud.js';
 import * as sync from './sync.js';
@@ -19,10 +20,13 @@ export { decodeImage, photoForUpload } from './image.js';
 export { coverCrop, radarPoints, wrapText, layoutChips } from './cardLayout.js';
 export { cloudPhotoPath } from './sync.js';
 export { newId } from './id.js';
+export {
+  COUNTRIES, REGIONS, ORIGIN_GROUPS, COUNTRY_BY_CODE, REGION_BY_KEY, CUP_LEVELS, regionsOf, matchOrigin, beanPlace, originLabel,
+} from './origins.js';
 
-// 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos；v4 加入 drippers 與 brews.dripperId；v5 加入 beanPhotos。匯入時接受所有舊版
-export const SCHEMA_VERSION = 5;
-const IMPORTABLE_VERSIONS = [1, 2, 3, 4, 5];
+// 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos；v4 加入 drippers 與 brews.dripperId；v5 加入 beanPhotos；v6 加入 beans.country、region。匯入時接受所有舊版
+export const SCHEMA_VERSION = 6;
+const IMPORTABLE_VERSIONS = [1, 2, 3, 4, 5, 6];
 
 export const PROCESS = { washed: '水洗', natural: '日曬', honey: '蜜處理', other: '其他' };
 // 由淺到深排列
@@ -116,6 +120,8 @@ export function validateBean(b) {
     else if (b.roastDate > todayLocal()) errors.roastDate = '烘焙日不能晚於今天';
   }
   if (b.bagWeightG != null && !(b.bagWeightG > 0)) errors.bagWeightG = '整包重量需大於 0';
+  if (b.country && !COUNTRY_BY_CODE.has(b.country)) errors.country = '不認得的國家';
+  if (b.region && REGION_BY_KEY.get(b.region)?.country !== (b.country || undefined)) errors.region = '產區和國家對不上';
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
@@ -185,7 +191,9 @@ function normalizeBean(input) {
   return {
     id: input.id || newId(),
     name: String(input.name ?? '').trim(),
-    origin: String(input.origin ?? '').trim(),
+    origin: String(input.origin ?? '').trim(), // 產地文字（v6 起表單上是「莊園／批次」，國家、產區另外選）
+    country: input.country || '', // 國家代碼（js/origins.js），'' ＝沒選；v5 以前沒有這個欄位
+    region: input.region || '',   // 產區 key（例如 'ET.yirgacheffe'），'' ＝沒選
     process: input.process,
     roastLevel: input.roastLevel,
     roastDate: input.roastDate || '',
@@ -342,6 +350,8 @@ export async function saveBean(input, { photo } = {}) {
     ...input, id: existing?.id, archived: existing?.archived, createdAt: existing?.createdAt,
   });
   const errors = { ...nameLengthErrors(bean, ['name', 'origin']), ...validateBean(bean).errors };
+  // 跟著紀錄上傳的是「國家 產區 產地文字」合起來
+  if (!errors.origin && charLength(originLabel(bean)) > SHARED_TEXT_MAX) errors.origin = `國家、產區加上這一欄最多 ${SHARED_TEXT_MAX} 字`;
   if (photo && !(photo.blob instanceof Blob && photo.thumb instanceof Blob)) errors.photo = '照片資料錯誤，請重新選擇';
   if (Object.keys(errors).length) return { ok: false, errors };
   await db.transact(BEAN_PHOTO_STORES, (s) => {
@@ -545,7 +555,7 @@ export async function saveBrew(input, { photo } = {}) {
   if (brew.dripperId && !dripper) errors.dripperId = '找不到這支濾杯';
   if (brew.visibility === 'friends') {
     // 豆子、磨豆機、濾杯的名稱跟著紀錄上傳，也要符合雲端的限制（舊資料或匯入的可能超過）
-    if (bean && (charLength(bean.name) > SHARED_TEXT_MAX || charLength(bean.origin) > SHARED_TEXT_MAX)) {
+    if (bean && (charLength(bean.name) > SHARED_TEXT_MAX || charLength(originLabel(bean)) > SHARED_TEXT_MAX)) {
       errors.beanId ??= `分享給好友時，豆子的名稱和產地最多 ${SHARED_TEXT_MAX} 字，請先到豆子頁修改`;
     }
     if (grinder && charLength(grinder.name) > SHARED_TEXT_MAX) {
@@ -593,6 +603,20 @@ export async function getStats({ period = '30', beanId = '' } = {}) {
   return { stats: computeStats({ brews, beans, grinders, drippers, period, beanId: known ? beanId : '' }), beanOptions, beanId: known ? beanId : '' };
 }
 
+/* ===== 產地地圖 ===== */
+
+/**
+ * 產地地圖（☰ →「產地地圖」）：只用本機的豆子（含封存）和紀錄，不上傳；計算在 js/origins.js
+ * 豆子沒選國家時，從名稱和產地文字猜（不儲存）
+ */
+export async function getOriginMap() {
+  const [beans, brews] = await Promise.all([db.getAll('beans'), db.getAll('brews')]);
+  return summarizeOrigins(beans, brews);
+}
+
+/** 地圖的國界資料（約 180KB）：用到地圖頁才載入，其他頁面不用下載 */
+export const loadWorldMap = () => import('./worldMap.js');
+
 /* ===== 分享卡片 ===== */
 
 /**
@@ -611,7 +635,7 @@ export async function getShareCardData(id) {
   const date = toLocalDateStr(brew.brewedAt);
   return {
     beanName: bean?.name ?? '（已刪除的豆子）',
-    origin: bean?.origin ?? '',
+    origin: originLabel(bean),
     process: PROCESS[bean?.process] ?? '',
     roastLevel: ROAST_LEVEL[bean?.roastLevel] ?? '',
     restDays: restDays(brew.brewedAt, bean?.roastDate),
@@ -835,7 +859,7 @@ function parseImportPhotos(rawPhotos, knownIds, kind = 'brew') {
  * 匯入備份 JSON 文字。整份檔案都通過驗證才寫入（單一交易），否則完全不動。
  * replace：true 先清空現有資料（含照片）；false 依 id 合併（同 id 以檔案為準）
  * v1 檔案沒有 grinders，視為空陣列；brews 沒有 grinderId 會補成 ''；v1、v2 沒有 photos，視為空陣列
- * v1–v4 沒有 beanPhotos，視為空陣列
+ * v1–v4 沒有 beanPhotos，視為空陣列；v1–v5 的豆子沒有 country、region，補成 ''（顯示、地圖時從文字猜）
  * v1–v3 沒有 drippers：用和 DB 升級相同的規則（js/drippers.js）從紀錄的濾杯文字建立；
  *   合併時名稱相同的沿用本機已有的濾杯，取代全部時全部新建
  * onProgress(n, total)：正在處理第 n 張照片（選填，給畫面顯示進度）

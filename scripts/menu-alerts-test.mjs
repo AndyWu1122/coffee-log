@@ -75,7 +75,7 @@ try {
   // 按鈕（使用教學）沒有 href，用 id 代表
   const menuHrefs = await page.eval(`[...document.querySelectorAll('#app-menu [role="menuitem"]:not([hidden])')].map((a) => a.getAttribute('href') ?? '#' + a.id)`);
   check('☰ 選單只有常用的項目＋使用教學＋設定與關於',
-    q(menuHrefs) === q(['#/account', '#/friends', '#/stats', '#/grinders', '#/drippers', '#/backup', '#menu-tour', '#/settings']), q(menuHrefs));
+    q(menuHrefs) === q(['#/account', '#/friends', '#/stats', '#/origins', '#/grinders', '#/drippers', '#/backup', '#menu-tour', '#/settings']), q(menuHrefs));
   check('☰ 選單沒有外觀、版本號', !(await page.eval(`Boolean(document.querySelector('#app-menu [data-theme-pref], #app-menu #app-version'))`)));
   await page.cdp('Emulation.setDeviceMetricsOverride', { width: 375, height: 667, deviceScaleFactor: 2, mobile: true });
   await click(page, '#menu-btn');

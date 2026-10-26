@@ -11,6 +11,7 @@ import { photoForUpload } from './image.js';
 import { activityRows, WINDOW_DAYS } from './heatmap.js';
 import { localDate, addDays } from './stats.js';
 import { newId } from './id.js';
+import { originLabel } from './origins.js';
 
 // supabase-js 存 session 的位置（models.js 設定的 meta key）；沒有就代表沒登入，不必載入 supabase-js
 const SESSION_KEY = 'auth:supabase-auth';
@@ -27,7 +28,7 @@ export function toSharedRow(brew, bean, grinder, dripper, photoPath) {
   return {
     id: brew.id,
     bean_name: bean?.name ?? '',
-    bean_origin: bean?.origin ?? '',
+    bean_origin: bean ? originLabel(bean) : '', // 選了的國家、產區＋產地文字（雲端結構不變）
     bean_process: bean?.process ?? null,
     roast_level: bean?.roastLevel ?? null,
     roast_date: bean?.roastDate || null,
