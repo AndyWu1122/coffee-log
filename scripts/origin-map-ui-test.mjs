@@ -6,6 +6,7 @@
 // 認識產區：所有產地都畫出來、國家與產區的介紹、「你喝到的」打勾對照、產區圖鑑、想買清單（加入、移除、連結）；從 DB v7 升級
 // 放大、拖曳（1.17.0）：真的觸控事件（CDP Input.dispatchTouchEvent）拖曳、兩指縮放，滾輪、按鈕；拖曳不算點擊；
 // 國名：放大後變多、畫面上的字互不重疊、都在地圖框裡；點國家先在下面顯示國名，再點那一行才進去；手機橫放
+// 認識產區的國家頁（1.17.1）：產區介紹在地圖正下方；點圓點不捲動，點列表、直接打開產區時捲回地圖
 //
 // 用法：node scripts/origin-map-ui-test.mjs
 
@@ -139,6 +140,12 @@ const mapState = (page) => page.eval(`(() => {
     ranks: shown.map((l) => l.rank), overlaps, outside, picked: svg.dataset.picked ?? '', bar: document.querySelector('.origin-pick-bar')?.textContent.trim() ?? '',
     zoomIn: document.querySelector('[data-zoom="in"]').disabled, zoomOut: document.querySelector('[data-zoom="out"]').disabled };
 })()`);
+/** 地圖框的頂端剛好在固定的頁首下方（捲到地圖了） */
+const mapAtTop = `(() => {
+  const top = document.querySelector('.origin-frame').getBoundingClientRect().top;
+  const header = document.querySelector('.app-header').getBoundingClientRect().bottom;
+  return top >= header - 1 && top <= header + 24;
+})()`;
 const ET_REGIONS = ['耶加雪菲', '西達摩', '古吉', '西阿爾西', '哈拉', '利姆', '吉瑪', '卡法', '列坎提'];
 
 /** 版面：整頁不橫向捲動、橫條名稱不壓到數字、每列 ≥ 44px */
@@ -460,7 +467,25 @@ try {
     rows: [...document.querySelectorAll('.origin-row[data-region]')].map((r) => r.dataset.region), detail: document.querySelector('.origin-detail').textContent,
     mode: document.querySelector('.origin-modes .segmented').dataset.value })`);
   check('沒喝過的國家（巴拿馬）也有國家介紹、常見風味、所有產區', panama.intro.includes("藝伎") && panama.tags >= 3 && q(panama.rows) === q(["PA.boquete", "PA.volcan"]) && panama.mode === "explore", q(panama));
+  // 點地圖上的圓點：畫面不捲動、介紹出現在地圖正下方
+  await frameRect(page);
+  const y0 = await page.eval('scrollY');
+  await tap(page, '.origin-hit[data-region="PA.volcan"]');
+  await sleep(500);
+  const afterTap = await page.eval(`(() => {
+    const d = document.querySelector('.origin-region-detail');
+    const r = document.querySelector('.origin-frame').getBoundingClientRect();
+    return { y: scrollY, text: d.textContent.includes('沃肯'), order: d.previousElementSibling.classList.contains('origin-detail') && d.nextElementSibling.classList.contains('origin-rows'),
+      frame: r.top >= 0 && r.bottom <= innerHeight };
+  })()`);
+  check('點地圖上的圓點：畫面不捲動、地圖還在畫面裡、介紹在地圖正下方（產區列表上面）',
+    afterTap.y === y0 && afterTap.text && afterTap.order && afterTap.frame, q({ y0, ...afterTap }));
+  // 點下面列表的產區：平順地捲回地圖（不被頁首蓋住），介紹接在地圖下面
+  await page.eval(`scrollTo(0, 0); true`);
+  check('（準備）捲到最上面：地圖不在頁首正下方', !(await page.eval(mapAtTop)));
   await click(page, '.origin-row[data-region="PA.boquete"]');
+  await page.waitFor(mapAtTop, { label: '捲回地圖' });
+  check('點列表的產區：捲回地圖（地圖頂端在頁首下方）', true);
   const boquete = await page.eval(`({ text: document.querySelector('.origin-region-detail').textContent.replace(/\\s+/g, ' '),
     subs: [...document.querySelectorAll('.origin-region-detail .origin-sub')].map((p) => p.textContent),
     selected: document.querySelector('.origin-dot.is-selected')?.dataset.dot })`);
@@ -511,6 +536,8 @@ try {
   await page.waitFor(`location.hash === '#/origins?mode=explore' && document.querySelector('.origin-progress')`, { label: '回世界（認識產區）' });
   check('「‹ 世界地圖」回到同一個模式的世界', true);
   await openExplore('#/origins/ID?mode=explore&region=ID.mandheling', '.origin-mine');
+  await page.waitFor(mapAtTop, { label: '直接打開產區：捲到地圖' });
+  check('從別頁直接打開產區（&region=）：捲到地圖，介紹接在下面', true);
   check('濕剝法（曼特寧）顯示成「濕剝常見」', (await page.eval(`[...document.querySelectorAll('.origin-region-detail .origin-sub')].map((p) => p.textContent).join('|')`)) === '濕剝常見|你喝到的');
   for (const theme of ['light', 'dark']) {
     await setTheme(page, theme);

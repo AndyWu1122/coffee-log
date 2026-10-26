@@ -130,8 +130,8 @@ function renderCountry(container, ctx, code, initialRegion) {
         ${flavorTagsHtml(g.flavors.map((key) => ({ key })))}` : ''}
       ${countrySvg(ctx.map, code, ctx.drunk, `${country.zh}的地圖，圓點是產區（實心＝喝過）`)}
       <p class="chart-detail origin-detail" aria-live="polite">點地圖上的圓點或下面的產區，看介紹</p>
-      <div class="origin-rows">${all.map((r) => regionRowHtml(r, ctx)).join('')}</div>
       <div class="origin-region-detail" id="origin-region-detail"></div>
+      <div class="origin-rows">${all.map((r) => regionRowHtml(r, ctx)).join('')}</div>
     </section>
   </div>`;
 
@@ -141,13 +141,15 @@ function renderCountry(container, ctx, code, initialRegion) {
   const detailText = page.querySelector('.origin-detail');
   const detailBox = page.querySelector('.origin-region-detail');
   let current = '';
-  const select = (key, { scroll = true } = {}) => {
+  // 產區介紹在地圖正下方：點地圖的圓點不捲動（地圖留在原位）；點下面列表的產區、從別頁直接打開時，平順地捲到地圖
+  const frame = page.querySelector('.origin-frame');
+  const select = (key, { scroll = false } = {}) => {
     current = key;
     markSelected(page, key);
     const mine = ctx.drunk.get(key);
     detailText.textContent = `${REGION_BY_KEY.get(key).zh}：${mine ? `喝過 ${cupsText(mine.cups)}${score(mine.avgRating)}` : '還沒喝過'}`;
     detailBox.innerHTML = regionGuideHtml(key, ctx);
-    if (scroll) detailBox.scrollIntoView({ block: 'start' });
+    if (scroll) frame.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };
   page.addEventListener('click', async (e) => {
     const wish = e.target.closest('[data-wish]');
@@ -164,10 +166,10 @@ function renderCountry(container, ctx, code, initialRegion) {
       return;
     }
     const target = e.target.closest('[data-region]');
-    if (target) select(target.dataset.region);
+    if (target) select(target.dataset.region, { scroll: !target.closest('.origin-frame') });
   });
   // 從想買清單、我的足跡點過來：直接打開那個產區
-  if (REGION_BY_KEY.get(initialRegion)?.country === code) select(initialRegion);
+  if (REGION_BY_KEY.get(initialRegion)?.country === code) select(initialRegion, { scroll: true });
 }
 
 function regionRowHtml(r, ctx) {
