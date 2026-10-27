@@ -77,7 +77,7 @@ const btn = (action, label, cls = '') => `<button type="button" class="btn ${cls
 function sectionHtml(id, title, people, emptyText, row) {
   if (!people.length && !emptyText) return '';
   return `
-    <section class="section" id="${id}">
+    <section class="section panel" id="${id}">
       <h2>${title}${people.length ? `（${people.length}）` : ''}</h2>
       ${people.length ? `<ul class="list people">${people.map(row).join('')}</ul>` : `<p class="hint">${emptyText}</p>`}
     </section>`;
@@ -86,7 +86,7 @@ function sectionHtml(id, title, people, emptyText, row) {
 function renderReady(container, { user }, lists, { code, rerender }) {
   const { incoming, outgoing, friends, blocked } = lists;
   container.innerHTML = `<div id="friends-page">
-    <form class="section form" id="add-form" novalidate>
+    <form class="section panel form" id="add-form" novalidate>
       <h2>加好友</h2>
       <div class="field" data-field="code">
         <label for="code">好友代碼</label>

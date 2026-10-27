@@ -99,7 +99,7 @@ const layout = (page) => page.eval(`(() => {
   const rowHits = [...document.querySelectorAll('.hbar-row:not(.hbar-axis)')].filter((row) => {
     const name = row.querySelector('.hbar-name').getBoundingClientRect();
     const value = row.querySelector('.hbar-value').getBoundingClientRect();
-    return name.right > value.left;
+    return overlap(name, value); // 每支豆子、器材的名稱獨佔一行（在數值上面），所以上下也要比
   }).length;
   const tickHits = [...document.querySelectorAll('.hbar-ticks')].filter((t) => {
     const spans = [...t.querySelectorAll('span')].map((s) => s.getBoundingClientRect());
@@ -149,8 +149,21 @@ try {
   await openStats(page, base, 'all');
   const scroll = await page.eval(`(() => { const s = document.querySelector('.stats-card .chart-scroll'); return s && { w: s.scrollWidth, c: s.clientWidth, left: s.scrollLeft }; })()`);
   check('「全部」（18 週）：每週的圖在框裡橫向捲動、捲到最新', Boolean(scroll) && scroll.w > scroll.c && scroll.left >= scroll.w - scroll.c - 2, q(scroll));
-  check('長名稱的豆子：截斷顯示（…），完整名稱在 aria-label',
-    await page.eval(`(() => { const a = document.querySelector('[data-bean="bean-b"]'); const n = a.querySelector('.hbar-name'); return n.scrollWidth > n.clientWidth && a.getAttribute('aria-label').includes('巴拿馬翡翠莊園藝伎水洗處理特級批次限量版本'); })()`));
+  check('長名稱的豆子：名稱獨佔一行、完整顯示（不截斷），長條在下一行；完整名稱也在 aria-label',
+    await page.eval(`(() => {
+      const a = document.querySelector('[data-bean="bean-b"]'); const n = a.querySelector('.hbar-name'); const bar = a.querySelector('.hbar');
+      const nr = n.getBoundingClientRect(); const br = bar.getBoundingClientRect();
+      return n.scrollHeight <= n.clientHeight + 1 && n.textContent.includes('巴拿馬翡翠莊園藝伎水洗處理特級批次限量版本')
+        && nr.bottom <= br.top + 0.5 && a.getAttribute('aria-label').includes('巴拿馬翡翠莊園藝伎水洗處理特級批次限量版本');
+    })()`));
+  check('每支豆子、器材的長條同寬（才能互相比較）', await page.eval(`(() => {
+    const ws = [...document.querySelectorAll('.hbars.is-stacked .hbar-row:not(.hbar-axis) .hbar')].map((b) => Math.round(b.getBoundingClientRect().width));
+    return ws.length > 2 && new Set(ws).size === 1;
+  })()`));
+  check('總覽「最常沖的豆子」：名稱用較小的字、最多兩行，不超出卡片', await page.eval(`(() => {
+    const v = [...document.querySelectorAll('.stat-value.is-name')];
+    return v.length === 1 && parseFloat(getComputedStyle(v[0]).fontSize) < 20 && v[0].scrollWidth <= v[0].clientWidth + 1;
+  })()`));
   check('已封存的豆子、磨豆機也在統計裡', await page.eval(`Boolean(document.querySelector('[data-bean="bean-c"]')) && document.querySelector('#stats-page').textContent.includes('Comandante C40')`));
   check('豆子下拉：已封存的標「已封存」', await page.eval(`[...document.querySelectorAll('#stats-bean option')].some((o) => o.value === 'bean-c' && o.textContent.includes('已封存'))`));
 

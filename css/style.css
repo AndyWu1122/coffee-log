@@ -331,6 +331,9 @@ a { color: var(--accent); }
 
 .badge-warn { background: var(--accent); color: var(--accent-text); font-weight: 600; }
 .stock-row { color: var(--text); }
+/* 用完的豆子：名稱改淡、縮圖變淡（--text-dim 的對比已驗證 ≥ 6.9:1） */
+.card.is-empty .card-title, .card.is-empty .stock-row { color: var(--text-dim); }
+.card.is-empty .card-thumb { opacity: 0.55; }
 .stock-hint { margin: 0; }
 
 .empty {
@@ -397,6 +400,16 @@ input:focus, select:focus, textarea:focus {
 .section { display: grid; gap: 12px; margin-bottom: 32px; }
 .section h2 { margin: 0; font-size: 1.1rem; }
 .section .hint { margin: 0; }
+/* 有框的區塊（帳號、備份、好友管理、通知設定）：和統計、設定頁的卡片同樣的外觀；隱私說明、更新內容等長文維持沒有框 */
+.section.panel {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.section.panel h2 { font-size: 1.05rem; }
+.section.panel .switch-row:last-of-type { border-bottom: none; }
 .ratio-display {
   font-size: 1.4rem;
   font-weight: 600;
@@ -544,6 +557,10 @@ input:focus, select:focus, textarea:focus {
 .btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
 .btn-block { width: 100%; }
 .actions { display: grid; gap: 12px; margin-top: 8px; }
+.btn-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.btn-pair .btn { padding: 0 12px; }
+/* 刪除：紅色文字按鈕，和上面的按鈕隔開，避免誤觸 */
+.actions .delete-btn { justify-self: center; margin-top: 12px; padding: 0 20px; color: var(--danger); font-weight: 600; }
 /* 紀錄表單的「儲存」：貼在分頁列上方，不用滑到最下面（要是 form 的直接子元素，sticky 只在父元素的範圍內移動） */
 .save-bar {
   position: sticky;
@@ -587,8 +604,6 @@ input:focus, select:focus, textarea:focus {
 }
 
 .toolbar { display: flex; justify-content: flex-end; margin-bottom: 12px; }
-.toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 0.9rem; min-height: var(--tap); }
-.toggle input { width: 22px; min-height: 22px; height: 22px; }
 
 /* ===== 通知設定的開關 ===== */
 /* 整列都可以點（≥ 48px）；開關的圓點：關閉時用 --text（在 --border 上）、開啟時用 --accent-text（在 --accent 上），兩個主題都分得清楚 */
@@ -610,6 +625,8 @@ input:focus, select:focus, textarea:focus {
 .switch-row input:checked::after { transform: translateX(20px); background: var(--accent-text); }
 .switch-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .switch-row input:disabled { opacity: 0.6; }
+/* 列表上方、備份、分享頁的開關：文字和開關靠在一起，不畫分隔線 */
+.switch-row.is-compact { justify-content: flex-start; padding: 0; border-bottom: none; color: var(--text-dim); font-size: 0.9rem; }
 .notifications-page .notice p { margin: 0 0 6px; }
 .notifications-page .notice p:last-child { margin-bottom: 0; }
 
@@ -908,6 +925,11 @@ a.feed-body:active { background: var(--surface-2); }
 }
 .stat-label { font-size: 0.85rem; color: var(--text-dim); }
 .stat-value { font-size: 1.35rem; font-weight: 600; overflow-wrap: anywhere; }
+/* 名稱（最常沖的豆子）：字小一點，最多兩行 */
+.stat-value.is-name {
+  font-size: 1.05rem; line-height: 1.35;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
 .stats-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .stats-card h2 { margin: 0; font-size: 1.05rem; }
 .stats-card > .hint { margin: 0; font-size: 0.85rem; }
@@ -958,6 +980,14 @@ a.feed-body:active { background: var(--surface-2); }
 .hbar-value { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .hbar-value small { display: block; font-size: 0.75rem; font-weight: 400; color: var(--text-dim); }
 .hbar-axis { min-height: 24px; cursor: default; }
+/* 名稱很長的橫條（每支豆子、器材）：名稱獨佔一行（最多兩行），下面才是長條和數值；長條一樣同寬 */
+.hbars.is-stacked .hbar-row { grid-template-columns: minmax(0, 1fr) 3.6em; row-gap: 2px; padding: 6px 4px; }
+.hbars.is-stacked .hbar-name {
+  grid-column: 1 / -1; white-space: normal; overflow-wrap: anywhere; line-height: 1.35;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+}
+.hbars.is-stacked .hbar-axis { padding-top: 0; padding-bottom: 0; }
+.hbars.is-stacked .hbar-axis > span:first-child { display: none; }
 .hbar-ticks { position: relative; height: 20px; }
 .hbar-scale { display: block; width: 100%; height: 4px; }
 .hbar-ticks span {
@@ -1021,7 +1051,11 @@ a.feed-body:active { background: var(--surface-2); }
 .heatmap-card h2 { margin: 0; font-size: 1.05rem; }
 .heatmap-card > .hint { margin: 0; font-size: 0.85rem; }
 .stats .heatmap-card { margin-bottom: 0; }
-.heatmap-scroll { padding-bottom: 10px; } /* 捲軸不蓋住最下面一排（週日） */
+/* 捲軸細一點、跟著主題（不隱藏：要讓人知道可以往左捲看更早的日子）；下面留一點空間，不蓋住最下面一排（週日） */
+.heatmap-scroll { padding-bottom: 6px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.heatmap-scroll::-webkit-scrollbar { height: 4px; }
+.heatmap-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.heatmap-scroll::-webkit-scrollbar-track { background: transparent; }
 .heatmap-scroll .heatmap { width: auto; }
 .heat-dot { stroke: none; }
 .heat-0 { fill: var(--heat-0); }

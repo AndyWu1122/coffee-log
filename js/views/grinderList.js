@@ -11,7 +11,7 @@ export async function render(container, { isCurrent }) {
 
   container.innerHTML = `
     <div class="toolbar">
-      <label class="toggle"><input type="checkbox" id="show-archived" ${showArchived ? 'checked' : ''}>顯示已封存</label>
+      <label class="switch-row is-compact"><input type="checkbox" id="show-archived" ${showArchived ? 'checked' : ''}><span>顯示已封存</span></label>
     </div>
     ${grinders.length ? `<ul class="list">${grinders.map(grinderCard).join('')}</ul>` : `
       <div class="empty">

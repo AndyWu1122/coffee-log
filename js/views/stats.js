@@ -79,16 +79,16 @@ const notEnough = (text) => `<p class="hint chart-empty">${esc(text)}</p>`;
 /* ===== 1. 總覽 ===== */
 
 function overviewHtml(o) {
-  const tile = (label, value, sub = '') => `<div class="stat-tile">
+  const tile = (label, value, sub = '', { name = false } = {}) => `<div class="stat-tile">
     <div class="stat-label">${esc(label)}</div>
-    <div class="stat-value">${esc(value)}</div>
+    <div class="stat-value${name ? ' is-name' : ''}">${esc(value)}</div>
     ${sub ? `<div class="hint">${esc(sub)}</div>` : ''}
   </div>`;
   return `<section class="stats-overview" aria-label="總覽">
     ${tile('總杯數', `${o.cups} 杯`)}
     ${tile('平均評分', score(o.avgRating), o.ratedCups < o.cups ? `${o.ratedCups} 杯有評分` : '')}
     ${tile('用掉的咖啡豆', formatGrams(o.totalCoffeeG))}
-    ${tile('最常沖的豆子', o.topBean?.name ?? '—', o.topBean ? `${o.topBean.cups} 杯` : '')}
+    ${tile('最常沖的豆子', o.topBean?.name ?? '—', o.topBean ? `${o.topBean.cups} 杯` : '', { name: Boolean(o.topBean) })}
   </section>`;
 }
 
@@ -172,7 +172,7 @@ const cupsNote = (cups, small) => `<small>${cups} 杯</small>${small ? '<small>�
 
 function beanBarsHtml(beans) {
   if (!beans.length) return notEnough('這段期間沒有評分過的紀錄');
-  return `<div class="hbars">
+  return `<div class="hbars is-stacked">
     ${beans.map((b) => `<a class="hbar-row" href="#/?bean=${encodeURIComponent(b.id)}" data-bean="${esc(b.id)}"
         aria-label="${esc(b.name)}：平均 ${score(b.avg)} 分，${b.cups} 杯${b.small ? '，樣本少' : ''}，看這支豆子的紀錄">
       <span class="hbar-name">${esc(b.name)}</span>
@@ -215,9 +215,9 @@ function equipmentHtml({ drippers, grinders }) {
   })).join('');
   return `
     ${filter.method === 'siphon' ? '' : `<h3 class="stats-sub">濾杯</h3>
-    ${drippers.length ? `<div class="hbars">${rows(drippers, '濾杯')}${scoreAxis()}</div>` : notEnough('沒有指定濾杯、或都沒有評分')}`}
+    ${drippers.length ? `<div class="hbars is-stacked">${rows(drippers, '濾杯')}${scoreAxis()}</div>` : notEnough('沒有指定濾杯、或都沒有評分')}`}
     <h3 class="stats-sub">磨豆機</h3>
-    ${grinders.length ? `<div class="hbars">${rows(grinders, '磨豆機')}${scoreAxis()}</div>` : notEnough('沒有指定磨豆機、或都沒有評分')}`;
+    ${grinders.length ? `<div class="hbars is-stacked">${rows(grinders, '磨豆機')}${scoreAxis()}</div>` : notEnough('沒有指定磨豆機、或都沒有評分')}`;
 }
 
 /* ===== 6. 每週沖幾杯：直條圖 ===== */

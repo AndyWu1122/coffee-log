@@ -301,10 +301,10 @@ export function beanStock(bean, beanBrews, allBrews) {
 /** 克數顯示：最多一位小數（15.5g、85g） */
 export const formatGrams = (g) => `${Number(g.toFixed(1))}g`;
 
-/** 剩餘量文字：「剩 85g，約 5 杯」「已用完」「已用完（超出 12g）」；short 只給克數（下拉選單用） */
+/** 剩餘量文字：「剩 85g，約 5 杯」「已用完」「已用完，記錄的用量比整包多 12g」；short 只給克數（下拉選單用） */
 export function formatStock(stock, { short = false } = {}) {
   if (!stock) return '';
-  if (stock.remainingG < 0) return short ? '已用完' : `已用完（超出 ${formatGrams(-stock.remainingG)}）`;
+  if (stock.remainingG < 0) return short ? '已用完' : `已用完，記錄的用量比整包多 ${formatGrams(-stock.remainingG)}`;
   if (stock.remainingG === 0) return '已用完';
   const grams = `剩 ${formatGrams(stock.remainingG)}`;
   if (short || stock.cupsLeft == null) return grams;

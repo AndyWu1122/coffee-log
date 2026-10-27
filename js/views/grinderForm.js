@@ -33,7 +33,7 @@ export async function render(container, { id, isCurrent }) {
         <button class="btn btn-primary btn-block" type="submit">儲存</button>
         ${isNew ? '' : `
           <button class="btn btn-block" type="button" data-action="archive">${grinder.archived ? '取消封存' : '封存（不再使用）'}</button>
-          <button class="btn btn-danger btn-block" type="button" data-action="delete">刪除</button>`}
+          <button class="link-btn delete-btn" type="button" data-action="delete">刪除</button>`}
       </div>
     </form>
   `;

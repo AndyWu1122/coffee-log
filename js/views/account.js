@@ -39,7 +39,7 @@ export async function render(container, { isCurrent }) {
 function renderSignedOut(container) {
   const inApp = isInAppBrowser();
   container.innerHTML = `
-    <section class="section">
+    <section class="section panel">
       <h2>咖啡社群</h2>
       <p>登入後可以用好友代碼加朋友，雙方同意才會成為好友。</p>
       <ul class="plain-list hint">
@@ -102,7 +102,7 @@ function renderNoProfile(container, { user }, rerender) {
 
 function renderReady(container, { user, profile }, { isCurrent, rerender }) {
   container.innerHTML = `
-    <section class="section">
+    <section class="section panel">
       <div class="profile-head">
         ${avatarHtml(profile, { large: true })}
         <div class="profile-text">
@@ -118,7 +118,7 @@ function renderReady(container, { user, profile }, { isCurrent, rerender }) {
       <p class="hint">頭像會重新壓縮並移除照片裡的位置等資訊，只有好友和邀請中的對方看得到。</p>
     </section>
 
-    <form class="section form" id="nickname-form" novalidate>
+    <form class="section panel form" id="nickname-form" novalidate>
       <div class="field" data-field="nickname">
         <label for="nickname">暱稱</label>
         <input id="nickname" name="nickname" value="${esc(profile.nickname)}" autocomplete="nickname" required>
@@ -127,7 +127,7 @@ function renderReady(container, { user, profile }, { isCurrent, rerender }) {
       <button class="btn btn-block" type="submit">儲存暱稱</button>
     </form>
 
-    <section class="section">
+    <section class="section panel">
       <h2>我的好友代碼</h2>
       <p class="hint">把代碼或 QR code 給朋友，對方輸入後會送出邀請，你接受了才會成為好友。</p>
       <div class="friend-code" aria-label="好友代碼">${esc(formatFriendCode(profile.friendCode))}</div>

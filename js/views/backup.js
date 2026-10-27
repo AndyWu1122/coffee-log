@@ -33,16 +33,16 @@ export async function render(container, { isCurrent }) {
   if (!isCurrent()) return;
 
   container.innerHTML = `
-    <section class="section">
+    <section class="section panel">
       <h2>匯出</h2>
       <p class="last-backup${status.remind ? ' is-overdue' : ''}" id="last-backup">${esc(lastBackupText(status))}</p>
       <p class="hint">目前有 ${summary.beans} 支豆子、${summary.grinders} 台磨豆機、${summary.drippers} 支濾杯、${summary.brews} 筆紀錄、${summary.photos} 張照片。資料只存在這支手機上，建議定期匯出，存到雲端硬碟。</p>
-      <label class="toggle"><input type="checkbox" id="include-photos" checked>包含照片</label>
+      <label class="switch-row is-compact"><input type="checkbox" id="include-photos" checked><span>包含照片</span></label>
       <p class="hint" id="export-size"></p>
       <button class="btn btn-primary btn-block" type="button" id="export">匯出 JSON</button>
     </section>
 
-    <section class="section" id="import-section">
+    <section class="section panel" id="import-section">
       <h2>匯入</h2>
       ${segmentedHtml('mode', IMPORT_MODES, 'merge')}
       <p class="hint" id="mode-hint"></p>

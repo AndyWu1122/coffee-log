@@ -292,6 +292,23 @@ try {
   check('編輯：值都帶回表單', q(back) === q({ min: '2', sec: '40', acidity: '4', body: '2', grinder: 'g-1', setting: '22', temp: '93' }), q(back));
   const edit = await formLayout(page);
   check('編輯頁：「儲存」一打開就在畫面內', edit.saveInView && edit.saveAboveTabbar);
+  // 1.22.0：分享、再沖一杯並排；刪除是紅色文字按鈕（≥ 44px），和上面隔開
+  const editBtns = await page.eval(`(() => {
+    const r = (sel) => document.querySelector(sel).getBoundingClientRect();
+    const share = r('.actions [data-action="share"]'), again = r('.actions a[href^="#/brew/new?from="]'), del = r('.actions [data-action="delete"]');
+    const delEl = document.querySelector('.actions [data-action="delete"]');
+    return {
+      sideBySide: Math.abs(share.top - again.top) < 1 && share.right <= again.left,
+      equalWidth: Math.abs(share.width - again.width) < 1,
+      delBelow: del.top - Math.max(share.bottom, again.bottom) >= 20,
+      delTap: del.height >= 44 && del.width >= 44,
+      delText: !delEl.classList.contains('btn') && getComputedStyle(delEl).borderTopWidth === '0px',
+      againLabel: document.querySelector('.actions a[href^="#/brew/new?from="]').getAttribute('aria-label'),
+    };
+  })()`);
+  check('編輯頁：「分享」「再沖一杯」並排、同寬', editBtns.sideBySide && editBtns.equalWidth, q(editBtns));
+  check('編輯頁：「刪除」是文字按鈕、點擊範圍 ≥ 44px、和上面隔開 ≥ 20px', editBtns.delText && editBtns.delTap && editBtns.delBelow, q(editBtns));
+  check('編輯頁：「再沖一杯」的 aria-label 寫完整', editBtns.againLabel === '用這次參數再沖一杯');
 
   /* ===== 沖煮方式（1.21.0）：手沖／賽風 ===== */
   const methodState = () => page.eval(`({
@@ -392,6 +409,41 @@ try {
   await page.eval('scrollTo(0, 0), new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))');
   const withBanner = await formLayout(page);
   check('「已更新」提示出現時：「儲存」在提示上方、不被蓋住', withBanner.banners === 1 && withBanner.saveInView && withBanner.saveClearOfBanners, q(withBanner));
+
+  /* ===== 豆子列表（1.22.0）：用完的變淡、排到後面；用量比整包多寫清楚；「顯示已封存」是開關 ===== */
+  await page.eval(`import('/js/db.js').then((db) => db.bulkPut({
+    beans: [
+      { id: 'sb-over', name: '超量的豆子', origin: '', country: '', region: '', process: 'washed', roastLevel: 'light', roastDate: '', bagWeightG: 20, archived: false, createdAt: '2099-01-03T00:00:00.000Z' },
+      { id: 'sb-full', name: '還很多的豆子', origin: '', country: '', region: '', process: 'washed', roastLevel: 'light', roastDate: '', bagWeightG: 500, archived: false, createdAt: '2099-01-01T00:00:00.000Z' },
+    ],
+    brews: [{ id: 'sb-brew', beanId: 'sb-over', method: 'pourover', grinderId: '', dripperId: '', dripper: '', brewedAt: new Date().toISOString(),
+      grindSetting: '', coffeeG: 32, waterG: 480, tempC: null, totalTimeS: null, rating: null,
+      flavor: { acidity: null, sweetness: null, bitterness: null, body: null }, flavorNotes: [], notes: '', visibility: 'private' }],
+  })).then(() => true)`);
+  await page.eval(`location.hash = '#/beans'`);
+  await page.waitFor(`document.querySelector('a.card[href="#/beans/sb-over"]')`, { label: '豆子列表' });
+  const beanList = await page.eval(`(() => {
+    const cards = [...document.querySelectorAll('.list a.card')];
+    const over = document.querySelector('a.card[href="#/beans/sb-over"]');
+    const full = document.querySelector('a.card[href="#/beans/sb-full"]');
+    const archived = document.querySelector('#show-archived');
+    return {
+      overAfterFull: cards.indexOf(over) > cards.indexOf(full),
+      overLast: cards.at(-1) === over,
+      faded: over.classList.contains('is-empty') && !full.classList.contains('is-empty'),
+      badge: over.querySelector('.badge')?.textContent,
+      stock: over.querySelector('.stock-row')?.textContent.trim(),
+      switchRow: Boolean(archived.closest('.switch-row')),
+    };
+  })()`);
+  check('豆子列表：用完的豆子排到最後、變淡', beanList.overAfterFull && beanList.overLast && beanList.faded, q(beanList));
+  check('豆子列表：用量比整包多 → 標籤「已用完」＋「記錄的用量比整包多 12g」', beanList.badge === '已用完' && beanList.stock === '記錄的用量比整包多 12g', q(beanList));
+  check('豆子列表：「顯示已封存」是開關', beanList.switchRow);
+  for (const theme of ['dark', 'light']) {
+    await reload(page, `localStorage.setItem('theme', ${q(theme)})`);
+    await page.waitFor(`document.querySelector('a.card[href="#/beans/sb-over"]')`, { label: '豆子列表' });
+    await screenshot(page, path.join(shotDir, `beans-${theme}.png`));
+  }
 
   check('沒有 CSP 違規', (await page.eval('window.__csp')).length === 0, (await page.eval('window.__csp')).join(' / '));
   check('沒有 JavaScript 錯誤', page.errors.length === 0, page.errors.join(' / '));

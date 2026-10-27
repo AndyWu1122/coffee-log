@@ -36,12 +36,12 @@ export async function render(container, { isCurrent }) {
   const { prefs } = state;
   container.innerHTML = `
     <div class="notifications-page">
-      <section class="section" id="push-device">
+      <section class="section panel" id="push-device">
         <h2>這台裝置</h2>
         ${deviceHtml(state)}
       </section>
 
-      <section class="section">
+      <section class="section panel">
         <h2>要通知哪些</h2>
         <label class="switch-row">
           <input type="checkbox" name="comments" ${prefs.comments ? 'checked' : ''}>

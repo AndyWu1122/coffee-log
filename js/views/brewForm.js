@@ -220,10 +220,12 @@ export async function render(container, { id, query, isCurrent }) {
 
       <button class="btn btn-primary btn-block save-bar" type="submit">儲存</button>
       <div class="actions">
-        <button class="btn btn-block" type="button" data-action="share">${isNew ? '儲存並分享' : '分享'}</button>
-        ${isNew ? '' : `
-          <a class="btn btn-block" href="#/brew/new?from=${esc(id)}">用這次參數再沖一杯</a>
-          <button class="btn btn-danger btn-block" type="button" data-action="delete">刪除這筆紀錄</button>`}
+        ${isNew ? '<button class="btn btn-block" type="button" data-action="share">儲存並分享</button>' : `
+          <div class="btn-pair">
+            <button class="btn" type="button" data-action="share">分享</button>
+            <a class="btn" href="#/brew/new?from=${esc(id)}" aria-label="用這次參數再沖一杯">再沖一杯</a>
+          </div>
+          <button class="link-btn delete-btn" type="button" data-action="delete">刪除這筆紀錄</button>`}
       </div>
     </form>
   `;

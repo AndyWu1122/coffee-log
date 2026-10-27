@@ -385,8 +385,8 @@ export async function render(container, { id, isCurrent }) {
         <canvas id="card" role="img" aria-label="分享卡片預覽"></canvas>
       </div>
       <div class="share-options">
-        ${photo ? '<label class="toggle"><input type="checkbox" id="opt-photo" checked>包含照片</label>' : ''}
-        ${data.notes ? '<label class="toggle"><input type="checkbox" id="opt-notes">包含筆記</label>' : ''}
+        ${photo ? '<label class="switch-row is-compact"><input type="checkbox" id="opt-photo" checked><span>包含照片</span></label>' : ''}
+        ${data.notes ? '<label class="switch-row is-compact"><input type="checkbox" id="opt-notes"><span>包含筆記</span></label>' : ''}
         ${segmentedHtml('size', SIZE_OPTIONS, 'post')}
       </div>
       <div class="share-actions">
