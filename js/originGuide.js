@@ -566,4 +566,246 @@ export const REGION_GUIDE = {
     },
     text: '位在多明尼加西南部的山區、靠近海地邊境，是多明尼加最知名的產區，有原產地名稱保護。比起國內其他產區，酸質較明亮、口感較厚實，常見巧克力、果乾和糖漬橙皮，有時帶一點菸草感。',
   },
+
+  /* ----- 第三批補上（南美洲） ----- */
+  'CO.cauca': {
+    altitude: [1700, 2100], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.citrus.orange', 'floral.floral', 'sweet.brownsugar', 'spices.brownspice.anise'],
+    },
+    text: '位在哥倫比亞西南部，Inzá、Popayán 一帶靠近 Puracé 火山，很多農場在海拔 2,000 公尺上下，日夜溫差大。咖啡多由小農自己發酵、水洗，常見柳橙、花香和紅糖般的甜感，有時帶八角般的香料感，酸質明亮。',
+  },
+  'CO.tolima': {
+    altitude: [1500, 2000], processes: ['washed'],
+    flavors: {
+      washed: ['sweet.brownsugar.caramel', 'nutty.cocoa.chocolate', 'fruity.berry', 'fruity.citrus.orange'],
+    },
+    text: '位在哥倫比亞中部，南部的 Planadas 一帶過去因內戰對外封閉，近年靠小農合作社的精品咖啡打出名號，常在比賽拿到好成績。咖啡多種在遮蔭下、成熟得慢，常見焦糖、巧克力的甜感和莓果、柑橘的果香。',
+  },
+  'CO.antioquia': {
+    altitude: [1300, 1900], processes: ['washed'],
+    flavors: {
+      washed: ['nutty.cocoa.chocolate', 'sweet.brownsugar.caramel', 'nutty.nutty', 'fruity.citrus'],
+    },
+    text: '以麥德林為中心的大產區，是哥倫比亞歷史悠久、產量很大的咖啡省份，咖啡多種在陡峭的山谷裡，以水洗為主。常見牛奶巧克力、焦糖、紅糖和核桃，口感中等，比較不走水果和酒香；海拔高的批次會帶柑橘與紅色水果。',
+  },
+  'CO.quindio': {
+    altitude: [1400, 1800], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.berry.strawberry', 'fruity.other.peach', 'sweet.brownsugar.caramel', 'sour.alcohol.fermented'],
+    },
+    text: '位在哥倫比亞「咖啡文化景觀區」（咖啡軸心）的中央，是面積最小的產咖啡省份之一，觀光咖啡莊園很多。近年這裡的農場以厭氧、二氧化碳浸漬、加入水果共同發酵等實驗性處理聞名，常見草莓、葡萄、水蜜桃等很強烈的果香。',
+  },
+  'BR.suldeminas': {
+    altitude: [900, 1300], processes: ['natural', 'honey'],
+    flavors: {
+      natural: ['nutty.cocoa.chocolate', 'nutty.nutty', 'sweet.brownsugar.caramel', 'roasted.cereal.malt'],
+      honey: ['nutty.cocoa.chocolate', 'sweet.brownsugar.honey', 'nutty.nutty', 'fruity.citrus.orange'],
+    },
+    text: '位在米納斯吉拉斯州南部，是巴西最大、歷史最久的咖啡產區之一，丘陵起伏，很多農場用機器採收。以日曬和去皮日曬（巴西的蜜處理）為主，常見巧克力、堅果、焦糖和麥芽，酸質低、口感厚實；海拔較高的批次帶柑橘與核果。',
+  },
+  'BR.mogiana': {
+    altitude: [900, 1200], processes: ['natural'],
+    flavors: {
+      natural: ['nutty.cocoa.chocolate', 'nutty.nutty.hazelnut', 'sweet.brownsugar.caramel', 'fruity.other.cherry'],
+    },
+    text: '在聖保羅州和米納斯吉拉斯州交界，北邊的 Alta Mogiana 海拔較高、氣溫穩定，是巴西老牌的精品產區。以日曬為主，品種多是 Catuaí 和 Mundo Novo，常見巧克力、榛果、焦糖的甜感，以及櫻桃般的柔和果香。',
+  },
+  'BR.chapada': {
+    altitude: [1100, 1400], processes: ['natural', 'honey'],
+    flavors: {
+      natural: ['fruity.other.peach', 'fruity.berry', 'floral.floral', 'sweet.brownsugar.maple'],
+      honey: ['fruity.citrus.orange', 'fruity.other.peach', 'sweet.brownsugar.honey', 'spices.brownspice'],
+    },
+    text: '位在巴西東北部巴伊亞州的高原，Piatã 一帶海拔約 1,300 公尺，是東北部海拔最高的小鎮之一，冬天夜裡很冷。近年常在巴西的卓越杯拿下好成績，風格和南部產區不同，酸質明亮乾淨，常見花香、柑橘、核果和莓果。',
+  },
+  'PE.cajamarca': {
+    altitude: [1500, 2000], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.citrus.orange', 'fruity.other.cherry', 'floral.floral', 'nutty.cocoa.chocolate'],
+    },
+    text: '位在秘魯北部，Jaén、San Ignacio 一帶是秘魯產量最大的產區之一，合作社和有機咖啡很多。San Ignacio 的豆子常被形容果香、花香較多，帶巧克力和堅果；比較溫暖的 Jaén 則偏柳橙、橘子般的柑橘調性。',
+  },
+  'PE.junin': {
+    altitude: [1200, 1800], processes: ['washed'],
+    flavors: {
+      washed: ['nutty.cocoa.chocolate', 'sweet.brownsugar.honey', 'fruity.other.apple', 'nutty.nutty'],
+    },
+    text: '位在秘魯中部，咖啡主要種在 Chanchamayo 和 Satipo 兩個省的「高地叢林」，也是秘魯主要的產區之一。常見可可、蜂蜜、蘋果和堅果，口感圓潤、酸質柔和；高海拔的得獎批次則有紅色莓果和柑橘。',
+  },
+  'PE.cusco': {
+    altitude: [1400, 2100], processes: ['washed'],
+    flavors: {
+      washed: ['nutty.cocoa.chocolate', 'sweet.brownsugar.caramel', 'spices.brownspice', 'fruity.citrus.orange'],
+    },
+    text: '位在秘魯南部，咖啡主要種在 La Convención 省 Quillabamba 一帶的山谷，多在遮蔭下種植，品種以鐵比卡、波旁為主。風味常被形容輕盈有結構，帶牛奶巧克力、焦糖和香料；高海拔的批次有柳橙、紅茶和熱帶水果。',
+  },
+  'PE.puno': {
+    altitude: [1500, 1900], processes: ['washed'],
+    flavors: {
+      washed: ['floral.blacktea', 'fruity.citrus.lemon', 'fruity.other.grape', 'nutty.cocoa.chocolate'],
+    },
+    text: '位在秘魯東南部、靠近玻利維亞，咖啡多種在 Sandia 一帶、亞馬遜雨林邊緣的山谷，由合作社集中處理，品種多是波旁、鐵比卡。常見紅茶、檸檬皮和紅葡萄，也有巧克力和焦糖的甜感，酸質柔和。',
+  },
+  'BO.caranavi': {
+    altitude: [1400, 1800], processes: ['washed', 'natural'],
+    flavors: {
+      washed: ['fruity.citrus', 'fruity.other.peach', 'floral.floral', 'nutty.cocoa'],
+      natural: ['fruity.dried', 'fruity.other.cherry', 'spices.brownspice'],
+    },
+    text: '位在玻利維亞 La Paz 省的 Yungas 山區，地形陡峭潮濕，森林覆蓋大部分土地，玻利維亞大部分的精品咖啡都產自這裡。水洗常見柑橘、黃桃、白花和可可，日曬則偏果乾、黑櫻桃和香料感。',
+  },
+  'EC.loja': {
+    altitude: [1500, 2200], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.other.peach', 'fruity.citrus.lime', 'floral.floral', 'sweet.brownsugar.honey'],
+    },
+    text: '位在厄瓜多南部的安地斯山區，靠近秘魯邊境，Vilcabamba、Quilanga 一帶有不少高海拔的小農場，品種常見 Typica Mejorado。常見杏桃、水蜜桃、萊姆和白花，搭配蜂蜜般的甜感，風格乾淨明亮。',
+  },
+  'EC.pichincha': {
+    altitude: [1100, 1800], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.other.apple', 'fruity.citrus.grapefruit', 'floral.blacktea', 'sweet.brownsugar'],
+    },
+    text: '位在首都基多周圍，Nanegal 等西北邊的雲霧森林山谷比基多溫暖潮濕，有不少知名的小莊園，Sidra 等品種也常在這一帶出現。常見蘋果、葡萄柚、石榴與紅茶般的風味，甜感像紅糖，酸質明亮。',
+  },
+
+  /* ----- 第四批補上（亞洲、太平洋） ----- */
+  'US.kona': {
+    altitude: [250, 900], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.other.peach', 'fruity.citrus', 'floral.floral', 'nutty.nutty', 'sweet.brownsugar'],
+    },
+    text: '夏威夷大島西岸 Hualālai 和 Mauna Loa 火山的山坡，下午常有雲層遮蔭，只有這一帶種的咖啡才能叫「Kona」，品種以鐵比卡為主。常見水蜜桃、柑橘、花香和夏威夷豆般的堅果感，甜感像紅糖，口感柔和乾淨。',
+  },
+  'ID.java': {
+    altitude: [1100, 1600], processes: ['washed'],
+    flavors: {
+      washed: ['floral.blacktea', 'nutty.cocoa.chocolate', 'nutty.nutty', 'spices.brownspice'],
+    },
+    text: '爪哇是荷蘭人在 17 世紀末最早大規模種咖啡的地方之一，「Java」後來也成了咖啡的代稱。東爪哇的 Ijen 高原有大片火山土壤的老莊園，和蘇門答臘不同，多為水洗，常見紅茶般的口感、可可、堅果和香料，酸質柔和乾淨。',
+  },
+  'ID.toraja': {
+    altitude: [1200, 1900], processes: ['wethulled', 'washed'],
+    flavors: {
+      wethulled: ['spices', 'nutty.cocoa.darkchocolate', 'green.vegetative.herblike'],
+      washed: ['fruity.citrus', 'floral.blacktea', 'nutty.cocoa.chocolate'],
+    },
+    text: '位在蘇拉威西島中部的山區，以 Toraja 族的船形屋聞名，咖啡多由小農種植。傳統的濕剝處理口感厚重、酸質低，常見泥土、香料、黑巧克力和草本的風味；水洗的批次則比較乾淨明亮，帶柑橘和紅茶感。',
+  },
+  'ID.bali': {
+    altitude: [1200, 1600], processes: ['natural'],
+    flavors: {
+      natural: ['fruity.citrus', 'fruity.other.cherry', 'fruity.berry.strawberry', 'nutty.cocoa.chocolate'],
+    },
+    text: '位在峇里島北部的 Kintamani 高原，火山坡上的咖啡常和柑橘樹一起種，小農以傳統的 Subak Abian 組織合作管理。近年以日曬為主，常見柑橘、櫻桃、草莓與巧克力，比蘇門答臘的豆子輕盈明亮。',
+  },
+  'PG.easternhighlands': {
+    altitude: [1500, 2000], processes: ['washed'],
+    flavors: {
+      washed: ['sweet.brownsugar', 'fruity.berry', 'fruity.citrus', 'floral.floral'],
+    },
+    text: '位在巴布亞紐幾內亞中部的高地，Goroka 一帶是當地咖啡的中心，咖啡多由小農在自家園子種植，品種多是鐵比卡和 Arusha。常見紅糖、紅色莓果、柑橘和花香，酸質柔和、甜感好。',
+  },
+  'PG.westernhighlands': {
+    altitude: [1400, 1800], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.citrus', 'nutty.cocoa.chocolate', 'nutty.nutty', 'spices.brownspice.nutmeg'],
+    },
+    text: '以 Mount Hagen 和 Wahgi 河谷為中心，除了小農，也有 Sigri 這樣歷史悠久的大莊園，品種多是鐵比卡和 Arusha。常見柑橘、黑李、巧克力和堅果，偶爾帶肉豆蔻般的香料感，口感滑順。',
+  },
+  'TW.gukeng': {
+    altitude: [200, 800], processes: ['washed'],
+    flavors: {
+      washed: ['nutty.nutty', 'sweet.brownsugar', 'floral.blacktea', 'nutty.cocoa'],
+    },
+    text: '雲林的古坑，以華山一帶最有名，日治時期就有大規模的咖啡農場，戰後一度荒廢，1990 年代以後才重新興起，咖啡常和檳榔、果樹混種在山坡上。風味常被形容溫和、酸質低，帶堅果、紅糖和茶感。',
+  },
+  'TW.nantou': {
+    altitude: [500, 1500], processes: ['washed', 'natural', 'honey'],
+    flavors: {
+      washed: ['floral.blacktea', 'fruity.citrus', 'sweet.brownsugar.honey'],
+      natural: ['fruity.berry', 'fruity.other.pineapple', 'sweet.brownsugar'],
+      honey: ['sweet.brownsugar.honey', 'fruity.other.peach', 'floral.blacktea'],
+    },
+    text: '國姓、仁愛、魚池、信義等鄉鎮都有種咖啡，921 地震後國姓很多農民改種咖啡。各地海拔和處理法差異很大，常被形容溫潤回甘；高海拔的批次帶花果香和明亮的酸質。',
+  },
+  'TW.pingtung': {
+    altitude: [300, 1000], processes: ['washed'],
+    flavors: {
+      washed: ['floral.floral', 'fruity', 'sweet.brownsugar.honey', 'nutty.nutty'],
+    },
+    text: '大武山下的泰武、三地門、瑪家一帶，多由排灣族、魯凱族的小農種植，品種多是鐵比卡，日照強、日夜溫差大。淺焙常見花香、果香和蜂蜜般的甜感，口感溫和回甘、酸度中等。',
+  },
+  'CN.puer': {
+    altitude: [1300, 1700], processes: ['washed', 'natural', 'honey'],
+    flavors: {
+      washed: ['floral.blacktea', 'fruity.other.apple', 'fruity.berry'],
+      natural: ['fruity.other.cherry', 'fruity.other.pear', 'nutty.cocoa.chocolate'],
+      honey: ['fruity.citrus.orange', 'sweet.vanilla', 'roasted.cereal'],
+    },
+    text: '位在雲南南部，是中國咖啡產量最大的地區，品種多是卡蒂姆（Catimor），過去多做商業豆，近年處理法越來越講究。水洗常見茶感、蘋果和莓果，蜜處理有柳橙和香草般的甜，日曬則偏黑櫻桃、西洋梨和巧克力。',
+  },
+  'CN.baoshan': {
+    altitude: [1300, 1800], processes: ['washed', 'natural'],
+    flavors: {
+      washed: ['fruity.dried', 'nutty.cocoa', 'fruity.citrus.orange', 'floral.blacktea'],
+      natural: ['fruity.berry', 'sour.alcohol.winey', 'nutty.cocoa.chocolate'],
+    },
+    text: '位在雲南西部，怒江河谷的潞江壩是雲南很早開始種咖啡的地區之一，「保山小粒咖啡」有中國和歐盟的地理標誌保護，除了卡蒂姆也有少量鐵比卡。常見紅棗、可可、柳橙和茶感，日曬與發酵的批次則有莓果和酒香。',
+  },
+  'CN.dehong': {
+    altitude: [1300, 1700], processes: ['honey', 'washed'],
+    flavors: {
+      honey: ['fruity.other.peach', 'floral.blacktea', 'sweet.brownsugar.caramel'],
+      washed: ['fruity.other.peach', 'floral.floral.rose', 'floral.blacktea'],
+    },
+    text: '位在雲南西部、和緬甸交界，芒市一帶是雲南的咖啡重鎮，品種以卡蒂姆為主。近年蜜處理和酵母發酵的批次越來越多，常見水蜜桃、荔枝和像烏龍茶的茶感，甜感明顯、苦味低。',
+  },
+  'IN.chikmagalur': {
+    altitude: [1000, 1500], processes: ['washed', 'natural'],
+    flavors: {
+      washed: ['nutty.cocoa.chocolate', 'nutty.nutty', 'sweet.brownsugar.caramel', 'spices'],
+      natural: ['nutty.cocoa.chocolate', 'nutty.nutty', 'sweet.brownsugar'],
+    },
+    text: '位在印度西南部的卡納塔克邦，相傳 17 世紀蘇非聖人 Baba Budan 從葉門帶了 7 顆咖啡種子種在這裡的山上，是印度咖啡的起點。咖啡多在遮蔭下和胡椒、小豆蔻混種，常見巧克力、堅果、焦糖與香料感，酸質低、口感厚實。',
+  },
+  'VN.dalat': {
+    altitude: [1400, 1600], processes: ['washed', 'honey'],
+    flavors: {
+      washed: ['fruity.other.peach', 'fruity.other.apple', 'nutty.cocoa.chocolate'],
+      honey: ['fruity.citrus.orange', 'fruity.other.pineapple', 'floral.floral'],
+    },
+    text: '位在越南中南部的林同省高原，越南大部分是羅布斯塔，大叻周圍的 Cầu Đất 一帶則因為涼爽、海拔高，是阿拉比卡的主要產區，19 世紀由法國人引進。常見水蜜桃、青蘋果和牛奶巧克力；蜜處理則偏柳橙、鳳梨與白花。',
+  },
+  'TH.chiangrai': {
+    altitude: [1200, 1500], processes: ['honey', 'natural'],
+    flavors: {
+      honey: ['fruity.other.pineapple', 'sweet.brownsugar.honey', 'floral.blacktea'],
+      natural: ['fruity.other.apple', 'fruity.other.peach', 'sweet.brownsugar.caramel'],
+    },
+    text: '位在泰國最北部，Doi Chang、Doi Tung 一帶的山區原本種罌粟，透過皇室計畫改種咖啡，現在是泰國阿拉比卡的主要產區，多由山地部落的小農種植。蜜處理常見龍眼、鳳梨和蜂蜜，日曬則有蘋果、杏桃和熱帶水果。',
+  },
+  'TH.chiangmai': {
+    altitude: [1000, 1300], processes: ['washed'],
+    flavors: {
+      washed: ['floral.blacktea', 'fruity.citrus.lemon', 'nutty.cocoa.darkchocolate', 'sweet.brownsugar.molasses'],
+    },
+    text: '在清萊南邊，咖啡多種在山地部落周圍的森林裡，和清萊一樣是皇室計畫推動、用來取代罌粟的作物，多由合作社處理。水洗常見綠茶、檸檬、柚子般的清爽酸質，接著是黑巧克力和糖蜜的甜，有時帶香料感。',
+  },
+  'LA.bolaven': {
+    altitude: [1000, 1300], processes: ['washed'],
+    flavors: {
+      washed: ['floral.blacktea', 'sweet.brownsugar', 'nutty.nutty', 'fruity.other.peach'],
+    },
+    text: '位在寮國南部，Paksong 一帶的火山高原涼爽多雨，20 世紀初由法國人引進咖啡，現在除了羅布斯塔也有不少阿拉比卡。水洗常見花草茶般的口感、紅糖和核桃，風格溫和、酸質低，好的批次帶水蜜桃與柑橘。',
+  },
+  'MM.shan': {
+    altitude: [1100, 1600], processes: ['natural', 'washed'],
+    flavors: {
+      natural: ['fruity.berry.strawberry', 'fruity.other.grape', 'sour.alcohol.winey', 'nutty.cocoa.chocolate'],
+      washed: ['nutty.cocoa.chocolate', 'roasted.cereal.malt', 'floral.floral'],
+    },
+    text: '位在緬甸東部的高原，Ywangan、彬烏倫（Pyin Oo Lwin）一帶是主要產區，因為缺水，傳統以日曬為主，近年才開始有水洗和蜜處理。日曬常見草莓、葡萄、香蕉和酒香，水洗則偏巧克力、麥芽與花香。',
+  },
 };
