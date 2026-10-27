@@ -517,7 +517,16 @@ try {
     boquete.text.includes('海拔約 1,200–1,900 公尺') && q(boquete.subs) === q(['水洗常見', '日曬常見', '你喝到的']) && boquete.text.includes('翡翠莊園')
       && boquete.text.includes('還沒喝過這個產區的豆子') && boquete.selected === 'PA.boquete', q(boquete));
   await click(page, '.origin-row[data-region="PA.volcan"]');
-  check('還沒寫詳細介紹的產區（沃肯）：說明之後補上', (await page.eval(`document.querySelector('.origin-region-detail').textContent`)).includes('詳細介紹之後補上'));
+  const volcan = await page.eval(`document.querySelector('.origin-region-detail').textContent`);
+  check('1.22.1 補上的產區（沃肯）：顯示詳細介紹', volcan.includes('巴魯火山') && !volcan.includes('詳細介紹之後補上'), volcan.slice(0, 80));
+  // 還沒寫詳細介紹的產區：從清單裡找一個（分批補完後就沒有了，那時跳過）
+  const unwritten = await page.eval(`Promise.all([import('/js/origins.js'), import('/js/originGuide.js')])
+    .then(([o, g]) => o.REGIONS.find((r) => !g.REGION_GUIDE[r.key])?.key ?? null)`);
+  if (unwritten) {
+    await openExplore(`#/origins/${unwritten.split('.')[0]}?mode=explore&region=${unwritten}`, '.origin-region-detail');
+    check(`還沒寫詳細介紹的產區（${unwritten}）：說明之後補上`, (await page.eval(`document.querySelector('.origin-region-detail').textContent`)).includes('詳細介紹之後補上'));
+    await openExplore('#/origins/PA?mode=explore&region=PA.volcan', '.origin-row.is-selected[data-region="PA.volcan"]');
+  }
   // 想買清單：加入 → 清單列標「★ 想買」→ 世界頁列出、連回這個產區 → 移除
   await click(page, '[data-wish="PA.volcan"]');
   await toast(page, '已加入想買清單');

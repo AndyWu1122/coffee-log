@@ -326,4 +326,244 @@ export const REGION_GUIDE = {
     },
     text: '嘉義的阿里山鄉，咖啡常和茶園、檳榔園一起種在山坡上，多為小農，處理法很多元。常被形容乾淨、甜感好，帶有類似烏龍茶的茶感和柑橘、熱帶水果的風味。',
   },
+
+  /* ----- 第一批補上（非洲、葉門） ----- */
+  'ET.westarsi': {
+    altitude: [1800, 2300], processes: ['washed', 'natural'],
+    flavors: {
+      washed: ['floral.floral.jasmine', 'fruity.other.peach', 'floral.blacktea', 'fruity.citrus.orange'],
+      natural: ['fruity.berry.blueberry', 'fruity.berry.blackberry', 'floral.floral'],
+    },
+    text: '位在西達摩北邊的高原，Nensebo 一帶的處理站近年很受注目，品種多是當地原生種。水洗常見茉莉、水蜜桃和紅茶般的風味，日曬則偏藍莓、深色莓果和熱帶水果的甜感。',
+  },
+  'ET.limu': {
+    altitude: [1500, 2100], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.citrus', 'floral.floral.jasmine', 'fruity.other.peach', 'sweet.brownsugar.caramel'],
+    },
+    text: '在衣索比亞西南部、吉瑪附近，以水洗為主。「Limu」在市場上比較像一種風格的名稱，鄰近地區的豆子也常這樣標示。風味常被形容比南部產區溫和，帶柑橘、花香與焦糖般的甜感。',
+  },
+  'ET.jimma': {
+    altitude: [1600, 2200], processes: ['natural', 'washed'],
+    flavors: {
+      natural: ['fruity.other.cherry', 'fruity.berry', 'nutty.cocoa.chocolate', 'floral.floral'],
+      washed: ['fruity.citrus', 'fruity.other.peach', 'floral.blacktea', 'sweet.brownsugar.caramel'],
+    },
+    text: '衣索比亞西南部的大產區，過去以大量生產、品質普通的日曬豆為主；近年 Agaro 一帶的處理站開始做精緻的日曬與水洗，評價大幅提升。風格通常比南部產區均衡，花香與莓果沒那麼強烈。',
+  },
+  'ET.kaffa': {
+    altitude: [1400, 2100], processes: ['natural'],
+    flavors: {
+      natural: ['nutty.cocoa.chocolate', 'spices.brownspice', 'fruity.berry'],
+    },
+    text: '衣索比亞西南部、常被稱為咖啡發源地的地區，至今還有大片野生咖啡森林，很多咖啡在森林裡半野生生長，以人工採收、日曬為主。風味常見可可、香料和溫和的果香，酸質比較柔和。',
+  },
+  'ET.lekempti': {
+    altitude: [1700, 2200], processes: ['natural', 'washed'],
+    flavors: {
+      natural: ['fruity.other.peach', 'sweet.brownsugar.caramel', 'nutty.cocoa.chocolate'],
+      washed: ['fruity.other.peach', 'fruity.citrus.lemon', 'floral.floral'],
+    },
+    text: '位在衣索比亞西部的 Wellega 地區，Lekempti 是當地城市 Nekemte 的舊名，傳統以日曬為主，豆子顆粒較大。果香常被形容比較溫和，比起莓果更偏向核果，口感中等，帶焦糖與巧克力的甜感。',
+  },
+  'KE.muranga': {
+    altitude: [1500, 1900], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.berry.blackberry', 'fruity.berry.raspberry', 'fruity.citrus', 'floral.floral'],
+    },
+    text: '位在肯亞山南側、涅里的南邊，由小農合作社的處理廠水洗處理，品種以 SL28、SL34 為主。常見黑醋栗、紅醋栗與柑橘的明亮酸質，也常帶花香，甜感乾淨。',
+  },
+  'KE.kiambu': {
+    altitude: [1500, 2000], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.berry.blackberry', 'fruity.citrus.grapefruit', 'floral.blacktea', 'spices'],
+    },
+    text: '位在首都奈洛比北邊，是肯亞歷史最久的產區之一，有很多大型莊園，肯亞的咖啡研究機構也在這裡。品種以 SL28、SL34 為主，常見黑醋栗、葡萄柚和紅茶般的風味，有時帶一點香料感。',
+  },
+  'KE.embu': {
+    altitude: [1300, 1900], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.berry.raspberry', 'fruity.berry.blackberry', 'fruity.citrus.lemon', 'sweet.brownsugar'],
+    },
+    text: '位在肯亞山東南側的坡地，紅色火山土壤，由小農合作社的處理廠水洗處理。風格明亮多汁，常見覆盆子、黑醋栗和檸檬；有些批次帶熱帶水果，或比較飽滿的可可調性。',
+  },
+  'TZ.mbeya': {
+    altitude: [1400, 1900], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.citrus.orange', 'fruity.other.cherry', 'nutty.cocoa.chocolate', 'sweet.brownsugar.caramel'],
+    },
+    text: '位在坦尚尼亞西南部的南部高地，靠近馬拉威和尚比亞，咖啡多由小農種植，經合作社和處理站水洗。近年品質進步很多，常見柑橘、櫻桃般的果香，搭配巧克力與焦糖的甜感，口感柔滑。',
+  },
+  'RW.southern': {
+    altitude: [1600, 2000], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.citrus.orange', 'fruity.other.cherry', 'floral.floral', 'sweet.brownsugar.caramel'],
+    },
+    text: '包含 Huye（舊稱 Butare）、Nyamagabe 等地，是盧安達最早發展精品水洗處理站的地區之一，比西部的基伍湖畔乾燥一些。品種以波旁為主，常見柳橙、櫻桃、花香和焦糖，乾淨甜美。',
+  },
+  'BI.kayanza': {
+    altitude: [1600, 2100], processes: ['washed', 'natural'],
+    flavors: {
+      washed: ['floral.blacktea', 'fruity.berry', 'fruity.citrus.lemon', 'sweet.brownsugar.honey'],
+      natural: ['fruity.berry.raspberry', 'fruity.other.peach', 'sweet.brownsugar.caramel'],
+    },
+    text: '位在蒲隆地北部、靠近盧安達邊境，是蒲隆地最知名的精品產區，小農把咖啡櫻桃送到處理站集中處理，品種以紅波旁為主。水洗常見紅茶、莓果與檸檬，日曬則有覆盆子、杏桃般的果甜。',
+  },
+  'BI.ngozi': {
+    altitude: [1600, 1950], processes: ['washed', 'natural'],
+    flavors: {
+      washed: ['fruity.other.cherry', 'fruity.citrus', 'floral.blacktea', 'nutty.cocoa.chocolate'],
+      natural: ['fruity.berry.blueberry', 'sweet.vanilla', 'fruity.other.pear', 'sweet.brownsugar'],
+    },
+    text: '在卡揚扎東邊，同樣是蒲隆地北部的高海拔產區，處理站常用兩段發酵的水洗法，酸質明亮。品種以紅波旁為主，水洗常見櫻桃、柑橘與紅茶，日曬則偏藍莓果醬、香草和西洋梨的甜感。',
+  },
+  'UG.elgon': {
+    altitude: [1500, 2200], processes: ['washed', 'natural'],
+    flavors: {
+      washed: ['nutty.cocoa.chocolate', 'fruity.berry', 'fruity.citrus', 'fruity.other.grape'],
+      natural: ['fruity.dried.prune', 'fruity.dried.raisin', 'nutty.cocoa'],
+    },
+    text: '位在烏干達東部、和肯亞交界的艾爾貢山西坡，市場上常以 Bugisu 或 Sipi Falls 的名字出現，是烏干達最主要的阿拉比卡產區。水洗常見莓果、柑橘的酸質和巧克力的基調，口感厚實。',
+  },
+  'UG.rwenzori': {
+    altitude: [1500, 2200], processes: ['natural', 'washed'],
+    flavors: {
+      natural: ['fruity.other.peach', 'fruity.berry', 'nutty.cocoa.chocolate', 'sour.alcohol.winey'],
+      washed: ['fruity.berry.blackberry', 'floral.blacktea', 'fruity.dried.prune', 'nutty.nutty'],
+    },
+    text: '位在烏干達西部、和剛果交界的魯文佐里山，咖啡多種在香蕉樹下，由小農合作社收購。近年日曬和延長發酵的批次越來越多，常見核果、紅色水果與巧克力；水洗則偏黑醋栗、紅茶和果乾。',
+  },
+  'CD.kivu': {
+    altitude: [1450, 2200], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.berry', 'fruity.citrus.orange', 'sweet.brownsugar.caramel', 'spices.brownspice.cinnamon'],
+    },
+    text: '位在剛果東部、基伍湖西岸和湖中的島上，火山土壤，和湖對岸的盧安達風土相近。過去因戰亂很難出口，近年靠合作社重新發展水洗精品豆，常見紅色莓果、柑橘、焦糖，以及肉桂般的香料感。',
+  },
+  'YE.banimatar': {
+    altitude: [1800, 2400], processes: ['natural'],
+    flavors: {
+      natural: ['fruity.other.grape', 'fruity.dried.prune', 'roasted.tobacco', 'nutty.cocoa', 'spices'],
+    },
+    text: '在首都沙那西邊的山區，「Matari」是葉門最有名的咖啡之一，咖啡種在山坡的梯田上，傳統以日曬處理。常見葡萄般的酸質、黑棗乾、菸草和可可，風格厚重、帶香料感；近年也有花香、核果調性的微批次。',
+  },
+
+  /* ----- 第二批補上（中美洲、加勒比海） ----- */
+  'PA.volcan': {
+    altitude: [1400, 2000], processes: ['washed', 'natural'],
+    flavors: {
+      washed: ['floral.floral.jasmine', 'fruity.citrus', 'floral.blacktea', 'fruity.other.peach'],
+      natural: ['fruity.berry', 'fruity.citrus.lime', 'floral.blacktea', 'sour.alcohol.winey'],
+    },
+    text: '在巴魯火山西側，和波奎特隔著火山相望，部分莊園海拔比波奎特更高，近年也出了不少知名的藝伎莊園。水洗的藝伎常見茉莉、柑橘和佛手柑般的茶感，日曬則偏紅色莓果與酒香。',
+  },
+  'CR.westvalley': {
+    altitude: [1200, 1800], processes: ['honey', 'washed'],
+    flavors: {
+      honey: ['fruity.other.cherry', 'fruity.berry.raspberry', 'fruity.other.grape', 'sweet.brownsugar.caramel'],
+      washed: ['fruity.citrus', 'fruity.other.peach', 'sweet.brownsugar.honey'],
+    },
+    text: '在首都聖荷西西北邊的 Naranjo、Sarchí 一帶，是哥斯大黎加微型處理廠最集中的產區之一，蜜處理特別盛行，Villa Sarchí 品種也是在這裡發現的。常見櫻桃、紅色莓果、葡萄和焦糖般的甜感，口感圓潤。',
+  },
+  'CR.centralvalley': {
+    altitude: [1200, 1600], processes: ['washed', 'honey'],
+    flavors: {
+      washed: ['fruity.citrus.orange', 'fruity.citrus.lemon', 'floral.floral', 'nutty.cocoa.chocolate'],
+      honey: ['sweet.brownsugar.honey', 'fruity.other.peach', 'nutty.cocoa'],
+    },
+    text: '圍繞首都聖荷西，在 Poás、Barva、Irazú 等火山的坡地上，是哥斯大黎加最早開始種咖啡的地方，火山土壤肥沃。常見柳橙、檸檬等柑橘的乾淨酸質和花香，口感均衡，也常帶巧克力般的甜感。',
+  },
+  'GT.atitlan': {
+    altitude: [1500, 2000], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.citrus', 'floral.floral', 'nutty.cocoa.chocolate', 'spices.brownspice.cinnamon'],
+    },
+    text: '圍繞阿提特蘭湖，湖邊有三座火山，在瓜地馬拉的火山產區裡土壤的有機質最豐富，湖面吹來的風和雲霧影響當地的微氣候。咖啡多由小農種植，常見明亮的柑橘酸質、花香，以及巧克力和肉桂般的香料感，口感飽滿。',
+  },
+  'GT.acatenango': {
+    altitude: [1500, 2000], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.citrus.orange', 'floral.floral', 'sweet.brownsugar.caramel', 'spices.brownspice'],
+    },
+    text: '在安提瓜西邊、阿卡特南果火山的坡地上，附近的富埃戈火山經常噴發，火山灰為土壤補充礦物質；咖啡多種在濃密的遮蔭樹下，在穩定的風中曬乾。常見明亮有結構的酸質、柳橙和花香，甜感乾淨。',
+  },
+  'HN.santabarbara': {
+    altitude: [1300, 1800], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.other.apple', 'fruity.other.peach', 'fruity.citrus.lime', 'nutty.cocoa.darkchocolate'],
+    },
+    text: '位在宏都拉斯西部，聖塔芭芭拉山周圍的小農莊園常在卓越杯拿下好成績，主要品種是當地常見的帕卡斯（Pacas）。常見蘋果、水蜜桃、萊姆般的果香和熱帶水果，搭配黑巧克力的甜感，風味豐富。',
+  },
+  'HN.marcala': {
+    altitude: [1300, 1700], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.citrus.orange', 'fruity.other.peach', 'sweet.brownsugar.caramel', 'spices'],
+    },
+    text: '位在宏都拉斯西南部的 La Paz 一帶，2005 年取得中美洲第一個咖啡的原產地名稱保護（DO Marcala），範圍橫跨三個省。常見柳橙、水蜜桃的酸質，以及焦糖和一點香料感的甜，口感乾淨滑順。',
+  },
+  'HN.copan': {
+    altitude: [1000, 1600], processes: ['washed'],
+    flavors: {
+      washed: ['fruity.other.apple', 'fruity.citrus.orange', 'sweet.brownsugar.caramel', 'nutty.cocoa.chocolate'],
+    },
+    text: '位在宏都拉斯西部、靠近瓜地馬拉邊境，著名的馬雅古城科潘就在這裡；咖啡多種在遮蔭樹下，屬於「宏都拉斯西部咖啡」（HWC）地理標示的範圍。常見蘋果、柑橘的果香和焦糖、巧克力的甜感，口感飽滿。',
+  },
+  'SV.apaneca': {
+    altitude: [1100, 1900], processes: ['washed', 'natural'],
+    flavors: {
+      washed: ['sweet.brownsugar.caramel', 'nutty.cocoa.darkchocolate', 'fruity.citrus', 'floral.floral'],
+      natural: ['fruity.berry.blackberry', 'fruity.dried', 'fruity.other.grape'],
+    },
+    text: '從聖安娜火山延伸到阿帕內卡的山脈，是薩爾瓦多最大的產區，火山土壤肥沃。傳統以波旁為主，常見焦糖、黑巧克力與柔和的果香；在薩爾瓦多培育的帕卡馬拉（Pacamara）顆粒很大，風味比較明亮，帶花香和柑橘。',
+  },
+  'NI.jinotega': {
+    altitude: [1100, 1700], processes: ['washed', 'natural'],
+    flavors: {
+      washed: ['nutty.cocoa.chocolate', 'nutty.nutty.hazelnut', 'sweet.brownsugar.honey', 'floral.floral'],
+      natural: ['fruity.berry.strawberry', 'fruity.other.grape', 'fruity.berry.blueberry', 'nutty.cocoa.chocolate'],
+    },
+    text: '位在尼加拉瓜北部的高地，是尼加拉瓜產量最大的產區，咖啡多由小農種植。水洗常見巧克力、榛果和蜂蜜般的甜感，口感圓潤；近年也有日曬的批次，帶草莓、葡萄和莓果的果香。',
+  },
+  'NI.nuevasegovia': {
+    altitude: [1100, 1700], processes: ['washed'],
+    flavors: {
+      washed: ['floral.floral.jasmine', 'fruity.other.peach', 'floral.blacktea', 'fruity.citrus.grapefruit', 'sweet.brownsugar'],
+    },
+    text: '位在尼加拉瓜最北邊、和宏都拉斯交界，Dipilto 一帶的山區海拔較高，常在卓越杯拿下好成績。風味常見茉莉、水蜜桃、紅茶和葡萄柚，甜感像紅糖，是尼加拉瓜風味最明亮的產區之一。',
+  },
+  'NI.matagalpa': {
+    altitude: [900, 1400], processes: ['washed'],
+    flavors: {
+      washed: ['nutty.cocoa.chocolate', 'nutty.nutty', 'sweet.brownsugar.caramel', 'fruity.other.apple'],
+    },
+    text: '在希諾特加南邊，是尼加拉瓜咖啡歷史最久的產區之一，十九世紀就有德國等地的移民來開墾咖啡莊園。風味常被形容溫和、酸質偏低，帶牛奶巧克力、核桃和焦糖；海拔較高的批次則有蘋果、熱帶水果的果香。',
+  },
+  'MX.chiapas': {
+    altitude: [1000, 1800], processes: ['washed'],
+    flavors: {
+      washed: ['nutty.cocoa.chocolate', 'nutty.nutty.almond', 'fruity.other.pear', 'fruity.citrus.orange'],
+    },
+    text: '位在墨西哥最南端、和瓜地馬拉交界，是墨西哥產量最大的咖啡州；南部的 Soconusco 一帶多是在森林遮蔭下種植的小農，有機咖啡很多。常見牛奶巧克力、杏仁、西洋梨和柑橘，口感柔和。',
+  },
+  'MX.oaxaca': {
+    altitude: [1300, 1800], processes: ['washed'],
+    flavors: {
+      washed: ['nutty.cocoa.chocolate', 'fruity.citrus.lemon', 'fruity.other.cherry', 'floral.floral.chamomile'],
+    },
+    text: '位在墨西哥南部，咖啡多由原住民小農種在山區，Pluma Hidalgo 一帶有當地鐵比卡變種、同名的「Pluma Hidalgo」品種。常見可可、檸檬、李子與櫻桃般的果香，偶爾帶洋甘菊的花香，酸質細緻。',
+  },
+  'MX.veracruz': {
+    altitude: [1100, 1600], processes: ['washed'],
+    flavors: {
+      washed: ['sweet.brownsugar', 'nutty.nutty', 'fruity.citrus.orange', 'nutty.cocoa.chocolate'],
+    },
+    text: '位在墨西哥東部、面向墨西哥灣，Coatepec 一帶在 Cofre de Perote 火山的坡地上，是墨西哥歷史悠久的咖啡產區。常見紅糖、堅果和柳橙皮般的風味，酸質圓潤、帶巧克力的甜感；海拔高的批次則有水果和花香。',
+  },
+  'DO.barahona': {
+    altitude: [600, 1300], processes: ['washed'],
+    flavors: {
+      washed: ['nutty.cocoa.chocolate', 'fruity.dried', 'fruity.citrus.orange', 'roasted.tobacco'],
+    },
+    text: '位在多明尼加西南部的山區、靠近海地邊境，是多明尼加最知名的產區，有原產地名稱保護。比起國內其他產區，酸質較明亮、口感較厚實，常見巧克力、果乾和糖漬橙皮，有時帶一點菸草感。',
+  },
 };
