@@ -47,7 +47,7 @@ function renderSignedOut(container) {
         <li>Google 帳號的 email 只用來登入，其他使用者看不到</li>
         <li>不登入也能照常使用，紀錄都存在這支手機</li>
       </ul>
-      <a href="#/privacy">隱私說明：收集什麼、誰看得到、怎麼刪除</a>
+      <a class="field-link" href="#/privacy">隱私說明：收集什麼、誰看得到、怎麼刪除</a>
       ${inApp ? `<div class="notice notice-error">LINE、Facebook 等 App 內建的瀏覽器無法用 Google 登入，
         請用 Safari 或 Chrome 開啟這個網址。</div>` : ''}
       <button type="button" class="btn btn-primary btn-block" data-action="google">用 Google 登入</button>

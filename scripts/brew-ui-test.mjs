@@ -439,6 +439,15 @@ try {
   check('豆子列表：用完的豆子排到最後、變淡', beanList.overAfterFull && beanList.overLast && beanList.faded, q(beanList));
   check('豆子列表：用量比整包多 → 標籤「已用完」＋「記錄的用量比整包多 12g」', beanList.badge === '已用完' && beanList.stock === '記錄的用量比整包多 12g', q(beanList));
   check('豆子列表：「顯示已封存」是開關', beanList.switchRow);
+  // 1.23.0：名稱很長時「已用完」不會被擠成兩行
+  await page.eval(`import('/js/db.js').then(async (db) => { await db.put('beans', { ...(await db.get('beans', 'sb-over')), name: '哥倫比亞 薇拉 天堂莊園 雙重厭氧 荔枝 超級長的名稱' }); return true; })`);
+  await page.eval(`location.hash = '#/'; true`);
+  await page.waitFor(`document.querySelector('.day-group')`, { label: '離開豆子列表' });
+  await page.eval(`location.hash = '#/beans'; true`);
+  await page.waitFor(`document.querySelector('a.card[href="#/beans/sb-over"] .card-title')?.textContent.includes('超級長')`, { label: '豆子列表（長名稱）' });
+  const longBadge = await page.eval(`(() => { const b = document.querySelector('a.card[href="#/beans/sb-over"] .badge'); const r = b.getBoundingClientRect();
+    return { h: r.height, line: parseFloat(getComputedStyle(b).lineHeight) || parseFloat(getComputedStyle(b).fontSize) * 1.5, right: r.right, vw: innerWidth }; })()`);
+  check('豆子名稱很長：「已用完」標籤維持一行、在畫面內', longBadge.h < longBadge.line * 1.5 && longBadge.right <= longBadge.vw, q(longBadge));
   for (const theme of ['dark', 'light']) {
     await reload(page, `localStorage.setItem('theme', ${q(theme)})`);
     await page.waitFor(`document.querySelector('a.card[href="#/beans/sb-over"]')`, { label: '豆子列表' });

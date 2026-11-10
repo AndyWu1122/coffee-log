@@ -8,19 +8,21 @@ import {
 const startTour = (options) => import('./views/tour.js').then((m) => m.startTour(options));
 
 // 各 view 用動態 import 延遲載入；每個 view 匯出 render(container, params)
+// back：頁首「‹」回到哪一頁（上一層；字串，或收到路由參數的函式）。沒有 back 的是最上層：
+// 底部分頁、☰ 選單直接打開的頁面；產地地圖的國家頁自己有「‹ 世界地圖」（要帶著目前的模式）
 const routes = [
   { pattern: /^\/$/, tab: 'brews', load: () => import('./views/brewList.js') },
-  { pattern: /^\/brew\/new$/, tab: 'brews', load: () => import('./views/brewForm.js') },
-  { pattern: /^\/brew\/([\w-]+)$/, tab: 'brews', load: () => import('./views/brewForm.js') },
-  { pattern: /^\/brew\/([\w-]+)\/share$/, tab: 'brews', load: () => import('./views/shareCard.js') },
+  { pattern: /^\/brew\/new$/, tab: 'brews', back: '#/', load: () => import('./views/brewForm.js') },
+  { pattern: /^\/brew\/([\w-]+)$/, tab: 'brews', back: '#/', load: () => import('./views/brewForm.js') },
+  { pattern: /^\/brew\/([\w-]+)\/share$/, tab: 'brews', back: ([id]) => `#/brew/${id}`, load: () => import('./views/shareCard.js') },
   { pattern: /^\/beans$/, tab: 'beans', load: () => import('./views/beanList.js') },
-  { pattern: /^\/beans\/new$/, tab: 'beans', load: () => import('./views/beanForm.js') },
-  { pattern: /^\/beans\/([\w-]+)$/, tab: 'beans', load: () => import('./views/beanForm.js') },
+  { pattern: /^\/beans\/new$/, tab: 'beans', back: '#/beans', load: () => import('./views/beanForm.js') },
+  { pattern: /^\/beans\/([\w-]+)$/, tab: 'beans', back: '#/beans', load: () => import('./views/beanForm.js') },
   // 社群：動態牆與紀錄的詳細頁（底部分頁，js/config.js 沒設定時不顯示）；#/social?mine=1 只看自己的
   { pattern: /^\/social$/, tab: 'social', load: () => import('./views/feed.js') },
-  { pattern: /^\/social\/([\w-]+)\/([\w-]+)$/, tab: 'social', load: () => import('./views/feedDetail.js') },
+  { pattern: /^\/social\/([\w-]+)\/([\w-]+)$/, tab: 'social', back: '#/social', load: () => import('./views/feedDetail.js') },
   // 個人檔案（頭像、暱稱點過來；自己的從 ☰ →「帳號」進來）
-  { pattern: /^\/user\/([\w-]+)$/, tab: 'social', load: () => import('./views/profile.js') },
+  { pattern: /^\/user\/([\w-]+)$/, tab: 'social', back: '#/social', load: () => import('./views/profile.js') },
   // ☰ 選單裡的頁面：不屬於任何底部分頁（tab: null）
   // 設定與關於：外觀、通知設定、隱私說明、更新內容、意見回饋、開發者後台、版本號（☰ 只放常用的）
   { pattern: /^\/settings$/, tab: null, load: () => import('./views/settings.js') },
@@ -29,23 +31,23 @@ const routes = [
   { pattern: /^\/origins$/, tab: null, load: () => import('./views/originMap.js') },
   { pattern: /^\/origins\/([A-Z]{2})$/, tab: null, load: () => import('./views/originMap.js') },
   { pattern: /^\/backup$/, tab: null, load: () => import('./views/backup.js') },
-  { pattern: /^\/privacy$/, tab: null, load: () => import('./views/privacy.js') },
-  { pattern: /^\/changelog$/, tab: null, load: () => import('./views/changelog.js') },
+  { pattern: /^\/privacy$/, tab: null, back: '#/settings', load: () => import('./views/privacy.js') },
+  { pattern: /^\/changelog$/, tab: null, back: '#/settings', load: () => import('./views/changelog.js') },
   { pattern: /^\/grinders$/, tab: null, load: () => import('./views/grinderList.js') },
-  { pattern: /^\/grinders\/new$/, tab: null, load: () => import('./views/grinderForm.js') },
-  { pattern: /^\/grinders\/([\w-]+)$/, tab: null, load: () => import('./views/grinderForm.js') },
+  { pattern: /^\/grinders\/new$/, tab: null, back: '#/grinders', load: () => import('./views/grinderForm.js') },
+  { pattern: /^\/grinders\/([\w-]+)$/, tab: null, back: '#/grinders', load: () => import('./views/grinderForm.js') },
   { pattern: /^\/drippers$/, tab: null, load: () => import('./views/dripperList.js') },
-  { pattern: /^\/drippers\/new$/, tab: null, load: () => import('./views/dripperForm.js') },
-  { pattern: /^\/drippers\/([\w-]+)$/, tab: null, load: () => import('./views/dripperForm.js') },
+  { pattern: /^\/drippers\/new$/, tab: null, back: '#/drippers', load: () => import('./views/dripperForm.js') },
+  { pattern: /^\/drippers\/([\w-]+)$/, tab: null, back: '#/drippers', load: () => import('./views/dripperForm.js') },
   // 咖啡社群（js/config.js 沒設定時選單不顯示；直接輸入網址會顯示「沒有開放」）
   { pattern: /^\/account$/, tab: null, load: () => import('./views/account.js') },
   { pattern: /^\/friends(?:\/add)?$/, tab: null, load: () => import('./views/friends.js') },
-  { pattern: /^\/feedback$/, tab: null, load: () => import('./views/feedback.js') },
-  { pattern: /^\/notifications$/, tab: null, load: () => import('./views/notifications.js') },
+  { pattern: /^\/feedback$/, tab: null, back: '#/settings', load: () => import('./views/feedback.js') },
+  { pattern: /^\/notifications$/, tab: null, back: '#/settings', load: () => import('./views/notifications.js') },
   // 開發者後台（只有開發者看得到入口；權限在資料庫與 Edge Function 檢查）
-  { pattern: /^\/admin$/, tab: null, load: () => import('./views/admin.js') },
-  { pattern: /^\/admin\/user\/([\w-]+)$/, tab: null, load: () => import('./views/admin.js') },
-  { pattern: /^\/admin\/post\/([\w-]+)\/([\w-]+)$/, tab: null, load: () => import('./views/admin.js') },
+  { pattern: /^\/admin$/, tab: null, back: '#/settings', load: () => import('./views/admin.js') },
+  { pattern: /^\/admin\/user\/([\w-]+)$/, tab: null, back: '#/admin?tab=users', load: () => import('./views/admin.js') },
+  { pattern: /^\/admin\/post\/([\w-]+)\/([\w-]+)$/, tab: null, back: '#/admin?tab=posts', load: () => import('./views/admin.js') },
 ];
 
 /** 解析 "#/brew/new?from=abc" → { path: '/brew/new', query: { from: 'abc' } } */
@@ -56,6 +58,7 @@ function parseHash() {
 }
 
 const container = document.getElementById('app');
+const backBtn = document.getElementById('back-btn');
 let cleanup = null;
 let navToken = 0;
 
@@ -79,6 +82,9 @@ async function navigate() {
   for (const a of document.querySelectorAll('.tabbar a')) {
     a.classList.toggle('active', route.tab !== null && a.dataset.tab === route.tab);
   }
+  const back = typeof route.back === 'function' ? route.back(match.slice(1)) : route.back;
+  backBtn.hidden = !back;
+  if (back) backBtn.href = back;
 
   try {
     const view = await route.load();

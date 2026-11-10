@@ -44,7 +44,7 @@ js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinde
 icons/             # icons/flags/<小寫國家代碼>.svg：產地地圖的國旗（只有 COUNTRIES 的 32 國，svgo 壓縮過，來源與壓縮方式見 icons/flags/README.md）
 docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟、部署指令）、overnight-report.md（2026-10-26 通宵工作的報告）、roadmap.md（之後要開發、還沒開始的功能）、user-feedback.md（使用者回饋、判斷與決定）
 supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）、functions/admin-delete-user（開發者刪別人的帳號）、functions/_shared/account.ts（兩者共用的刪除流程）、functions/feedback（意見回饋：存檔＋寄 Email 給站長；mail.ts 是設定檢查與錯誤說明的純函式）、functions/send-push（推播通知）、functions/_shared/webpush.ts（VAPID 簽章與 RFC 8291 加密，只用 Web Crypto）、functions/_shared/local.ts（`isLocalSupabase`：只有已知的本機網址才用公開的測試金鑰，其他一律當正式環境）
-scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs、webpush-test.mjs、onboarding-test.mjs、bean-photo-test.mjs、heatmap-test.mjs、origins-test.mjs、origin-map-ui-test.mjs、brew-ui-test.mjs、storage-test.mjs（最後十三個不需要 Supabase）、build-worldmap.mjs（產生 js/worldMap.js，不是測試）、supabase-activity-test.mjs、social-heatmap-test.mjs、supabase-push-test.mjs、social-push-test.mjs、push-helpers.mjs（推播測試共用：解密、假推播伺服器）、vapid-keys.mjs（站長產生正式金鑰用，不是測試）
+scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs、webpush-test.mjs、onboarding-test.mjs、bean-photo-test.mjs、heatmap-test.mjs、origins-test.mjs、origin-map-ui-test.mjs、brew-ui-test.mjs、storage-test.mjs、glass-contrast-test.mjs（最後十四個不需要 Supabase）、build-worldmap.mjs（產生 js/worldMap.js，不是測試）、supabase-activity-test.mjs、social-heatmap-test.mjs、supabase-push-test.mjs、social-push-test.mjs、push-helpers.mjs（推播測試共用：解密、假推播伺服器）、vapid-keys.mjs（站長產生正式金鑰用，不是測試）
 tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mjs 用 headless Chrome 開；不屬於 App、不放進 ASSETS）
 ```
 
@@ -93,6 +93,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
   - 設定頁整頁先畫好、不等網路；登入狀態用 `models.signedInUserId()`（只讀本機），讀完在 `#settings-social` 記 `data-signed-in`（測試用）；沒登入時「我的個人檔案」和熱度圖開關停用、寫「登入後才能使用」
   - 帳號與社群、意見回饋只在 `js/config.js` 有設定時顯示；開發者後台（`[data-admin]`）只有 `models.isAdmin()` 為 true 時顯示，問完在 `.settings` 記 `data-admin-checked`（測試用）
 - ☰ 選單和設定頁裡的頁面不屬於任何分頁，路由設 `tab: null`，底部分頁都不亮
+- **頁首左邊的「‹」（1.23.0，`#back-btn`）**：`app.js` 路由的 `back`（字串，或收到路由參數的函式）＝上一層的網址；新增子頁面時要設。底部分頁、☰ 選單直接打開的頁面沒有（最上層）；產地地圖的國家頁用自己的「‹ 世界地圖」（要帶著目前的模式）
 - ☰ 的「!」（`app.js` 的 `setupBadges`）：選單裡需要注意的那一項後面有「!」（`.menu-alert[data-alert]`，`--accent`），☰ 按鈕上的「!」＝其中任何一項；aria-label 寫出是哪幾項
   - 好友管理＝收到好友邀請（社群）；備份＝`getBackupStatus().overdue`（有紀錄且 ≥ 14 天沒備份，首頁按「稍後」也照樣顯示，匯出後消失）；設定與關於（`data-alert="settings"`）＝還沒看過這一版的更新內容，設定頁裡「更新內容」那一行也有「!」（settings.js 自己問 `getChangelogStatus`；只進設定頁不算看過）
   - 備份、更新內容只看本機，沒有社群功能也顯示
@@ -126,6 +127,14 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - 焦點留在卡片裡（Tab 循環）、Esc＝略過、結束時焦點還回去；不用 `inert`（舊測試用 `el.click()` 操作畫面）
 
 ## 主題（深色／淺色）
+- **玻璃風格（1.23.0）**：只有浮在內容上面的那一層是玻璃（半透明＋`backdrop-filter` 模糊）：頁首、底部分頁列、☰ 選單、toast、「有新版本／已更新」提示、新手教學卡片；**內容本身（卡片、表單、圖表）維持實心，不要做成玻璃**（後面只有純色背景，透不出東西，只會讓字變難讀）
+  - 變數：`--glass-bg`（頁首、分頁列）、`--glass-strong`（字多的：☰ 選單、提示、教學卡片）、`--glass-filter`、`--glass-border`、`--glass-shine`、`--glass-shadow`、`--tab-active-bg`，深淺色各一套
+  - 對比用最差的情況算（後面全白／全黑）：`node scripts/glass-contrast-test.mjs`，--text ≥ 7:1、--text-dim ≥ 4.5:1；**改這些變數或文字色要重跑**。所以玻璃上不要用 `--accent` 當文字色（目前的分頁用 `--tab-active-bg` 的底＋`--text`）
+  - 頁首的玻璃畫在 `.app-header::before`：頁首自己設 `backdrop-filter` 的話，裡面的 ☰ 選單就模糊不到頁面的內容
+  - 不支援 `backdrop-filter`、或開了「降低透明度」（`prefers-reduced-transparency`）時退回實心
+  - 底部分頁列是浮起來的膠囊：`--tabbar-h` 是它自己的高度，`--tabbar-bottom` 是離畫面底部多遠，**貼在它上方的東西（＋、儲存、toast、提示、`#app` 的留白）一律用 `--tabbar-top`**
+  - 做不到蘋果的折射（iPhone 的 Safari 不支援），不要用 SVG filter 硬做
+  - **測試用的 headless Chrome 有 `--disable-gpu`，截圖看不到模糊**（樣式有套用，只是畫不出來）；要看模糊的效果，啟動 Chrome 時拿掉那個參數
 - ☰ →「設定與關於」的「外觀」：自動（跟系統）｜淺色｜深色；結果寫在 `<html data-theme="dark|light">`
 - `index.html` `<head>` 用一般 `<script src="js/theme.js">`（不是 module、不是 inline，CSP 不允許 inline script）在畫面畫出前套用；之後的切換是 `js/views/ui.js` 的 `themePref`／`applyTheme`／`setThemePref`（設定頁用），`js/app.js` 的 `setupTheme()` 只負責「自動」時跟著系統；兩邊判斷要一致
   - `matchMedia` 回傳的物件要用變數留住，否則被回收後 change 事件不再觸發
@@ -417,6 +426,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 - `node scripts/heatmap-test.mjs`：不需要 Supabase；Node（`TZ=Asia/Taipei`）測 `js/heatmap.js`：空資料、跨年、閏年、23:59／00:01 不同天、53×7 與週一開始、月份標籤、5 級門檻、連續天數、近 365 天、50 杯上限
 - `node scripts/origins-test.mjs`、`node scripts/origin-map-ui-test.mjs`：不需要 Supabase；產地地圖（見「產地地圖」），UI 測試含認識產區、想買清單、備份 v7、從 DB v7（commit 72279c0 的 db.js）升級
 - `node scripts/storage-test.mjs`：不需要 Supabase；headless Chrome 測資料保存（見「資料保存」）：沒資料不要求保留、有資料時啟動與存檔各最多一次、設定頁三種狀態、iPhone 的 Safari 首頁提示（取代備份提醒、稍後 7 天、匯出備份）、從主畫面開啟沒有提示、新手教學多一句、深淺色截圖、CSP
+- `node scripts/glass-contrast-test.mjs`：不需要 Supabase、不需要 Chrome；Node 讀 `css/style.css` 的變數，算玻璃後面全白／全黑時文字的對比，並檢查退回實心的規則
 - `node scripts/brew-ui-test.mjs`：不需要 Supabase；headless Chrome（390px）測首頁紀錄卡片與紀錄表單：依日期分組的標題、器材／數字兩行、「儲存」固定在底部（不被分頁列和「已更新」提示蓋住）、酸甜苦醇一項一列、總時間的單位、磨豆機獨佔一行、風味輪總覽不畫最外圈的字、存檔與編輯帶回、深淺色截圖、CSP
 - `node scripts/supabase-activity-test.mjs`：熱度圖的權限從 API 層測（A、B 好友，C 非好友，D 封鎖）：沒開不能寫、好友讀得到、C／D 讀不到、不能寫別人的、cups 0／51／未來／超過一年被拒、不能改日期、讀不到別人的開關、換裝置、關閉清空、刪除帳號
 - `node scripts/social-heatmap-test.mjs`：headless Chrome（390px）：自己和好友看到的不同、點圓點、捲到最右邊、打開／關閉、C／D 看不到、新增／刪除／改日期後同步、第二台裝置不上傳與「改用這台」、沒登入／沒有社群功能也有、深淺色截圖、CSP

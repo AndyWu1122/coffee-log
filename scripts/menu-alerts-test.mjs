@@ -86,6 +86,49 @@ try {
   await click(page, '#app-menu a[href="#/settings"]');
   await page.waitFor(`Boolean(document.querySelector('.settings')) && document.getElementById('app-menu').hidden`, { label: '從 ☰ 到設定頁' });
   check('設定頁不屬於任何底部分頁', !(await page.eval(`Boolean(document.querySelector('.tabbar a.active'))`)));
+
+  /* ===== 頁首的「‹」（1.23.0）：子頁面回上一層，最上層的頁面沒有 ===== */
+  const backState = async (hash, title) => {
+    await page.eval(`location.hash = ${q(hash)}; true`);
+    await page.waitFor(`document.getElementById('page-title').textContent === ${q(title)}`, { label: `打開 ${hash}` });
+    return page.eval(`(() => { const b = document.getElementById('back-btn'); const r = b.getBoundingClientRect();
+      const t = document.getElementById('page-title').getBoundingClientRect(); const m = document.getElementById('menu-btn').getBoundingClientRect();
+      return { shown: !b.hidden && r.width > 0, href: b.getAttribute('href'), label: b.getAttribute('aria-label'), w: r.width, h: r.height,
+        left: r.left, order: r.right <= t.left + 1 && t.right <= m.left + 1 }; })()`);
+  };
+  const top = [];
+  for (const [hash, title] of [['#/', '咖啡紀錄'], ['#/beans', '豆子'], ['#/stats', '統計'], ['#/backup', '備份'], ['#/grinders', '磨豆機'], ['#/settings', '設定與關於']]) {
+    if ((await backState(hash, title)).shown) top.push(hash);
+  }
+  check('最上層的頁面（底部分頁、☰ 選單打開的）沒有「‹」', top.length === 0, top.join(' '));
+  const wrong = [];
+  let backBox = null;
+  for (const [hash, title, parent] of [
+    ['#/privacy', '隱私說明', '#/settings'], ['#/changelog', '更新內容', '#/settings'], ['#/beans/new', '新增豆子', '#/beans'],
+    ['#/grinders/new', '新增磨豆機', '#/grinders'], ['#/drippers/new', '新增濾杯', '#/drippers'], ['#/notifications', '通知設定', '#/settings'],
+  ]) {
+    backBox = await backState(hash, title);
+    if (!backBox.shown || backBox.href !== parent || !backBox.order) wrong.push(`${hash} → ${q(backBox)}`);
+  }
+  check('子頁面有「‹」，連到上一層，排在標題左邊（標題在 ☰ 左邊）', wrong.length === 0, wrong.join(' / '));
+  check('「‹」的點擊範圍 ≥ 44px、在畫面內、aria-label「返回」', backBox.w >= 44 && backBox.h >= 44 && backBox.left >= 0 && backBox.label === '返回', q(backBox));
+  await click(page, '#back-btn');
+  await page.waitFor(`Boolean(document.querySelector('.settings'))`, { label: '按「‹」回設定頁' });
+  check('按「‹」回到上一層，「‹」消失', await page.eval(`document.getElementById('back-btn').hidden`));
+
+  /* ===== 玻璃（1.23.0）：分頁列是浮起來的膠囊，內容不會被它擋住 ===== */
+  await backState('#/beans', '豆子');
+  const bar = await page.eval(`(() => { const r = document.querySelector('.tabbar').getBoundingClientRect(); const cs = getComputedStyle(document.querySelector('.tabbar'));
+    const app = document.getElementById('app'); const links = [...document.querySelectorAll('.tabbar a:not([hidden])')].map((a) => a.getBoundingClientRect());
+    return { left: r.left, right: innerWidth - r.right, bottom: innerHeight - r.bottom, top: innerHeight - r.top, radius: parseFloat(cs.borderTopLeftRadius),
+      filter: cs.backdropFilter || cs.webkitBackdropFilter, alpha: cs.backgroundColor, pad: parseFloat(getComputedStyle(app).paddingBottom),
+      tapH: Math.min(...links.map((l) => l.height)), tapW: Math.min(...links.map((l) => l.width)), active: document.querySelectorAll('.tabbar a.active').length }; })()`);
+  check('分頁列浮起來：左右、底部都留邊，圓角膠囊', bar.left >= 8 && bar.right >= 8 && bar.bottom >= 8 && bar.radius >= 24, q(bar));
+  check('分頁列是玻璃：半透明底色＋模糊', /blur\(/.test(bar.filter) && /rgba\(/.test(bar.alpha), q(bar));
+  check('分頁的點擊範圍 ≥ 44px；目前的分頁有標示', bar.tapH >= 44 && bar.tapW >= 44 && bar.active === 1, q(bar));
+  check('內容最下面留的空間比分頁列高（最後一筆不會被擋住）', bar.pad >= bar.top + 16, q(bar));
+  await backState('#/settings', '設定與關於'); // 接下來測設定頁的外觀
+  await page.waitFor(`Boolean(document.querySelector('.settings'))`, { label: '回設定頁' });
   await page.cdp('Emulation.clearDeviceMetricsOverride');
 
   /* ===== 設定頁：外觀 ===== */

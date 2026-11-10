@@ -50,7 +50,7 @@ export function render(container, { isCurrent }) {
   container.innerHTML = `
     <div class="settings">
       <section class="section">
-        <h2 id="theme-label">🌓 外觀</h2>
+        <h2 id="theme-label">外觀</h2>
         <div class="theme-options" role="radiogroup" aria-labelledby="theme-label">
           ${THEMES.map(({ value, label }) => `<button type="button" role="radio" data-theme-pref="${value}"
             aria-checked="${value === pref}">${label}</button>`).join('')}
@@ -58,7 +58,7 @@ export function render(container, { isCurrent }) {
       </section>
 
       <section class="section" id="settings-storage">
-        <h2>🛡️ 資料保存</h2>
+        <h2>資料保存</h2>
         <p class="hint" id="storage-status" aria-live="polite"></p>
         <nav class="settings-group">${row('#/backup', '💾', '備份與還原')}</nav>
       </section>

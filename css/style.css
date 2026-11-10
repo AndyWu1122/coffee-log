@@ -28,12 +28,25 @@
   --heat-2: #ad6c33;
   --heat-3: #d8903f;
   --heat-4: #fac684;
+  /* 玻璃（1.23.0）：浮在內容上面的那一層（頁首、分頁列、☰ 選單、提示）半透明＋模糊後面的內容；內容本身的卡片維持實心
+     --glass-bg 配 --glass-filter（先把後面的內容調暗／調亮再模糊）：後面是全白或全黑時，
+     玻璃上的 --text ≥ 7:1、--text-dim ≥ 4.5:1（scripts/glass-contrast-test.mjs 會算；改這幾個值要重跑） */
+  --glass-bg: rgba(43, 29, 20, 0.78);
+  --glass-strong: rgba(58, 42, 31, 0.9);       /* 字多的（☰ 選單、提示、教學卡片）：更不透明 */
+  --glass-filter: blur(22px) saturate(170%) brightness(0.6);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-shine: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+  --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  --tab-active-bg: rgba(217, 152, 79, 0.16);
 
   --radius: 14px;
   --tap: 48px;            /* 最小點擊高度 */
-  --tabbar-h: 64px;
+  --tabbar-h: 60px;       /* 分頁列（浮起來的膠囊）自己的高度 */
   --gap: 16px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* 分頁列離畫面底部多遠（有 home indicator 的 iPhone 往上讓一點），以及它的上緣離畫面底部多遠（貼在它上方的東西用這個） */
+  --tabbar-bottom: max(12px, calc(var(--safe-bottom) - 10px));
+  --tabbar-top: calc(var(--tabbar-h) + var(--tabbar-bottom));
 
   color-scheme: dark;
 }
@@ -61,8 +74,23 @@
   --heat-2: #b9752f;
   --heat-3: #8f4e17;
   --heat-4: #5a2d08;
+  --glass-bg: rgba(255, 255, 255, 0.74);
+  --glass-strong: rgba(250, 244, 236, 0.92);
+  --glass-filter: blur(22px) saturate(170%) brightness(1.12);
+  --glass-border: rgba(120, 90, 60, 0.28);
+  --glass-shine: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(120, 90, 60, 0.12);
+  --glass-shadow: 0 10px 30px rgba(60, 35, 15, 0.2);
+  --tab-active-bg: rgba(154, 79, 23, 0.16);
 
   color-scheme: light;
+}
+
+/* 瀏覽器不支援模糊、或使用者開了「降低透明度」：退回實心（和 1.22 以前一樣） */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root, :root[data-theme="light"] { --glass-bg: var(--surface); --glass-strong: var(--surface-2); --glass-filter: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root, :root[data-theme="light"] { --glass-bg: var(--surface); --glass-strong: var(--surface-2); --glass-filter: none; }
 }
 
 * { box-sizing: border-box; }
@@ -84,8 +112,7 @@ a { color: var(--accent); }
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--glass-border);
   padding: 12px var(--gap);
   padding-top: calc(12px + env(safe-area-inset-top, 0px));
 }
@@ -98,7 +125,30 @@ a { color: var(--accent); }
   padding-bottom: 4px;
   padding-right: 4px;
 }
-.app-header h1 { margin: 0; font-size: 1.25rem; }
+/* 玻璃畫在 ::before：頁首自己不設 backdrop-filter，否則裡面的 ☰ 選單就模糊不到頁面的內容（只看得到頁首這一塊） */
+.app-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+}
+.app-header h1 { flex: 1; min-width: 0; margin: 0; font-size: 1.25rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 「‹」回上一層（app.js 依路由決定；最上層的頁面沒有）：48px 的點擊範圍，往左吃掉頁首的邊距讓箭頭對齊內容 */
+.back-btn {
+  flex: none;
+  display: flex; align-items: center; justify-content: center;
+  width: 48px; height: 48px;
+  margin: 0 -8px 0 -14px;
+  border-radius: 12px;
+  color: var(--text);
+  font-size: 1.9rem;
+  line-height: 1;
+  text-decoration: none;
+}
+.back-btn:active { background: var(--tab-active-bg); }
 
 /* ===== 右上角 ☰ 選單 ===== */
 .menu { position: relative; }
@@ -112,7 +162,7 @@ a { color: var(--accent); }
   font-size: 1.5rem;
   line-height: 1;
 }
-.menu-btn[aria-expanded="true"] { background: var(--surface-2); }
+.menu-btn[aria-expanded="true"] { background: var(--tab-active-bg); }
 
 /* 社群提示：☰ 按鈕的「!」＝收到好友邀請（強調色）；底部「社群」分頁的數字＝新通知（--badge-new）
    外圈用所在位置的底色（header、tabbar 都是 --surface）隔開圖示 */
@@ -157,10 +207,12 @@ a { color: var(--accent); }
   z-index: 40;
   min-width: 180px;
   padding: 6px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 8px 24px var(--shadow);
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  box-shadow: var(--glass-shine), var(--glass-shadow);
 }
 .menu-list a, .menu-list button {
   display: flex;
@@ -168,12 +220,12 @@ a { color: var(--accent); }
   gap: 10px;
   min-height: 48px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: 14px;
   color: var(--text);
   text-decoration: none;
 }
 .menu-list button { width: 100%; border: none; background: none; font: inherit; text-align: left; cursor: pointer; }
-.menu-list a:hover, .menu-list a:focus-visible, .menu-list button:hover, .menu-list button:focus-visible { background: var(--surface); outline: none; }
+.menu-list a:hover, .menu-list a:focus-visible, .menu-list button:hover, .menu-list button:focus-visible { background: var(--tab-active-bg); outline: none; }
 .menu-list { min-width: 248px; }
 /* 項目不多（不常用的在設定頁），但小螢幕、放大字體時仍可能超出畫面：在選單裡捲動 */
 .menu-list { max-height: calc(100dvh - 72px - var(--safe-bottom)); overflow-y: auto; overscroll-behavior: contain; }
@@ -236,38 +288,60 @@ a { color: var(--accent); }
   max-width: 640px;
   margin: 0 auto;
   padding: var(--gap);
-  padding-bottom: calc(var(--tabbar-h) + 96px + var(--safe-bottom));
+  padding-bottom: calc(var(--tabbar-top) + 96px);
 }
 
 /* ===== 底部分頁列 ===== */
+/* 浮起來的玻璃膠囊：左右留邊，內容從底下捲過去 */
 .tabbar {
   position: fixed;
-  left: 0; right: 0; bottom: 0;
+  left: 12px; right: 12px; bottom: var(--tabbar-bottom);
   z-index: 10;
   display: flex;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-  padding-bottom: var(--safe-bottom);
+  gap: 4px;
+  max-width: 440px;
+  height: var(--tabbar-h);
+  margin: 0 auto;
+  padding: 5px;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  box-shadow: var(--glass-shine), var(--glass-shadow);
 }
 .tabbar a {
   flex: 1;
-  height: var(--tabbar-h);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  border-radius: 999px;
   color: var(--text-dim);
   text-decoration: none;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
 }
-.tabbar a.active { color: var(--accent); }
-.tab-icon { font-size: 1.4rem; line-height: 1.2; }
+/* 目前的分頁：一塊淡淡的強調色＋--text（不用強調色的字：後面的內容很亮／很暗時對比不夠） */
+.tabbar a.active { background: var(--tab-active-bg); color: var(--text); font-weight: 600; }
+.tab-icon { font-size: 1.3rem; line-height: 1.15; }
+/* 分頁列下面、左右兩邊：內容往底部淡出，不會在膠囊旁邊露出半截字 */
+body::after {
+  content: '';
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 4;
+  height: calc(var(--tabbar-top) + 28px);
+  background: linear-gradient(to top, var(--bg) 0, var(--bg) var(--tabbar-bottom), transparent);
+  opacity: 0.85;
+  pointer-events: none;
+}
 
 /* ===== 浮動新增按鈕 ===== */
 .fab {
   position: fixed;
   right: 20px;
-  bottom: calc(var(--tabbar-h) + 20px + var(--safe-bottom));
+  bottom: calc(var(--tabbar-top) + 16px);
   z-index: 11;
   width: 64px; height: 64px;
   border-radius: 50%;
@@ -278,7 +352,8 @@ a { color: var(--accent); }
   line-height: 1;
   display: flex; align-items: center; justify-content: center;
   text-decoration: none;
-  box-shadow: 0 4px 16px var(--shadow);
+  /* 上緣一道高光、下緣一道暗邊：像一顆有厚度的玻璃珠 */
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.45), inset 0 -2px 0 rgba(0, 0, 0, 0.18), var(--glass-shadow);
 }
 
 /* ===== 卡片列表 ===== */
@@ -327,6 +402,8 @@ a { color: var(--accent); }
   background: var(--surface-2);
   color: var(--text-dim);
   font-size: 0.8rem;
+  white-space: nowrap;   /* 名稱很長時不要把「已用完」擠成兩行 */
+  flex: none;
 }
 
 .badge-warn { background: var(--accent); color: var(--accent-text); font-weight: 600; }
@@ -409,6 +486,7 @@ input:focus, select:focus, textarea:focus {
   border-radius: var(--radius);
 }
 .section.panel h2 { font-size: 1.05rem; }
+.section.panel > p, .section.panel > ul { margin-top: 0; margin-bottom: 0; }   /* 間距交給 grid 的 gap */
 .section.panel .switch-row:last-of-type { border-bottom: none; }
 .ratio-display {
   font-size: 1.4rem;
@@ -564,16 +642,22 @@ input:focus, select:focus, textarea:focus {
 /* 紀錄表單的「儲存」：貼在分頁列上方，不用滑到最下面（要是 form 的直接子元素，sticky 只在父元素的範圍內移動） */
 .save-bar {
   position: sticky;
-  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 8px);
+  bottom: calc(var(--tabbar-top) + 10px);
   z-index: 5;
-  border-radius: var(--radius);
-  box-shadow: 0 0 0 8px var(--bg);
+  border-radius: 999px;
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.4), inset 0 -2px 0 rgba(0, 0, 0, 0.16), var(--glass-shadow);
 }
 /* 酸甜苦醇：名稱在左、1–5 在右，一項一列 */
 .score-rows { display: grid; gap: 8px; }
 .score-row { display: grid; grid-template-columns: 3.5em 1fr; align-items: center; gap: 8px; }
 .score-row > .label { font-size: 0.95rem; }
 .score-row > .error { grid-column: 1 / -1; }
+/* 很窄的手機（320px）：名稱那欄和間距縮一點，1–5 的按鈕才有 44px 寬 */
+@media (max-width: 340px) {
+  .score-row { grid-template-columns: 3em 1fr; gap: 4px; }
+  .score-row > .label { font-size: 0.9rem; }
+  .score-row .segmented { gap: 3px; }
+}
 /* 數字後面一直顯示單位（總時間的分、秒） */
 .unit-input { position: relative; }
 .unit-input input { padding-right: 2.4em; }
@@ -634,11 +718,16 @@ input:focus, select:focus, textarea:focus {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--tabbar-h) + 100px + var(--safe-bottom));
+  bottom: calc(var(--tabbar-top) + 96px);
   transform: translateX(-50%) translateY(20px);
   z-index: 20;
-  background: var(--text);
-  color: var(--bg);
+  max-width: calc(100vw - 32px);
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shine), var(--glass-shadow);
+  color: var(--text);
   padding: 10px 20px;
   border-radius: 999px;
   font-weight: 600;
@@ -652,7 +741,7 @@ input:focus, select:focus, textarea:focus {
 .update-banner {
   position: fixed;
   left: 12px; right: 12px;
-  bottom: calc(var(--tabbar-h) + 12px + var(--safe-bottom));
+  bottom: calc(var(--tabbar-top) + 10px);
   z-index: 30;
   display: flex;
   align-items: center;
@@ -660,20 +749,22 @@ input:focus, select:focus, textarea:focus {
   gap: 12px;
   max-width: 616px;
   margin: 0 auto;
-  padding: 10px 10px 10px 16px;
-  background: var(--surface-2);
+  padding: 8px 8px 8px 18px;
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--accent);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 16px var(--shadow);
+  border-radius: 26px;
+  box-shadow: var(--glass-shine), var(--glass-shadow);
 }
-.update-banner .btn { min-height: 44px; }
+.update-banner .btn { min-height: 44px; border-radius: 999px; }
 .update-actions { display: flex; flex: none; gap: 8px; }
 /* 「有新版本可用」出現時，「已更新」先讓它（同一個位置） */
 .update-banner:not([hidden]) ~ #updated-banner { display: none; }
 /* 提示出現時，把 FAB 與 toast 往上移，避免被蓋住 */
-body:has(.update-banner:not([hidden])) .fab { bottom: calc(var(--tabbar-h) + 100px + var(--safe-bottom)); }
-body:has(.update-banner:not([hidden])) .save-bar { bottom: calc(var(--tabbar-h) + 96px + var(--safe-bottom)); }
-body:has(.update-banner:not([hidden])) .toast { bottom: calc(var(--tabbar-h) + 180px + var(--safe-bottom)); }
+body:has(.update-banner:not([hidden])) .fab { bottom: calc(var(--tabbar-top) + 90px); }
+body:has(.update-banner:not([hidden])) .save-bar { bottom: calc(var(--tabbar-top) + 82px); }
+body:has(.update-banner:not([hidden])) .toast { bottom: calc(var(--tabbar-top) + 170px); }
 
 /* ===== 咖啡社群：帳號、好友 ===== */
 .plain-list { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
@@ -1017,11 +1108,13 @@ a.feed-body:active { background: var(--surface-2); }
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 16px;
-  background: var(--surface);
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   color: var(--text);
   border: 1px solid var(--accent);
-  border-radius: var(--radius);
-  box-shadow: 0 8px 24px var(--shadow);
+  border-radius: 22px;
+  box-shadow: var(--glass-shine), var(--glass-shadow);
 }
 .tour-progress { margin: 0; color: var(--text-dim); font-size: 0.85rem; }
 .tour-title { margin: 2px 0 6px; font-size: 1.15rem; }
