@@ -88,10 +88,14 @@ export function ratio({ coffeeG, waterG } = {}) {
 
 export const formatRatio = (r) => (r == null ? '—' : `1:${r.toFixed(1)}`);
 
-/** 養豆天數 = 沖煮日（本地日期）− 烘焙日 */
+/**
+ * 養豆天數 = 沖煮日（本地日期）− 烘焙日
+ * 沖煮日比烘焙日早（例如同一支豆子回購後改了烘焙日，舊紀錄就會這樣）算不出來，回傳 null、不顯示
+ */
 export function restDays(brewedAt, roastDate) {
   if (!brewedAt || !roastDate || !isValidDateStr(roastDate)) return null;
-  return daysBetween(roastDate, toLocalDateStr(brewedAt));
+  const days = daysBetween(roastDate, toLocalDateStr(brewedAt));
+  return days < 0 ? null : days;
 }
 
 /** 秒 → m:ss */
@@ -502,6 +506,18 @@ export async function defaultBrewMethod() {
   return brewMethod(latest);
 }
 
+/**
+ * 新紀錄預設的豆子：最近一杯沖的那支；它不在選項裡（封存、刪除）或已用完時，改用第一支還沒用完的；都用完了就第一支
+ * beanOptions：listBeans 的結果（有 stock）；latestByBean：latestBrewByBean 的結果
+ */
+export function defaultBeanId(beanOptions, latestByBean) {
+  const usable = (b) => !b.stock?.empty;
+  let latest = null;
+  for (const brew of latestByBean.values()) if (!latest || brew.brewedAt > latest.brewedAt) latest = brew;
+  const last = latest && beanOptions.find((b) => b.id === latest.beanId);
+  return (last && usable(last) ? last : beanOptions.find(usable) ?? beanOptions[0])?.id ?? '';
+}
+
 /* ===== 沖煮紀錄 ===== */
 
 /**
@@ -906,6 +922,8 @@ export async function getBackupSummary() {
   return {
     beans: beans.length, grinders: grinders.length, drippers: drippers.length, brews: brews.length,
     photos: photoRows.length + beanPhotoRows.length, beanPhotos: beanPhotoRows.length,
+    // 什麼都沒有（備份頁不讓匯出空的檔案）
+    empty: beans.length + grinders.length + drippers.length + brews.length + wishlist.length === 0,
     sizeWithPhotos: withPhotos, sizeWithoutPhotos: withoutPhotos,
   };
 }

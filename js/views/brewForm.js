@@ -1,6 +1,6 @@
 // #/brew/new、#/brew/<id> 新增 / 編輯沖煮紀錄
 import {
-  getBrew, saveBrew, deleteBrew, listBeans, latestBrewByBean, brewTemplateFrom,
+  getBrew, saveBrew, deleteBrew, listBeans, latestBrewByBean, brewTemplateFrom, defaultBeanId,
   listGrinders, defaultGrinderId, listDrippers, defaultDripperId, defaultBrewMethod, brewMethod, METHODS, formatStock, ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
   getPhoto, preparePhoto, PHOTO_ACCEPT, VISIBILITY, socialAvailable, getShareStatus,
 } from '../models.js';
@@ -56,7 +56,7 @@ export async function render(container, { id, query, isCurrent }) {
   const hasActiveDripper = drippers.some((d) => !d.archived);
 
   const b = brew ?? {
-    beanId: beanOptions[0].id,
+    beanId: defaultBeanId(beanOptions, latestByBean), // 上一杯沖的那支（用完了就換還有的）
     method: defaultMethod,
     grinderId: defaultGrinder,
     brewedAt: new Date().toISOString(),
@@ -72,7 +72,7 @@ export async function render(container, { id, query, isCurrent }) {
       Object.assign(b, brewTemplateFrom(source));
       notice = `已帶入 ${shortDate.format(new Date(source.brewedAt))} 的參數`;
       if (!beanOptions.some((bean) => bean.id === b.beanId)) {
-        b.beanId = beanOptions[0].id;
+        b.beanId = defaultBeanId(beanOptions, latestByBean);
         notice += '（原本的豆子已封存，請重新選擇豆子）';
       }
       // 原紀錄沒有磨豆機、或那台已封存／刪除時，改用預設值

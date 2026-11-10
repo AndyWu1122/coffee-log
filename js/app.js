@@ -202,6 +202,11 @@ async function start() {
     toast(result.message);
   }
   window.addEventListener('hashchange', navigate);
+  // 從 Google 登入頁按上一頁回來：Safari 把整頁原樣還原（bfcache），「用 Google 登入」還停在按下去的停用狀態 → 重畫帳號頁
+  // 只重畫帳號頁：其他頁面（例如填到一半的表單）原樣還原才是對的
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted && parseHash().path === '/account') navigate();
+  });
   navigate();
   setupSync();
   setupBadges();

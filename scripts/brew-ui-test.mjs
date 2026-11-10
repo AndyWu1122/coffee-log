@@ -445,6 +445,34 @@ try {
     await screenshot(page, path.join(shotDir, `beans-${theme}.png`));
   }
 
+  /* ===== 新紀錄預設的豆子（1.22.3）：上一杯沖的那支；用完了就換還有的 ===== */
+  // 這時最新建立的是 sb-over（已用完），最近一杯（sb-brew）也是它 → 不能預設它
+  const selectedBean = () => page.eval(`document.querySelector('#beanId').value`);
+  await openForm(page, base, '#/brew/new');
+  check('新紀錄：上一杯的豆子已用完 → 預設第一支還沒用完的（不是最新建立、已用完的那支）', (await selectedBean()) === 'sb-full', await selectedBean());
+  await page.eval(`import('/js/db.js').then(async (db) => {
+    await db.put('brews', { ...(await db.get('brews', 'brew-today-1')), id: 'brew-latest', brewedAt: new Date(Date.now() + 60000).toISOString() });
+    return true;
+  })`);
+  await openForm(page, base, '#/brew/new');
+  check('新紀錄：預設上一杯沖的那支豆子', (await selectedBean()) === 'bean-a', await selectedBean());
+  await openForm(page, base, '#/brew/new?from=sb-brew');
+  check('「再沖一杯」：豆子照原紀錄（即使已用完）', (await selectedBean()) === 'sb-over', await selectedBean());
+
+  /* ===== 養豆天數（1.22.3）：沖煮日比烘焙日早的不顯示（不出現負數） ===== */
+  const roast = new Date(Date.now() - 2 * 86400000);
+  const roastDate = `${roast.getFullYear()}-${String(roast.getMonth() + 1).padStart(2, '0')}-${String(roast.getDate()).padStart(2, '0')}`;
+  await page.eval(`import('/js/db.js').then(async (db) => { await db.put('beans', { ...(await db.get('beans', 'bean-a')), roastDate: ${q(roastDate)} }); return true; })`);
+  await openList(page, base);
+  const rest = await page.eval(`(() => {
+    const t = (id) => document.querySelector('a[href="#/brew/' + id + '"] .card-time').textContent.replace(/\\s+/g, ' ').trim();
+    return { today: t('brew-today-1'), older: t('brew-older'), any: document.querySelector('#app').textContent.includes('養豆 -') };
+  })()`);
+  check('烘焙日之後沖的：顯示養豆天數', rest.today.includes('養豆 2 天'), q(rest));
+  check('烘焙日之前沖的：不顯示養豆天數，整頁沒有負數', !rest.older.includes('養豆') && !rest.any, q(rest));
+  const restCard = await page.eval(`import('/js/models.js').then((m) => m.getShareCardData('brew-older')).then((d) => d.restDays)`);
+  check('分享卡片的資料：烘焙日之前沖的沒有養豆天數', restCard === null, String(restCard));
+
   check('沒有 CSP 違規', (await page.eval('window.__csp')).length === 0, (await page.eval('window.__csp')).join(' / '));
   check('沒有 JavaScript 錯誤', page.errors.length === 0, page.errors.join(' / '));
 } catch (err) {

@@ -1,7 +1,7 @@
 // #/ 沖煮紀錄列表
 import {
   listBrews, listBeans, latestBrewByBean, formatRatio, formatSeconds, flavorNote, getBackupStatus, snoozeBackupReminder,
-  formatDaysAgo, getStorageStatus, snoozeHomeScreenHint, METHODS,
+  formatDaysAgo, getStorageStatus, snoozeHomeScreenHint, METHODS, isInAppBrowser,
 } from '../models.js';
 import { esc, setTitle, toast } from './ui.js';
 import { exportBackup, errorReason } from './backup.js';
@@ -139,6 +139,8 @@ function bindReminders(container, rerender) {
     rerender();
   });
   container.querySelector('#backup-now')?.addEventListener('click', async () => {
+    // LINE 等 App 內建的瀏覽器不能直接下載：到備份頁用「分享備份檔」，不在這裡假裝匯出了
+    if (isInAppBrowser()) { location.hash = '#/backup'; return; }
     try {
       await exportBackup();
     } catch (err) {

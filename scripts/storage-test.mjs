@@ -38,10 +38,24 @@ function fixtures() {
  * 隔離的頁面（像一支新手機）；在頁面腳本執行前換掉 persist／persisted、記錄 CSP 違規
  * ios：iPhone 的 User-Agent；standalone：從主畫面開啟；persisted：瀏覽器一開始是否已經答應保留
  */
-async function openPage(chrome, { ios = false, standalone = false, persisted = false } = {}) {
+async function openPage(chrome, { ios = false, standalone = false, persisted = false, line = false, share = null } = {}) {
   const page = await chrome.newPage(null, { isolated: true });
   await page.cdp('Emulation.setDeviceMetricsOverride', VIEW);
-  if (ios) await page.cdp('Emulation.setUserAgentOverride', { userAgent: IPHONE_UA, platform: 'iPhone' });
+  // line：LINE 內建的瀏覽器（User-Agent 後面多了 Line/x.y.z）
+  if (ios || line) await page.cdp('Emulation.setUserAgentOverride', { userAgent: `${IPHONE_UA}${line ? ' Line/14.0.0' : ''}`, platform: 'iPhone' });
+  // share：'ok' ＝可以分享檔案（記下分享了什麼；window.__shareFail 設了就當成使用者按取消）｜'none' ＝不能分享檔案
+  if (share) await page.cdp('Page.addScriptToEvaluateOnNewDocument', {
+    source: `
+      window.__shared = [];
+      window.__downloads = 0;
+      const click = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function () { if (this.download) window.__downloads++; else click.call(this); };
+      Object.defineProperty(Navigator.prototype, 'canShare', { configurable: true, value: (d) => ${share === 'ok'} && Boolean(d?.files?.length) });
+      Object.defineProperty(Navigator.prototype, 'share', { configurable: true, value: async (d) => {
+        if (window.__shareFail) throw new DOMException('cancelled', 'AbortError');
+        window.__shared.push({ name: d.files[0].name, type: d.files[0].type, text: await d.files[0].text() });
+      } });`,
+  });
   await page.cdp('Page.addScriptToEvaluateOnNewDocument', {
     source: `
       window.__csp = [];
@@ -218,6 +232,75 @@ try {
   s = await settingsState(page);
   check('從主畫面開啟：設定頁不是 iPhone 的 Safari 那段說明', s.state !== 'ios-browser', q(s));
   await finish(page, 'iPhone 主畫面');
+
+  /* ===== 匯出（1.22.3）：沒有資料不匯出；LINE 內建的瀏覽器不假裝匯出了 ===== */
+  const toastText = (p) => p.eval(`document.getElementById('toast').classList.contains('show') ? document.getElementById('toast').textContent : ''`);
+  const openBackup = async (p) => {
+    await p.eval(`location.hash = '#/backup'; true`);
+    await p.waitFor(`document.querySelector('#export')`, { label: '備份頁' });
+  };
+
+  page = await openPage(chrome, { share: 'none' });
+  await start(page, base);
+  await openBackup(page);
+  check('沒有任何資料：備份頁寫「還沒有資料可以匯出」', (await page.eval(`document.querySelector('#export-section').textContent`)).includes('還沒有資料可以匯出'));
+  await page.eval(`document.querySelector('#export').click(); true`);
+  await page.waitFor(`document.getElementById('toast').classList.contains('show')`, { label: '沒有資料的提示' });
+  check('沒有任何資料：按匯出只提示，不下載、不記成已備份',
+    (await toastText(page)).includes('還沒有資料可以匯出') && (await page.eval('window.__downloads')) === 0 && !(await meta(page, 'lastBackupAt')), await toastText(page));
+  await finish(page, '匯出（沒資料）');
+
+  page = await openPage(chrome, { line: true, share: 'ok' });
+  await start(page, base, { seed: true });
+  await page.eval(`document.querySelector('.home-screen-hint #backup-now').click(); true`);
+  await page.waitFor(`location.hash === '#/backup' && document.querySelector('#export')`, { label: 'LINE：首頁的匯出備份 → 備份頁' });
+  check('LINE：首頁按「匯出備份」到備份頁，不下載、不記成已備份', (await page.eval('window.__downloads')) === 0 && !(await meta(page, 'lastBackupAt')));
+  check('LINE：備份頁說明這裡不能直接下載、資料是分開的', (await page.eval(`document.querySelector('#in-app-notice')?.textContent ?? ''`)).includes('分開'));
+  await page.eval(`document.querySelector('#export').click(); true`);
+  await page.waitFor(`document.querySelector('#share-backup')`, { label: 'LINE：分享備份檔的按鈕' });
+  check('LINE：按匯出後出現「分享備份檔」，還沒記成已備份、沒有「已匯出」',
+    (await page.eval('window.__downloads')) === 0 && !(await meta(page, 'lastBackupAt')) && !(await toastText(page)).includes('已匯出'), await toastText(page));
+  await page.eval(`window.__shareFail = true; document.querySelector('#share-backup').click(); true`);
+  await sleep(300);
+  check('LINE：分享時按取消 → 不記成已備份，按鈕還在', !(await meta(page, 'lastBackupAt')) && await page.eval(`Boolean(document.querySelector('#share-backup'))`));
+  await page.eval(`window.__shareFail = false; document.querySelector('#share-backup').click(); true`);
+  await page.waitFor(`document.getElementById('toast').textContent.includes('已匯出') && !document.querySelector('#share-backup')`, { label: 'LINE：分享完成' });
+  const shared = await page.eval(`(() => { const s = window.__shared[0]; const d = JSON.parse(s.text); return { n: window.__shared.length, name: s.name, type: s.type, v: d.schemaVersion, brews: d.brews.length, beans: d.beans.length }; })()`);
+  check('LINE：分享出去的是完整的備份檔（檔名、JSON、內容）',
+    shared.n === 1 && /^coffee-log-\d{4}-\d{2}-\d{2}\.json$/.test(shared.name) && shared.type === 'application/json' && shared.v === 8 && shared.brews === 1 && shared.beans === 1, q(shared));
+  check('LINE：分享完成才記下備份時間', Boolean(await meta(page, 'lastBackupAt')));
+  for (const theme of ['dark', 'light']) {
+    await page.eval(`document.documentElement.dataset.theme = ${q(theme)}; true`);
+    await screenshot(page, path.join(shotDir, `backup-line-${theme}.png`));
+  }
+  await finish(page, 'LINE（可以分享）');
+
+  page = await openPage(chrome, { line: true, share: 'none' });
+  await start(page, base, { seed: true });
+  await openBackup(page);
+  await page.eval(`document.querySelector('#export').click(); true`);
+  await page.waitFor(`document.querySelector('#in-app-blocked')`, { label: 'LINE：不能分享的說明' });
+  check('LINE、不能分享檔案：說明還沒有備份、請用 Safari 或 Chrome，不記成已備份',
+    (await page.eval(`document.querySelector('#in-app-blocked').textContent`)).includes('還沒有備份') && !(await meta(page, 'lastBackupAt'))
+      && (await page.eval('window.__downloads')) === 0 && !(await toastText(page)).includes('已匯出'));
+  await finish(page, 'LINE（不能分享）');
+
+  /* ===== 從 Google 登入頁按上一頁回來（1.22.3）：Safari 原樣還原整頁，登入按鈕要能再按 ===== */
+  // headless Chrome 不好真的做出 bfcache 還原：把按鈕弄成按下去的狀態，再送出和還原時一樣的 pageshow（persisted）
+  page = await openPage(chrome);
+  await start(page, base, { seed: true });
+  const restore = `window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))`;
+  await page.eval(`location.hash = '#/account'; true`);
+  await page.waitFor(`document.querySelector('[data-action="google"]')`, { label: '帳號頁的登入按鈕' });
+  await page.eval(`(() => { const b = document.querySelector('[data-action="google"]'); b.disabled = true; b.dataset.stale = '1'; ${restore}; return true; })()`);
+  await page.waitFor(`(() => { const b = document.querySelector('[data-action="google"]'); return b && !b.dataset.stale; })()`, { label: '帳號頁重畫' });
+  check('還原後：帳號頁重畫，「用 Google 登入」可以再按', await page.eval(`!document.querySelector('[data-action="google"]').disabled`));
+  await page.eval(`location.hash = '#/beans/new'; true`);
+  await page.waitFor(`document.querySelector('form [name="name"]')`, { label: '豆子表單' });
+  await page.eval(`(() => { document.querySelector('form [name="name"]').value = '填到一半'; ${restore}; return true; })()`);
+  await sleep(400);
+  check('還原後：其他頁面不重畫（填到一半的表單還在）', (await page.eval(`document.querySelector('form [name="name"]')?.value`)) === '填到一半');
+  await finish(page, '上一頁還原');
 } catch (err) {
   console.error(err);
   failures.push(`例外：${err.message}`);

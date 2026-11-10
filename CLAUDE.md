@@ -76,7 +76,8 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - 紀錄與照片一起寫入、一起刪除（`db.transact` 單一交易涵蓋 brews、photos、thumbs；豆子是 beans、beanPhotos、beanThumbs）
 - 照片顯示用 `URL.createObjectURL`，view 的 `render` 回傳 cleanup 在離開頁面時 `revokeObjectURL`
 - DB 升級：`onupgradeneeded` 每一步都先檢查是否已存在，既有 store 用升級交易取得後再加索引，絕不改動舊資料
-- 衍生值不儲存：粉水比 = waterG / coffeeG、養豆天數 = 沖煮日 − roastDate，在 models.js 計算
+- 衍生值不儲存：粉水比 = waterG / coffeeG、養豆天數 = 沖煮日 − roastDate，在 models.js 計算；沖煮日比烘焙日早（回購後改了烘焙日的舊紀錄）＝ null、不顯示
+- 新紀錄預設的豆子（`models.defaultBeanId`）：最近一杯沖的那支；它已封存或已用完就換第一支還沒用完的
 - 豆子剩餘量（衍生值）= bagWeightG − 該豆子所有紀錄 coffeeG 加總；「約幾杯」用該豆子最近 5 杯平均粉量估算（沒沖過就用全部紀錄最近 5 杯），剩 2 杯以下顯示「快沒了」
 - id 用 crypto.randomUUID()
 
@@ -209,6 +210,8 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - 匯入照片的驗證：brewId 對得到紀錄、不重複、base64 正確、≤ 2MB、JPEG 檔頭解析得出尺寸（≤ 4096px），再實際解碼產生縮圖；任一張失敗整份不匯入
 - 「取代全部」連照片（含豆子照片）一起清空
 - 按「匯出」就記下 lastBackupAt（瀏覽器無法確認檔案是否存好；匯入不算備份）
+  - **例外（1.22.3）**：LINE、Facebook 等 App 內建的瀏覽器（`models.isInAppBrowser()`）會忽略 `<a download>`，所以不下載：「匯出 JSON」只準備檔案 → 再按「分享備份檔」（`navigator.share`，要在點擊當下呼叫）→ 分享完成才記 lastBackupAt；`canShare` 不支援就寫「還沒有備份」、請用 Safari／Chrome；首頁的「立即備份」「匯出備份」在這裡改成到備份頁
+  - 什麼都沒有（豆子、磨豆機、濾杯、紀錄、想買清單都是 0，`getBackupSummary().empty`）時不匯出，只提示；按下時才檢查，按鈕不停用
 - 備份提醒：有紀錄，且距上次備份（沒備份過則從最早一筆紀錄起算）≥ 14 天時，首頁顯示提醒；「立即備份」直接下載，「稍後」3 天內不提醒
 
 ## 開發順序
@@ -282,6 +285,7 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
 
 ### 帳號與好友（階段 3）
 - Google 登入用 PKCE（`flowType: 'pkce'`）：回到 `<App>/?code=...`，不會和 hash 路由衝突；`app.js` 的 `start()` 處理完把網址清掉、改到 `#/account`
+- 從 Google 登入頁按上一頁回來，Safari 會把整頁原樣還原（bfcache，按鈕停在停用狀態）：`app.js` 在 `pageshow` 且 `persisted` 時重畫，**只重畫帳號頁**（其他頁面填到一半的表單要留著）
 - 登入狀態存在 IndexedDB meta（`auth:supabase-auth`），不放 localStorage、不進備份檔；登出用 `scope: 'local'`，網路失敗也會清掉本機 session
 - supabase-js 從 `js/vendor/` 以 `<script integrity>` 載入（不用 CDN）；只在社群頁面用到時才載入；升級步驟見 `js/vendor/README.md`
 - 頭像：私有 bucket `avatars`（≤ 100KB、只收 JPEG），路徑 `<user_id>/avatar.jpg`；前端 `image.compressAvatar` 裁成 256×256 並移除中繼資料；讀取權限跟著 profiles 走（`avatar_path` 指向它才讀得到）；不用 Google 大頭貼
