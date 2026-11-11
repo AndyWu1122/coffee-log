@@ -73,6 +73,9 @@ try {
     await writeFile(path.join(shots, `${name}.png`), Buffer.from(data, 'base64'));
   };
   const noHScroll = () => page.eval('document.documentElement.scrollWidth <= document.documentElement.clientWidth');
+  const scoreAll = async (values) => {
+    for (const [i, key] of ['contrast', 'foam', 'symmetry', 'completion'].entries()) await click(page, `[data-name="scores.${key}"] button[data-v="${values[i]}"]`);
+  };
   const pressed = (sel) => page.eval(`document.querySelector(${q(sel)})?.getAttribute('aria-pressed') === 'true'`);
   const counts = () => db(`return { arts: (await db.getAll('latteArts')).length, photos: (await db.getAll('latteArtPhotos')).length,
     thumbs: (await db.getAll('latteArtThumbs')).length, brewPhotos: (await db.getAll('photos')).length };`);
@@ -149,7 +152,7 @@ try {
   check('還不能分享：沒有「誰看得到」', !(await page.eval(`Boolean(document.querySelector('[data-field="visibility"]'))`)));
   check('新增時沒有「再拉一杯」、刪除', !(await page.eval(`Boolean(document.querySelector('[data-action="delete"], a[href*="from="]'))`)));
   await submit(page, 'form');
-  await page.waitFor(`document.querySelector('[data-field="pattern"] .error')?.textContent && document.querySelector('[data-field="selfScore"] .error')?.textContent`, { label: '必填的錯誤' });
+  await page.waitFor(`document.querySelector('[data-field="pattern"] .error')?.textContent && document.querySelector('[data-field="scores.contrast"] .error')?.textContent && document.querySelector('[data-field="scores.completion"] .error')?.textContent`, { label: '必填的錯誤' });
   check('沒選圖案、沒自評：顯示錯誤、不存檔', (await counts()).arts === 0);
 
   const jpegFile = path.join(shots, 'exif-input.jpg');
@@ -157,7 +160,15 @@ try {
   await click(page, '[data-name="pattern"] button[data-v="other"]');
   check('選「其他」：出現說明欄', !(await page.eval(`document.querySelector('[data-field="patternNote"]').hidden`)));
   await fill(page, '#patternNote', XSS);
-  await click(page, '[data-name="selfScore"] button[data-v="4"]');
+  check('總分：四項沒打完時提示', (await page.eval(`document.querySelector('#latte-total').textContent`)).includes('四項都打完'));
+  await scoreAll([4, 3, 4, 5]);
+  check('四項打完：即時算出總分 4.0', (await page.eval(`document.querySelector('#latte-total').textContent`)) === '總分 4.0');
+  check('打完分：那一項的錯誤馬上消失', (await page.eval(`document.querySelectorAll('.latte-score.invalid').length`)) === 0
+    && !(await page.eval(`document.querySelector('[data-field="pattern"]').classList.contains('invalid')`)));
+  check('分項有說明（參考比賽評分）', (await page.eval(`document.querySelectorAll('.latte-score .hint').length`)) === 4);
+  check('分項的 1–5 按鈕 ≥ 44px', (await page.eval(`Math.min(...[...document.querySelectorAll('.latte-score .segmented button')].map((b) => Math.min(b.getBoundingClientRect().width, b.getBoundingClientRect().height)))`)) >= 44);
+  await page.eval(`document.querySelector('.latte-scores').scrollIntoView(); true`);
+  await shot('dark-latte-scores');
   await fill(page, '#milk', XSS);
   await fill(page, '#cup', '300ml 拿鐵杯');
   await page.eval(`(() => { const s = document.querySelector('#espressoBeanId'); s.value = 'old-bean'; s.dispatchEvent(new Event('change')); return true; })()`);
@@ -171,7 +182,7 @@ try {
   await page.waitFor(`location.hash === '#/' && document.querySelector('.latte-card-item')`, { label: '存檔後回到拉花列表' });
 
   const [first] = await db(`return db.getAll('latteArts');`);
-  check('存下來的欄位', first && first.pattern === 'other' && first.patternNote === XSS && first.selfScore === 4 && first.milk === XSS
+  check('存下來的欄位', first && first.pattern === 'other' && first.patternNote === XSS && q(first.scores) === q({ contrast: 4, foam: 3, symmetry: 4, completion: 5 }) && !('selfScore' in first) && first.milk === XSS
     && first.cup === '300ml 拿鐵杯' && first.espressoBeanId === 'old-bean' && first.visibility === 'private' && Boolean(first.madeAt) && Boolean(first.createdAt), q(first));
   const c1 = await counts();
   check('照片和縮圖存在拉花自己的 store，紀錄的照片沒變', c1.photos === 1 && c1.thumbs === 1 && c1.brewPhotos === 1, q(c1));
@@ -186,7 +197,7 @@ try {
 
   check('卡片：圖案說明、自評星星、牛奶、杯子、豆子、縮圖',
     await page.eval(`(() => { const c = document.querySelector('.latte-card-item'); return c.querySelector('.card-title').textContent.includes(${q(XSS)})
-      && c.querySelector('.stars').textContent === '★★★★☆' && c.textContent.includes('300ml 拿鐵杯') && c.textContent.includes('舊的豆子')
+      && c.querySelector('.stars').textContent === '★★★★☆' && c.querySelector('.latte-total').textContent.includes('4.0') && c.textContent.includes('300ml 拿鐵杯') && c.textContent.includes('舊的豆子')
       && Boolean(c.querySelector('.card-thumb')); })()`));
   check('XSS：圖案說明、牛奶、筆記都只當文字', await noInjection(page));
   check('390px：拉花列表不橫向捲動', await noHScroll());
@@ -195,20 +206,20 @@ try {
   await click(page, '.latte-card-item');
   await page.waitFor(`document.querySelector('#photo-field .photo-preview') && document.querySelector('[data-action="delete"]')`, { label: '編輯頁' });
   check('編輯頁：照片、欄位帶回來', (await page.eval(`document.querySelector('#photo-field .photo-preview').alt`)) === '這杯拉花的照片'
-    && (await page.eval(`document.querySelector('#milk').value`)) === XSS && await pressed('[data-name="selfScore"] button[data-v="4"]'));
+    && (await page.eval(`document.querySelector('#milk').value`)) === XSS && await pressed('[data-name="scores.foam"] button[data-v="3"]'));
   check('XSS：編輯頁也只當文字', await noInjection(page));
   await click(page, `a[href="#/latte/new?from=${first.id}"]`);
   await page.waitFor(`location.hash.startsWith('#/latte/new?from=') && document.querySelector('form .notice')`, { label: '再拉一杯' });
   const copied = await page.eval(`({ pattern: document.querySelector('[data-name="pattern"]').dataset.value, note: document.querySelector('#patternNote').value,
     milk: document.querySelector('#milk').value, cup: document.querySelector('#cup').value, bean: document.querySelector('#espressoBeanId').value,
-    score: document.querySelector('[data-name="selfScore"]').dataset.value, notes: document.querySelector('#notes').value,
+    score: [...document.querySelectorAll('.latte-score .segmented')].map((g) => g.dataset.value).join(''), notes: document.querySelector('#notes').value,
     photo: Boolean(document.querySelector('#photo-field .photo-preview')) })`);
   check('再拉一杯：帶入圖案、牛奶、杯子、豆子；自評、筆記、照片不帶',
     copied.pattern === 'other' && copied.note === XSS && copied.milk === XSS && copied.cup === '300ml 拿鐵杯' && copied.bean === 'old-bean'
       && copied.score === '' && copied.notes === '' && !copied.photo, q(copied));
   check('牛奶、杯子有以前用過的建議', (await page.eval(`[...document.querySelectorAll('#cup-list option')].map((o) => o.value).join()`)) === '300ml 拿鐵杯');
   await click(page, '[data-name="pattern"] button[data-v="heart"]');
-  await click(page, '[data-name="selfScore"] button[data-v="5"]');
+  await scoreAll([5, 5, 5, 5]);
   await fill(page, '#milk', '燕麥奶');
   await submit(page, 'form');
   await page.waitFor(`location.hash === '#/' && document.querySelectorAll('.latte-card-item').length === 2`, { label: '第二杯' });
@@ -235,16 +246,16 @@ try {
 
   /* ===== 被拉花引用的豆子不能刪 ===== */
   await db(`await db.put('beans', ${q(bean('latte-bean', '義式豆'))}); return true;`);
-  await models(`const r = await m.saveLatteArt({ madeAt: new Date().toISOString(), pattern: 'tulip', selfScore: 3, espressoBeanId: 'latte-bean' }); return r.ok;`);
+  await models(`const r = await m.saveLatteArt({ madeAt: new Date().toISOString(), pattern: 'tulip', scores: { contrast: 3, foam: 3, symmetry: 3, completion: 3 }, espressoBeanId: 'latte-bean' }); return r.ok;`);
   const del = await models(`return m.deleteBean('latte-bean');`);
   check('只有拉花引用的豆子也不能刪（請改用封存）', !del.ok && del.message.includes('拉花'), q(del));
-  const badBean = await models(`return m.saveLatteArt({ madeAt: new Date().toISOString(), pattern: 'heart', selfScore: 3, espressoBeanId: 'nope' });`);
+  const badBean = await models(`return m.saveLatteArt({ madeAt: new Date().toISOString(), pattern: 'heart', scores: { contrast: 3, foam: 3, symmetry: 3, completion: 3 }, espressoBeanId: 'nope' });`);
   check('豆子不存在：不能存', !badBean.ok && Boolean(badBean.errors.espressoBeanId));
-  const badScore = await models(`return Promise.all([0, 6, 2.5].map((s) => m.saveLatteArt({ madeAt: new Date().toISOString(), pattern: 'heart', selfScore: s })));`);
-  check('自評 0、6、2.5 都不能存', badScore.every((r) => !r.ok && r.errors.selfScore));
-  const badPattern = await models(`return m.saveLatteArt({ madeAt: new Date().toISOString(), pattern: 'dragon', selfScore: 3 });`);
+  const badScore = await models(`return Promise.all([0, 6, 2.5, null].map((s) => m.saveLatteArt({ madeAt: new Date().toISOString(), pattern: 'heart', scores: { contrast: s, foam: 3, symmetry: 3, completion: 3 } })));`);
+  check('分項 0、6、2.5、沒填都不能存', badScore.every((r) => !r.ok && r.errors['scores.contrast']));
+  const badPattern = await models(`return m.saveLatteArt({ madeAt: new Date().toISOString(), pattern: 'dragon', scores: { contrast: 3, foam: 3, symmetry: 3, completion: 3 } });`);
   check('不認得的圖案不能存', !badPattern.ok && Boolean(badPattern.errors.pattern));
-  const longText = await models(`return m.saveLatteArt({ madeAt: new Date().toISOString(), pattern: 'heart', selfScore: 3, milk: 'x'.repeat(51) });`);
+  const longText = await models(`return m.saveLatteArt({ madeAt: new Date().toISOString(), pattern: 'heart', scores: { contrast: 3, foam: 3, symmetry: 3, completion: 3 }, milk: 'x'.repeat(51) });`);
   check('牛奶超過 50 字不能存', !longText.ok && Boolean(longText.errors.milk));
 
   /* ===== 備份 ===== */
@@ -294,16 +305,18 @@ try {
 
   /* ===== 統計頁的拉花 ===== */
   await models(`for (const [p, s] of [['heart', 2], ['heart', 4], ['rosetta', 3], ['heart', 5]]) {
-    await m.saveLatteArt({ madeAt: new Date(Date.now() - 3600000).toISOString(), pattern: p, selfScore: s }); } return true;`);
+    await m.saveLatteArt({ madeAt: new Date(Date.now() - 3600000).toISOString(), pattern: p, scores: { contrast: s, foam: s, symmetry: s, completion: s } }); } return true;`);
   await visit(page, base, '#/stats');
   await page.waitFor(`document.querySelector('#stats-latte .chart-latte')`, { label: '統計頁的拉花圖表' });
   const latteCard = await page.eval(`(() => { const c = document.querySelector('#stats-latte'); return {
-    text: c.textContent, bars: [...c.querySelectorAll('.hbar-row[data-detail]')].map((r) => r.querySelector('.hbar-name').textContent) }; })()`);
+    text: c.textContent, bars: [...c.querySelectorAll('.hbars:not(.latte-items) .hbar-row[data-detail]')].map((r) => r.querySelector('.hbar-name').textContent) }; })()`);
   check('拉花卡片：本月練習 7 杯、每種圖案的平均自評', latteCard.text.includes('本月練習') && latteCard.text.includes('7 杯')
     && latteCard.bars[0] === '愛心' && latteCard.bars.includes('其他'), q(latteCard.bars)); // 依圖案分組：「其他」不分說明
+  check('分項平均：四項都列出來', (await page.eval(`[...document.querySelectorAll('#stats-latte .latte-items .hbar-name')].map((n) => n.textContent).sort().join()`))
+    === ['完成度', '奶泡', '對比', '對稱與位置'].sort().join());
   await page.eval(`document.querySelector('#stats-latte .chart-latte .chart-hit').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 0, clientY: 10 })); true`);
   check('點進步曲線：顯示那一杯的自評', (await page.eval(`document.querySelector('#stats-latte .chart-detail').textContent`)).includes('分'));
-  await click(page, '#stats-latte .hbar-row[data-detail]');
+  await click(page, '#stats-latte .hbars:not(.latte-items) .hbar-row[data-detail]');
   check('點圖案的長條：顯示平均自評', (await page.eval(`document.querySelector('#stats-latte .chart-detail').textContent`)).includes('平均自評'));
   check('XSS：統計頁的圖案名稱只當文字', await noInjection(page));
   check('手沖的統計照舊（只有 1 杯：顯示多記幾杯）', Boolean(await page.eval(`document.querySelector('.stats-empty')`)));

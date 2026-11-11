@@ -693,6 +693,17 @@ input:focus, select:focus, textarea:focus {
 .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
 /* 拉花表單的圖案：兩欄的大按鈕，沖咖啡時單手好按 */
 .pattern-picker .segmented button { min-height: 60px; font-size: 1.05rem; }
+/* 拉花的分項自評：名稱＋說明一行、1–5 一行（名稱長短不一，不用手沖那種左右並排） */
+.latte-scores { gap: 12px; }
+.latte-score { display: grid; gap: 4px; }
+.latte-score-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.latte-score-name { font-weight: 600; }
+.latte-score-head .hint { font-size: 0.85rem; }
+.latte-score.invalid .segmented button { border-color: var(--danger); }
+.latte-total { flex: none; display: inline-flex; align-items: baseline; gap: 2px; white-space: nowrap; font-weight: 600; color: var(--text); }
+.latte-total .stars { font-size: 1rem; }
+/* 圖案說明可能很長（沒有空白）：標題可以在任何地方折行，不把卡片撐寬 */
+.latte-card-item .card-title { min-width: 0; overflow-wrap: anywhere; }
 .list-meta {
   display: flex;
   justify-content: space-between;

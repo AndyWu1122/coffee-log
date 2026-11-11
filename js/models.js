@@ -44,6 +44,22 @@ export const brewMethod = (brew) => brew?.method || 'pourover';
 // 拉花的圖案（key 會存在紀錄上、之後也會上傳，不能改名）
 export const LATTE_PATTERNS = { heart: '愛心', tulip: '鬱金香', rosetta: '葉子', swan: '天鵝', other: '其他' };
 export const LATTE_TEXT_MAX = 50; // 圖案說明、牛奶、杯子（之後分享時雲端的上限也是 50）
+// 自評的四個分項（參考世界拉花大賽 WLAC 的視覺評分：對比、奶泡質地、圖案的和諧／大小／位置、難度的完成度），各 1–5 必填
+// 總分＝四項平均（衍生值，不儲存，用 latteTotal 算）；key 會存在紀錄上、之後也會上傳，不能改名
+export const LATTE_SCORES = {
+  contrast: { label: '對比', hint: '線條清楚、邊緣不糊' },
+  foam: { label: '奶泡', hint: '細緻有光澤、沒有氣泡' },
+  symmetry: { label: '對稱與位置', hint: '對稱、置中、大小合適' },
+  completion: { label: '完成度', hint: '想拉的圖案有拉出來' },
+};
+const LATTE_SCORE_KEYS = Object.keys(LATTE_SCORES);
+const isScore = (v) => Number.isInteger(v) && v >= 1 && v <= 5;
+/** 拉花的總分（四項平均，一位小數）；有任何一項沒填回傳 null */
+export function latteTotal(art) {
+  const values = LATTE_SCORE_KEYS.map((k) => art?.scores?.[k]);
+  if (!values.every(isScore)) return null;
+  return Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 10) / 10;
+}
 
 /* ===== 日期工具（id 產生在 js/id.js） ===== */
 
@@ -186,7 +202,9 @@ export function validateLatteArt(a) {
   const errors = {};
   if (!a.madeAt || Number.isNaN(new Date(a.madeAt).getTime())) errors.madeAt = '請輸入時間';
   if (!Object.hasOwn(LATTE_PATTERNS, a.pattern ?? '')) errors.pattern = '請選擇圖案';
-  if (!(Number.isInteger(a.selfScore) && a.selfScore >= 1 && a.selfScore <= 5)) errors.selfScore = '請幫自己打分（1–5）';
+  for (const key of LATTE_SCORE_KEYS) {
+    if (!isScore(a.scores?.[key])) errors[`scores.${key}`] = `請幫「${LATTE_SCORES[key].label}」打分（1–5）`;
+  }
   for (const key of ['patternNote', 'milk', 'cup']) {
     if (charLength(a[key]) > LATTE_TEXT_MAX) errors[key] = `最多 ${LATTE_TEXT_MAX} 字`;
     else if (/[\u0000-\u001f\u007f]/.test(a[key] ?? '')) errors[key] = '不能有換行等特殊字元';
@@ -272,7 +290,7 @@ function normalizeLatteArt(input) {
     milk: String(input.milk ?? '').trim(),
     cup: String(input.cup ?? '').trim(),
     espressoBeanId: input.espressoBeanId || '', // '' ＝未指定
-    selfScore: toNum(input.selfScore),
+    scores: Object.fromEntries(LATTE_SCORE_KEYS.map((k) => [k, toNum(input.scores?.[k])])),
     notes: String(input.notes ?? '').trim(),
     visibility: input.visibility === 'friends' ? 'friends' : 'private',
     createdAt: toIso(input.createdAt) ?? new Date().toISOString(),
@@ -687,7 +705,10 @@ export async function getStats({ period = '30', beanId = '', method = '' } = {})
     stats: computeStats({ brews, beans, grinders, drippers, period, beanId: known ? beanId : '', method: m }),
     beanOptions, beanId: known ? beanId : '', methodOptions, method: m,
     // 拉花只套用期間（豆子、沖煮方式的篩選是手沖的）
-    latte: computeLatteStats({ arts, period, patternName: (k) => LATTE_PATTERNS[k] ?? k }),
+    latte: computeLatteStats({
+      arts, period, patternName: (k) => LATTE_PATTERNS[k] ?? k,
+      scoreItems: LATTE_SCORE_KEYS.map((key) => ({ key, name: LATTE_SCORES[key].label })),
+    }),
   };
 }
 
@@ -805,6 +826,7 @@ export async function listLatteArts({ pattern = '' } = {}) {
     .map((a) => ({
       ...a,
       beanName: a.espressoBeanId ? beanById.get(a.espressoBeanId)?.name ?? '（已刪除的豆子）' : '',
+      total: latteTotal(a),
       thumb: thumbById.get(a.id) ?? null,
     }));
 }
@@ -857,7 +879,7 @@ export async function deleteLatteArt(id) {
   });
 }
 
-/** 「再拉一杯」要複製的：圖案（含說明）、牛奶、杯子、豆子；自評、筆記、照片是每杯的結果，不複製；可見度回到只有我 */
+/** 「再拉一杯」要複製的：圖案（含說明）、牛奶、杯子、豆子；分項自評、筆記、照片是每杯的結果，不複製；可見度回到只有我 */
 export function latteTemplateFrom(art) {
   const { pattern, patternNote = '', milk = '', cup = '', espressoBeanId = '' } = art;
   return { pattern, patternNote: pattern === 'other' ? patternNote : '', milk, cup, espressoBeanId };

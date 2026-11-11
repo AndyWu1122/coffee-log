@@ -147,25 +147,35 @@ export function computeStats({ brews = [], beans = [], grinders = [], drippers =
 
 /**
  * 統計頁的「拉花」：arts＝全部拉花紀錄；period 和手沖同一個期間；patternName(key) → 圖案名稱
- * 回傳 { total（全部杯數）, cups（期間內）, thisMonth（本機日期的這個月，不受期間影響）, enough, patterns, trend }
- * patterns：每種圖案的平均自評（樣本少的排後面，和手沖的排序規則一樣）；trend：自評隨時間（點＋7 杯移動平均）
+ * scoreItems：自評的分項 [{ key, name }]（models.LATTE_SCORES）；每杯的總分＝分項平均（有一項沒填的不算）
+ * 回傳 { total（全部杯數）, cups（期間內）, thisMonth（本機日期的這個月，不受期間影響）, enough, patterns, items, trend }
+ * patterns：每種圖案的平均總分（樣本少的排後面，和手沖的排序規則一樣）；items：每個分項的平均（低→高，最弱的在前）；
+ * trend：總分隨時間（點＋7 杯移動平均）
  */
-export function computeLatteStats({ arts = [], period = 'all', now = new Date(), patternName = (k) => k } = {}) {
+export function computeLatteStats({ arts = [], period = 'all', now = new Date(), patternName = (k) => k, scoreItems = [] } = {}) {
   const days = PERIODS[period] ?? null;
   const since = days == null ? null : now.getTime() - days * DAY;
-  const scored = arts.filter((a) => Number.isInteger(a.selfScore) && a.selfScore >= 1 && a.selfScore <= 5);
-  const selected = scored
+  const isScore = (v) => Number.isInteger(v) && v >= 1 && v <= 5;
+  const totalOf = (a) => {
+    const values = scoreItems.map(({ key }) => a.scores?.[key]);
+    return values.length && values.every(isScore) ? values.reduce((s, v) => s + v, 0) / values.length : null;
+  };
+  const selected = arts
+    .map((a) => ({ ...a, rating: totalOf(a) }))
+    .filter((a) => a.rating != null)
     .filter((a) => since == null || new Date(a.madeAt).getTime() >= since)
     .sort((a, b) => a.madeAt.localeCompare(b.madeAt));
   const month = localDate(now).slice(0, 7);
-  const asRated = selected.map((a) => ({ ...a, rating: a.selfScore }));
-  const points = asRated.map((a) => ({ artId: a.id, at: a.madeAt, rating: a.rating, label: patternName(a.pattern) }));
+  const points = selected.map((a) => ({ artId: a.id, at: a.madeAt, rating: a.rating, label: patternName(a.pattern) }));
   return {
     total: arts.length,
     cups: selected.length,
     thisMonth: arts.filter((a) => localDate(a.madeAt).slice(0, 7) === month).length,
     enough: selected.length >= MIN_CUPS,
-    patterns: rankByRating(asRated, (a) => a.pattern, patternName).map(({ key, ...rest }) => ({ pattern: key, ...rest })),
+    patterns: rankByRating(selected, (a) => a.pattern, patternName).map(({ key, ...rest }) => ({ pattern: key, ...rest })),
+    items: selected.length
+      ? scoreItems.map(({ key, name }) => ({ key, name, avg: average(selected.map((a) => a.scores[key])) })).sort((a, b) => a.avg - b.avg)
+      : [],
     trend: { points, movingAvg: movingAverage(points) },
   };
 }

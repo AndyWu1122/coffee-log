@@ -65,11 +65,12 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
   - 豆子列表卡片右邊顯示縮圖（和紀錄卡片同樣的 `.has-thumb`／`.card-thumb`），離開頁面時 revoke
   - **只存在這支手機、不上傳到社群**（雲端結構、權限都沒有豆子照片）；隱私說明有寫
 **wishlist**（DB v8 加入，keyPath key）：key(`region:<產區 key>`), kind('region'), target(產區 key), createdAt；想買清單，只存在這支手機、**會匯出**（之後「好友的豆子推薦」也放這裡，用別的 kind）
-**latteArts**（DB v9 加入，keyPath id，索引 madeAt、espressoBeanId）：id, madeAt, pattern(heart/tulip/rosetta/swan/other＝愛心/鬱金香/葉子/天鵝/其他，`models.LATTE_PATTERNS`，**key 不能改名**), patternNote(選「其他」時的說明，≤ 50 字), milk(≤ 50), cup(≤ 50), espressoBeanId(選填，'' ＝不指定), selfScore(1–5 整數，必填), notes, visibility(private/friends；1.24.0 表單還沒有「誰看得到」，一律 private), createdAt
+**latteArts**（DB v9 加入，keyPath id，索引 madeAt、espressoBeanId）：id, madeAt, pattern(heart/tulip/rosetta/swan/other＝愛心/鬱金香/葉子/天鵝/其他，`models.LATTE_PATTERNS`，**key 不能改名**), patternNote(選「其他」時的說明，≤ 50 字), milk(≤ 50), cup(≤ 50), espressoBeanId(選填，'' ＝不指定), scores{contrast, foam, symmetry, completion}(各 1–5 整數，都必填；`models.LATTE_SCORES`，**key 不能改名**), notes, visibility(private/friends；1.24.0 表單還沒有「誰看得到」，一律 private), createdAt
 **latteArtPhotos**／**latteArtThumbs**（DB v9 加入，keyPath artId）：拉花的照片（每杯最多 1 張），格式、處理方式和 photos／thumbs 完全一樣；**另開 store、不和紀錄照片共用**（photos 的 key 是 brewId，備份、匯入驗證、同步都直接 getAll('photos') 當成紀錄的照片）
   - `saveLatteArt(input, { photo })`／`deleteLatteArt` 和 `saveBrew` 同樣的語意（`db.transact` 涵蓋 latteArts、latteArtPhotos、latteArtThumbs）
   - 首頁上方「手沖｜拉花」（`.home-tabs`）記在 meta `homeTab`（不放 localStorage）；`#/?bean=` 會切回手沖；拉花分頁：依日期分組的卡片（圖案、自評星星、牛奶／杯子／豆子、縮圖）、圖案篩選（`.latte-filter .chip`，切頁後保留）；＋ 依分頁到 `#/brew/new` 或 `#/latte/new`
-  - 表單：照片在最上面 → 圖案（兩欄大按鈕，選「其他」才出現說明）→ 自評 → 牛奶、杯子（`<datalist>` 列以前用過的）→ 豆子（選填，預設上一杯拉花用的）→ 時間 → 筆記；「再拉一杯」（`latteTemplateFrom`）帶入圖案（含說明）、牛奶、杯子、豆子
+  - **自評分四項**（參考世界拉花大賽 WLAC 的視覺評分表：Contrast between ingredients、Visual foam quality、Harmony／size／position of pattern、Level of difficulty successfully achieved；這是自己打的，沒有好友打分）：對比（線條清楚、邊緣不糊）、奶泡（細緻有光澤、沒有氣泡）、對稱與位置（對稱、置中、大小合適）、完成度（想拉的圖案有拉出來）；總分＝四項平均，衍生值不儲存（`models.latteTotal`），卡片顯示星星（四捨五入）＋一位小數
+  - 表單：照片在最上面 → 圖案（兩欄大按鈕，選「其他」才出現說明）→ 四項自評（名稱＋說明一行、1–5 一行，下面即時顯示總分；打了分那一項的錯誤馬上消失）→ 牛奶、杯子（`<datalist>` 列以前用過的）→ 豆子（選填，預設上一杯拉花用的）→ 時間 → 筆記；「再拉一杯」（`latteTemplateFrom`）帶入圖案（含說明）、牛奶、杯子、豆子
   - 被拉花引用的豆子也不能刪，只能封存；「有資料」（資料保存、新手教學、更新內容）與備份提醒都把拉花算進去
 **sync**（DB v5 加入，keyPath brewId）：brewId, userId, row(上次同步的 shared_brews 內容 JSON), photoAt(上次同步的照片 createdAt), error(''/rate_limited/invalid/failed/removed), failedRow, failedOn；**不匯出、匯入取代全部時也不清除**
 - brews 建索引：beanId、brewedAt、grinderId（v2 加入）、dripperId（v6 加入）
@@ -161,7 +162,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - 橫條：名稱｜長條｜數值三欄（名稱太長截斷），各列長條同寬才能比較；每週超過 14 週改成在自己的框裡橫向捲動（Y 軸固定在框外）
 - 測試：`stats-test.mjs`（計算）、`stats-ui-test.mjs`（390px、深淺色、有資料／沒資料的截圖、文字重疊、CSP）
 - **拉花（1.24.0）**：最下面一張 `#stats-latte`（外層 `.latte-card`，**不是 `.stats-card`**，理由同熱度圖）；`getStats` 回傳的 `latte`＝`stats.computeLatteStats`；只套用期間（豆子、沖煮方式篩選是手沖的）；手沖不到 3 杯時照樣顯示
-  - 本月練習幾杯（本機日期的日曆月，不受期間影響）、期間內幾杯；每種圖案的平均自評（依 pattern 分組，「其他」不分說明；樣本少的規則同手沖）；自評的變化（和評分變化同一個圖 `ratingChartHtml(trend, { kind: 'latte' })`，點的欄位是 `at`、`rating`、`label`）
+  - 本月練習幾杯（本機日期的日曆月，不受期間影響）、期間內幾杯；每一項的平均（低→高，`.latte-items`，最弱的那項點了會提示多注意）；每種圖案的平均自評（依 pattern 分組，「其他」不分說明；樣本少的規則同手沖）；自評的變化（和評分變化同一個圖 `ratingChartHtml(trend, { kind: 'latte' })`，點的欄位是 `at`、`rating`、`label`）
   - 沒有任何拉花：卡片寫「還沒有拉花紀錄」＋連結到 `#/latte/new`
   - 熱度圖、產地地圖只算手沖
   - 測試：`latte-test.mjs`（Node：平均、樣本少、移動平均、期間、本月邊界）、`latte-ui-test.mjs`（headless Chrome：從 DB v8（commit e3af7c2 的 db.js）升級、首頁切換與記住、表單、照片 EXIF、再拉一杯、篩選、豆子不能刪、備份 v9／v8／v1、統計卡片、XSS、深淺色截圖、CSP）

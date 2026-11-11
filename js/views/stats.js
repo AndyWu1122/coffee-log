@@ -283,13 +283,19 @@ function latteHtml(l) {
     name: p.name, value: p.avg, max: 5, label: `${score(p.avg)}${cupsNote(p.cups, p.small)}`,
     detail: `${p.name}：平均自評 ${score(p.avg)} 分，${p.cups} 杯${p.small ? '（樣本少，參考就好）' : ''}`,
   })).join('');
+  const itemRows = l.items.map((it, i) => detailRow({
+    name: it.name, value: it.avg, max: 5, label: score(it.avg),
+    detail: `${it.name}：平均 ${score(it.avg)} 分${i === 0 && l.items.length > 1 ? '（目前最弱的一項，下次可以多注意）' : ''}`,
+  })).join('');
   return `<section class="latte-card" id="stats-latte">
     <h2>拉花</h2>
-    <p class="hint">自己打的分數・圖案與進步曲線只算${esc(period)}</p>
+    <p class="hint">自己打的分數（對比、奶泡、對稱與位置、完成度的平均）・只算${esc(period)}</p>
     <div class="latte-tiles">
       <div class="stat-tile"><div class="stat-label">本月練習</div><div class="stat-value">${l.thisMonth} 杯</div></div>
       <div class="stat-tile"><div class="stat-label">${esc(period)}</div><div class="stat-value">${l.cups} 杯</div></div>
     </div>
+    <h3 class="stats-sub">每一項的平均（弱的在上面）</h3>
+    ${itemRows ? `<div class="hbars is-stacked latte-items">${itemRows}${scoreAxis()}</div>` : notEnough('這段期間沒有拉花紀錄')}
     <h3 class="stats-sub">每種圖案的平均自評</h3>
     ${rows ? `<div class="hbars is-stacked">${rows}${scoreAxis()}</div>` : notEnough('這段期間沒有拉花紀錄')}
     <h3 class="stats-sub">自評的變化</h3>

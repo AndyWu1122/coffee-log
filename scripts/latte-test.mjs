@@ -17,11 +17,16 @@ const q = JSON.stringify;
 const NAMES = { heart: '愛心', tulip: '鬱金香', rosetta: '葉子', swan: '天鵝', other: '其他' };
 const patternName = (k) => NAMES[k] ?? k;
 let n = 0;
-const art = (madeAt, pattern, selfScore) => ({ id: `a${++n}`, madeAt: new Date(madeAt).toISOString(), pattern, selfScore });
+const ITEMS = [{ key: 'contrast', name: '對比' }, { key: 'foam', name: '奶泡' }, { key: 'symmetry', name: '對稱與位置' }, { key: 'completion', name: '完成度' }];
+// s：四項同分，或 [對比, 奶泡, 對稱, 完成度]
+const art = (madeAt, pattern, s) => {
+  const v = Array.isArray(s) ? s : [s, s, s, s];
+  return { id: `a${++n}`, madeAt: new Date(madeAt).toISOString(), pattern, scores: Object.fromEntries(ITEMS.map(({ key }, i) => [key, v[i]])) };
+};
 const now = new Date('2026-11-11T12:00:00+08:00');
 
 /* ===== 空資料 ===== */
-const empty = computeLatteStats({ arts: [], now, patternName });
+const empty = computeLatteStats({ arts: [], now, patternName, scoreItems: ITEMS });
 check('空資料：都是 0、空陣列，不會丟錯', empty.total === 0 && empty.cups === 0 && empty.thisMonth === 0 && !empty.enough
   && empty.patterns.length === 0 && empty.trend.points.length === 0 && empty.trend.movingAvg.length === 0, q(empty));
 
@@ -35,14 +40,14 @@ const arts = [
   art('2026-11-06T08:00:00+08:00', 'rosetta', 2),
   art('2026-11-07T08:00:00+08:00', 'rosetta', 2),
 ];
-const s = computeLatteStats({ arts, now, patternName });
+const s = computeLatteStats({ arts, now, patternName, scoreItems: ITEMS });
 check('期間全部：7 杯、夠畫圖', s.cups === 7 && s.enough && s.total === 7);
 check('愛心平均 4.0、3 杯', s.patterns[0].pattern === 'heart' && s.patterns[0].avg === 4 && s.patterns[0].cups === 3 && !s.patterns[0].small, q(s.patterns[0]));
 check('樣本少的（鬱金香 1 杯）排在最後、標樣本少', s.patterns.at(-1).pattern === 'tulip' && s.patterns.at(-1).small, q(s.patterns.map((p) => p.pattern)));
 check('圖案名稱用中文', s.patterns.map((p) => p.name).join() === '愛心,葉子,鬱金香');
 
 /* ===== 進步曲線：依時間舊→新、7 杯移動平均 ===== */
-const shuffled = computeLatteStats({ arts: [...arts].reverse(), now, patternName });
+const shuffled = computeLatteStats({ arts: [...arts].reverse(), now, patternName, scoreItems: ITEMS });
 check('輸入順序亂的也依時間排', shuffled.trend.points.map((p) => p.rating).join() === '3,4,5,5,2,2,2');
 check('點有時間、名稱（給圖表顯示）', shuffled.trend.points[0].at === arts[0].madeAt && shuffled.trend.points[0].label === '愛心');
 check(`第 ${MA_WINDOW} 杯開始才有移動平均`, s.trend.movingAvg.length === 1 && s.trend.movingAvg[0].index === MA_WINDOW - 1
@@ -50,11 +55,11 @@ check(`第 ${MA_WINDOW} 杯開始才有移動平均`, s.trend.movingAvg.length =
 
 /* ===== 期間 ===== */
 const old = [...arts, art('2026-07-01T08:00:00+08:00', 'swan', 1)];
-const last30 = computeLatteStats({ arts: old, period: '30', now, patternName });
+const last30 = computeLatteStats({ arts: old, period: '30', now, patternName, scoreItems: ITEMS });
 check('近 30 天：不算 7 月那杯；total 仍是全部', last30.cups === 7 && last30.total === 8 && !last30.patterns.some((p) => p.pattern === 'swan'));
-const all = computeLatteStats({ arts: old, period: 'all', now, patternName });
+const all = computeLatteStats({ arts: old, period: 'all', now, patternName, scoreItems: ITEMS });
 check('全部：算進 7 月那杯', all.cups === 8 && all.patterns.some((p) => p.pattern === 'swan'));
-const few = computeLatteStats({ arts: arts.slice(0, 2), now, patternName });
+const few = computeLatteStats({ arts: arts.slice(0, 2), now, patternName, scoreItems: ITEMS });
 check('少於 3 杯：enough 是 false', few.cups === 2 && !few.enough);
 
 /* ===== 本月：本機日期的日曆月，不受期間影響 ===== */
@@ -63,14 +68,23 @@ const edge = [
   art('2026-11-01T00:01:00+08:00', 'heart', 3), // 這個月第一分鐘
   art('2026-11-30T23:59:00+08:00', 'heart', 3),
 ];
-const month = computeLatteStats({ arts: edge, period: 'all', now, patternName });
+const month = computeLatteStats({ arts: edge, period: 'all', now, patternName, scoreItems: ITEMS });
 check('本月：10/31 23:59 不算、11/1 00:01 算', month.thisMonth === 2, String(month.thisMonth));
-const monthShort = computeLatteStats({ arts: [...edge, art('2026-11-01T09:00:00+08:00', 'tulip', 4)], period: '30', now: new Date('2026-11-30T12:00:00+08:00'), patternName });
+const monthShort = computeLatteStats({ arts: [...edge, art('2026-11-01T09:00:00+08:00', 'tulip', 4)], period: '30', now: new Date('2026-11-30T12:00:00+08:00'), patternName, scoreItems: ITEMS });
 check('本月不受期間影響', monthShort.thisMonth === 3);
 
-/* ===== 不合法的自評不算進平均（舊資料保險） ===== */
-const bad = computeLatteStats({ arts: [art('2026-11-01T08:00:00+08:00', 'heart', null), art('2026-11-02T08:00:00+08:00', 'heart', 4)], now, patternName });
-check('沒有自評的不算進平均和曲線', bad.cups === 1 && bad.patterns[0].avg === 4 && bad.total === 2);
+/* ===== 總分＝四項平均；分項平均（弱的在前） ===== */
+const mixed = computeLatteStats({
+  arts: [art('2026-11-01T08:00:00+08:00', 'heart', [2, 4, 3, 5]), art('2026-11-02T08:00:00+08:00', 'heart', [4, 4, 1, 5])],
+  now, patternName, scoreItems: ITEMS,
+});
+check('每杯的總分是四項平均（3.5、3.5）', mixed.trend.points.map((p) => p.rating).join() === '3.5,3.5' && mixed.patterns[0].avg === 3.5, q(mixed.trend.points));
+check('分項平均：低→高（對稱 2 最弱、完成度 5 最好）', mixed.items.map((i) => `${i.name}:${i.avg}`).join() === '對稱與位置:2,對比:3,奶泡:4,完成度:5', q(mixed.items));
+check('沒有紀錄時分項是空陣列', empty.items.length === 0);
+
+/* ===== 有一項沒填的不算（舊資料保險） ===== */
+const bad = computeLatteStats({ arts: [art('2026-11-01T08:00:00+08:00', 'heart', [3, null, 3, 3]), art('2026-11-02T08:00:00+08:00', 'heart', 4)], now, patternName, scoreItems: ITEMS });
+check('有一項沒自評的不算進平均和曲線', bad.cups === 1 && bad.patterns[0].avg === 4 && bad.total === 2);
 
 console.log(`\n${passed}/${passed + failures.length} 通過`);
 if (failures.length) {

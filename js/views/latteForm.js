@@ -2,13 +2,17 @@
 // 照片放最上面（拉花最重要的就是照片）；照片選完就重新編碼成 JPEG（移除 EXIF），按「儲存」才和紀錄一起寫入
 import {
   getLatteArt, saveLatteArt, deleteLatteArt, getLatteArtPhoto, latteTemplateFrom, defaultLatteBeanId, latteSuggestions, listBeans,
-  LATTE_PATTERNS, LATTE_TEXT_MAX, toLocalInputValue, fromLocalInputValue, preparePhoto, PHOTO_ACCEPT,
+  LATTE_PATTERNS, LATTE_SCORES, LATTE_TEXT_MAX, latteTotal, toLocalInputValue, fromLocalInputValue, preparePhoto, PHOTO_ACCEPT,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors, photoFieldHtml, bindPhotoField } from './ui.js';
 
 const PATTERN_ICON = { heart: '♥', tulip: '🌷', rosetta: '🌿', swan: '🦢', other: '✨' };
 const PATTERN_OPTIONS = Object.entries(LATTE_PATTERNS).map(([value, label]) => ({ value, label: `${PATTERN_ICON[value]} ${label}` }));
-const SCORE_OPTIONS = [1, 2, 3, 4, 5].map((n) => ({ value: n, label: `${n} ★` }));
+const SCORE_OPTIONS = [1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n) }));
+const totalText = (scores) => {
+  const t = latteTotal({ scores });
+  return t == null ? '總分：四項都打完就會算出來' : `總分 ${t.toFixed(1)}`;
+};
 const shortDate = new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric' });
 
 export async function render(container, { id, query, isCurrent }) {
@@ -33,7 +37,7 @@ export async function render(container, { id, query, isCurrent }) {
   const beanOptions = beans.filter((b) => !b.archived || b.id === art?.espressoBeanId);
   const a = art ?? {
     madeAt: new Date().toISOString(), pattern: '', patternNote: '', milk: '', cup: '',
-    espressoBeanId: await defaultLatteBeanId(beanOptions), selfScore: null, notes: '', visibility: 'private',
+    espressoBeanId: await defaultLatteBeanId(beanOptions), scores: {}, notes: '', visibility: 'private',
   };
   if (!isCurrent()) return;
 
@@ -69,10 +73,15 @@ export async function render(container, { id, query, isCurrent }) {
         <div class="error"></div>
       </div>
 
-      <div class="field" data-field="selfScore">
-        <span class="label">自評 *</span>
-        ${segmentedHtml('selfScore', SCORE_OPTIONS, a.selfScore)}
-        <div class="error"></div>
+      <div class="field latte-scores">
+        <span class="label">自評 *（參考拉花比賽的評分，各 1–5）</span>
+        ${Object.entries(LATTE_SCORES).map(([key, { label, hint }]) => `
+          <div class="latte-score" data-field="scores.${key}">
+            <div class="latte-score-head"><span class="latte-score-name">${esc(label)}</span><span class="hint">${esc(hint)}</span></div>
+            ${segmentedHtml(`scores.${key}`, SCORE_OPTIONS, a.scores?.[key])}
+            <div class="error"></div>
+          </div>`).join('')}
+        <div class="ratio-display" id="latte-total" aria-live="polite">${esc(totalText(a.scores))}</div>
       </div>
 
       <div class="field-row">
@@ -122,8 +131,17 @@ export async function render(container, { id, query, isCurrent }) {
   const form = container.querySelector('form');
   const f = form.elements;
   const noteField = form.querySelector('[data-field="patternNote"]');
+  const readScores = () => Object.fromEntries(Object.keys(LATTE_SCORES).map((k) => [k, Number(segmentedValue(form, `scores.${k}`)) || null]));
+  const totalEl = form.querySelector('#latte-total');
   bindSegmented(form, (name, value) => {
+    // 選了就拿掉這一項「請選擇／請打分」的錯誤（不用等下次按儲存）
+    const field = form.querySelector(`[data-field="${name}"]`);
+    if (field && value) {
+      field.classList.remove('invalid');
+      field.querySelector('.error').textContent = '';
+    }
     if (name === 'pattern') noteField.hidden = value !== 'other';
+    if (name.startsWith('scores.')) totalEl.textContent = totalText(readScores());
   });
   const photoField = bindPhotoField(form, { photo, prepare: preparePhoto, alt: '這杯拉花的照片' });
 
@@ -139,7 +157,7 @@ export async function render(container, { id, query, isCurrent }) {
         madeAt: fromLocalInputValue(f.madeAt.value),
         pattern: segmentedValue(form, 'pattern'),
         patternNote: f.patternNote.value,
-        selfScore: segmentedValue(form, 'selfScore'),
+        scores: readScores(),
         milk: f.milk.value,
         cup: f.cup.value,
         espressoBeanId: f.espressoBeanId.value,

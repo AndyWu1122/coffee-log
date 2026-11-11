@@ -64,7 +64,9 @@ export async function latteContent() {
 export const patternLabel = (a) => (a.pattern === 'other' && a.patternNote ? a.patternNote : LATTE_PATTERNS[a.pattern] ?? '');
 
 function latteCard(a, thumbUrl) {
-  const stars = '★'.repeat(a.selfScore) + '☆'.repeat(5 - a.selfScore);
+  // 總分是四項平均（例如 3.8）：星星取四捨五入，旁邊寫分數
+  const full = Math.round(a.total ?? 0);
+  const stars = a.total == null ? '' : '★'.repeat(full) + '☆'.repeat(5 - full);
   const details = [a.milk, a.cup, a.beanName].filter(Boolean);
   return `
     <li><a class="card brew-card latte-card-item${a.thumb ? ' has-thumb' : ''}" href="#/latte/${esc(a.id)}">
@@ -72,7 +74,7 @@ function latteCard(a, thumbUrl) {
         <div class="card-head">
           <span class="card-title">${esc(patternLabel(a))}${a.visibility === 'friends'
             ? ' <span class="shared-badge" title="好友看得到" aria-label="好友看得到">👥</span>' : ''}</span>
-          <span class="stars" aria-label="自評 ${a.selfScore} 分">${stars}</span>
+          <span class="latte-total" aria-label="自評 ${a.total ?? '未評'} 分"><span class="stars" aria-hidden="true">${stars}</span>${a.total == null ? '' : ` ${a.total.toFixed(1)}`}</span>
         </div>
         ${details.length ? `<div class="card-row card-gear">${details.map((d) => `<span>${esc(d)}</span>`).join('')}</div>` : ''}
         <div class="card-row card-time"><span>${esc(timeFmt.format(new Date(a.madeAt)))}</span></div>
