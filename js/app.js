@@ -3,9 +3,14 @@ import { esc, toast, appVersion, BADGES_EVENT, applyTheme, themePref } from './v
 import {
   socialAvailable, completeSignIn, requestSync, getSocialBadges, badgeText,
   getBackupStatus, getChangelogStatus, markChangelogSeen, isPushRoute, claimOnboarding, ensurePersistentStorage,
+  watchInstallPrompt, isStandalone, claimInstallGuide, recordInstallChoice, installedElsewhere,
 } from './models.js';
 
+// 瀏覽器的「可以安裝」事件很早就來：模組一載入就開始留著（安裝教學打開時才用）
+watchInstallPrompt();
+
 const startTour = (options) => import('./views/tour.js').then((m) => m.startTour(options));
+const startInstallGuide = (options) => import('./views/installGuide.js').then((m) => m.startInstallGuide(options));
 
 // 各 view 用動態 import 延遲載入；每個 view 匯出 render(container, params)
 // back：頁首「‹」回到哪一頁（上一層；字串，或收到路由參數的函式）。沒有 back 的是最上層：
@@ -141,6 +146,10 @@ function setupMenu() {
   window.addEventListener('hashchange', () => setOpen(false));
   // 使用教學：隨時重看，不影響「看過了」（選單的點擊處理會先關掉選單）
   document.getElementById('menu-tour').addEventListener('click', () => startTour({ returnFocus: btn }));
+  // 安裝 App：隨時重看，不影響「看過了」；已經是安裝好的 App 就不顯示這一項
+  const installItem = document.getElementById('menu-install');
+  installItem.hidden = isStandalone();
+  installItem.addEventListener('click', () => startInstallGuide({ manual: true, returnFocus: btn }));
 }
 
 /* ===== 外觀：自動（跟系統）／淺色／深色 ===== */
@@ -223,16 +232,48 @@ async function start() {
   ensurePersistentStorage(); // 有資料就請瀏覽器不要自動清掉（見 models「資料保存」）
 }
 
-/* ===== 新手教學：全新裝置第一次打開首頁時自動顯示一次 ===== */
+/* ===== 教學：安裝 App → 新手教學，第一次打開首頁時各自動顯示一次 ===== */
+// 順序：不是從主畫面開啟（還沒安裝）→ 先顯示安裝教學（已經在用的人也顯示一次），關掉後才接新手教學（全新裝置才有）
+// 已經是安裝好的 App：沒有安裝教學，直接新手教學
 // 從好友的 QR code、Google 登入回來等其他頁面打開時不打斷（也不記成看過），等下次打開首頁
 
 async function setupOnboarding() {
+  setupInstalled();
   if (parseHash().path !== '/') return;
   try {
+    if (await claimInstallGuide()) {
+      const result = await startInstallGuide();
+      await recordInstallChoice(result);
+    }
+    // 裝好了：新手教學留到從主畫面第一次打開時（Android 和瀏覽器共用資料，這裡不能先記成看過）
+    if (await installedElsewhere()) return;
     if (await claimOnboarding()) await startTour();
   } catch (err) {
-    console.warn('新手教學檢查失敗', err);
+    console.warn('教學檢查失敗', err);
   }
+}
+
+// MediaQueryList 要留住（理由同 systemLight）
+const standaloneMode = matchMedia('(display-mode: standalone)');
+
+/** 安裝完成（Android、電腦的 Chrome／Edge 才有這個事件；iPhone 沒有） */
+function setupInstalled() {
+  window.addEventListener('appinstalled', async () => {
+    await recordInstallChoice('installed').catch((err) => console.warn('無法記下安裝狀態', err));
+    // 安裝教學開著的話由它顯示「安裝完成」；從瀏覽器選單自己安裝的用 toast
+    if (!document.querySelector('.install-guide')) toast('安裝完成，請從主畫面打開 App');
+    if (parseHash().path === '/') navigate(); // 首頁的安裝提示跟著消失
+  });
+  // 電腦：安裝後這個分頁直接變成 App 的視窗 → ☰ 不用再有「安裝 App」，新手教學當場接著顯示
+  standaloneMode.addEventListener('change', async () => {
+    if (!isStandalone()) return;
+    document.getElementById('menu-install').hidden = true;
+    try {
+      if (parseHash().path === '/' && await claimOnboarding()) await startTour();
+    } catch (err) {
+      console.warn('新手教學檢查失敗', err);
+    }
+  });
 }
 
 /* ===== 提示：☰ 選單的「!」、底部「社群」分頁的數字 ===== */

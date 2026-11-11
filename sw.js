@@ -1,7 +1,7 @@
 // Service Worker：安裝時預先快取所有檔案，之後一律從快取讀取（離線可用）
 // ⚠ 修改任何前端檔案後，APP_VERSION 至少第三碼 +1，使用者才會收到新版本（規則見 CLAUDE.md「版本號」）
 // 它也是「設定與關於」頁顯示的版本號、意見回饋附的版本（app.js 用 'version' 訊息詢問）
-const APP_VERSION = '1.25.0';
+const APP_VERSION = '1.26.0';
 const CACHE_NAME = `coffee-log-v${APP_VERSION}`;
 
 const ASSETS = [
@@ -25,6 +25,7 @@ const ASSETS = [
   'js/drippers.js',
   'js/id.js',
   'js/push.js',
+  'js/install.js',
   'js/origins.js',
   'js/worldMap.js',
   'js/mapView.js',
@@ -94,6 +95,7 @@ const ASSETS = [
   'js/views/feedback.js',
   'js/views/notifications.js',
   'js/views/tour.js',
+  'js/views/installGuide.js',
   'js/views/heatmap.js',
   'icons/icon.svg',
   'icons/icon-192.png',

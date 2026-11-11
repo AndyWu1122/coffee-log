@@ -1,8 +1,9 @@
 // 資料保存（1.20.0）：不需要 Supabase；headless Chrome（找不到時設 CHROME_PATH）
 // navigator.storage.persist／persisted 換成假的（計算呼叫次數）；iPhone 用 User-Agent 模擬，從主畫面開啟用 navigator.standalone 模擬
 // 確認：沒資料時不要求保留、有資料時啟動與存檔各最多要求一次；設定頁的「資料保存」三種狀態；
-// iPhone 的 Safari：首頁有「加入主畫面」提示（沒資料時沒有「匯出備份」）、取代備份提醒、「稍後」7 天、過期再出現、「匯出備份」記下備份時間；
-// 從主畫面開啟、電腦都沒有提示；新手教學最後一步在 iPhone 的 Safari 多一句；390px 不橫向捲動、深淺色截圖、沒有 CSP 違規、沒有 JavaScript 錯誤
+// iPhone 的 Safari、有資料：首頁的安裝提示（1.26.0 取代原本的「加入主畫面」卡片）關掉只安靜 7 天、過期再出現，和備份提醒同時顯示；
+// 沒資料、從主畫面開啟、電腦（略過安裝教學之後）都沒有提示；390px 不橫向捲動、深淺色截圖、沒有 CSP 違規、沒有 JavaScript 錯誤
+// （安裝教學本身在 install-test.mjs）
 //
 // 用法：node scripts/storage-test.mjs
 
@@ -39,7 +40,7 @@ function fixtures() {
  * ios：iPhone 的 User-Agent；standalone：從主畫面開啟；persisted：瀏覽器一開始是否已經答應保留
  */
 async function openPage(chrome, { ios = false, standalone = false, persisted = false, line = false, share = null } = {}) {
-  const page = await chrome.newPage(null, { isolated: true });
+  const page = await chrome.newPage(null, { isolated: true, installed: false });
   await page.cdp('Emulation.setDeviceMetricsOverride', VIEW);
   // line：LINE 內建的瀏覽器（User-Agent 後面多了 Line/x.y.z）
   if (ios || line) await page.cdp('Emulation.setUserAgentOverride', { userAgent: `${IPHONE_UA}${line ? ' Line/14.0.0' : ''}`, platform: 'iPhone' });
@@ -69,8 +70,11 @@ async function openPage(chrome, { ios = false, standalone = false, persisted = f
   return page;
 }
 
-/** 打開首頁（第一次打開要等 App 畫好）；seed：先寫入資料、看過新手教學與這一版的更新內容 */
-async function start(page, base, { seed = false, onboarding = false } = {}) {
+/**
+ * 打開首頁（第一次打開要等 App 畫好）；seed：先寫入資料、看過新手教學與這一版的更新內容
+ * 安裝教學一律當成看過、按了「略過」（hintDue：可以提示的時間已經到了）
+ */
+async function start(page, base, { seed = false, onboarding = false, hintDue = false } = {}) {
   await page.goto(`${base}#/settings`);
   await page.waitFor(`document.querySelector('#settings-storage')?.dataset.state`, { label: '設定頁' });
   const version = await page.eval(`import('/js/changelog.js').then((m) => m.CHANGELOG[0].version)`);
@@ -78,6 +82,8 @@ async function start(page, base, { seed = false, onboarding = false } = {}) {
     ${seed ? `await db.bulkPut(${q(fixtures())});` : ''}
     ${onboarding ? '' : "await db.setMeta('onboardingSeen', true);"}
     await db.setMeta('changelogSeen', ${q(version)});
+    await db.setMeta('installGuide', { seenAt: new Date().toISOString(), choice: 'skip', quiet: true,
+      hintAfter: new Date(Date.now() + ${hintDue ? -1000 : 7 * 86400000}).toISOString() });
     return true;
   })`);
   await reload(page, '#/');
@@ -91,9 +97,8 @@ async function reload(page, hash) {
 }
 
 const home = (page) => page.eval(`({
-  hint: Boolean(document.querySelector('.home-screen-hint')),
-  hintText: document.querySelector('.home-screen-hint')?.textContent.replace(/\\s+/g, '') ?? '',
-  exportBtn: Boolean(document.querySelector('.home-screen-hint #backup-now')),
+  hint: Boolean(document.querySelector('.install-hint')),
+  hintText: document.querySelector('.install-hint')?.textContent.replace(/\\s+/g, '') ?? '',
   backupReminder: Boolean(document.querySelector('.backup-reminder')),
   pageWidth: document.documentElement.scrollWidth, viewport: innerWidth,
 })`);
@@ -110,18 +115,6 @@ const settingsState = async (page) => {
 };
 const persistCalls = (page) => page.eval('window.__persistCalls');
 const meta = (page, key) => page.eval(`import('/js/db.js').then((db) => db.getMeta(${q(key)}))`);
-
-/** 新手教學一路按「下一步」到最後一步，回傳那一步的內容 */
-async function lastTourStep(page) {
-  await page.waitFor(`document.querySelector('.tour-card')`, { label: '新手教學' });
-  for (let i = 0; i < 10; i++) {
-    const title = await page.eval(`document.getElementById('tour-title').textContent`);
-    if (title === '記得定期備份') return page.eval(`document.getElementById('tour-body').textContent`);
-    await page.eval(`document.querySelector('.tour-card [data-act="next"]').click(); true`);
-    await page.waitFor(`document.getElementById('tour-title').textContent !== ${q(title)}`, { label: `離開「${title}」`, timeout: 5000 });
-  }
-  throw new Error('找不到新手教學的最後一步');
-}
 
 async function screenshot(page, file) {
   const height = await page.eval('Math.ceil(document.documentElement.scrollHeight)');
@@ -151,7 +144,7 @@ try {
   await start(page, base);
   check('沒有資料：打開 App 不要求保留（Firefox 才不會一打開就跳詢問）', (await persistCalls(page)) === 0, String(await persistCalls(page)));
   let h = await home(page);
-  check('不是 iPhone：首頁沒有「加入主畫面」提示', !h.hint, q(h));
+  check('略過安裝教學之後：首頁沒有安裝提示', !h.hint, q(h));
   let s = await settingsState(page);
   check('設定頁「資料保存」：瀏覽器還沒答應 → 可能被清、建議加到主畫面和備份，有「備份與還原」連結',
     s.state === 'best-effort' && s.text.includes('可能會清掉') && s.text.includes('備份') && s.backupLink.includes('備份與還原'), q(s));
@@ -169,7 +162,7 @@ try {
   await start(page, base, { seed: true });
   check('已經有資料：打開 App 就要求保留', (await persistCalls(page)) === 1, String(await persistCalls(page)));
   h = await home(page);
-  check('不是 iPhone：照常顯示備份提醒', !h.hint && h.backupReminder, q(h));
+  check('電腦：照常顯示備份提醒', !h.hint && h.backupReminder, q(h));
   await finish(page, '電腦（有資料）');
 
   page = await openPage(chrome, { persisted: true });
@@ -179,35 +172,32 @@ try {
 
   /* ===== iPhone 的 Safari ===== */
   page = await openPage(chrome, { ios: true });
-  await start(page, base);
+  await start(page, base, { hintDue: true });
   h = await home(page);
-  check('iPhone 的 Safari、沒資料：首頁有「加入主畫面」提示，沒有「匯出備份」', h.hint && h.hintText.includes('分享」→「加入主畫面') && !h.exportBtn, q(h));
+  check('iPhone 的 Safari、沒資料、略過了安裝教學：首頁沒有提示', !h.hint, q(h));
   check('首頁不橫向捲動', h.pageWidth <= h.viewport, q(h));
   s = await settingsState(page);
   check('設定頁「資料保存」：iPhone 的 Safari 說明加入主畫面、資料要用備份搬過去', s.state === 'ios-browser' && s.text.includes('加入主畫面') && s.text.includes('匯入'), q(s));
   await finish(page, 'iPhone（沒資料）');
 
   page = await openPage(chrome, { ios: true });
-  await start(page, base, { seed: true });
+  await start(page, base, { seed: true, hintDue: true });
   h = await home(page);
-  check('iPhone 的 Safari、有資料：提示說主畫面是另一份資料，有「匯出備份」', h.hint && h.hintText.includes('資料是分開的') && h.exportBtn, q(h));
-  check('「加入主畫面」取代備份提醒（不會兩張卡片疊在一起）', !h.backupReminder, q(h));
+  check('iPhone 的 Safari、有資料：略過了也提示「加入主畫面，資料才安全」', h.hint && h.hintText.includes('加入主畫面，資料才安全'), q(h));
+  check('安裝提示只有一行，備份提醒照常顯示', h.backupReminder && h.pageWidth <= h.viewport, q(h));
   for (const theme of ['dark', 'light']) {
     await page.eval(`document.documentElement.dataset.theme = ${q(theme)}; true`);
     await screenshot(page, path.join(shotDir, `home-hint-${theme}.png`));
   }
-  await page.eval(`document.querySelector('#home-screen-later').click(); true`);
-  await page.waitFor(`!document.querySelector('.home-screen-hint') && document.querySelector('.backup-reminder')`, { label: '按「稍後」' });
-  const until = new Date(await meta(page, 'homeScreenSnoozeUntil')).getTime() - Date.now();
-  check('按「稍後」：提示消失、換成備份提醒，7 天內不再提示', Math.abs(until - 7 * 86400000) < 60000, String(until));
+  await page.eval(`document.querySelector('#install-hint-close').click(); true`);
+  await page.waitFor(`!document.querySelector('.install-hint')`, { label: '關掉安裝提示' });
+  const until = new Date((await meta(page, 'installGuide')).hintAfter).getTime() - Date.now();
+  check('按 ✕：提示消失，7 天後再提醒（iPhone 有資料時不能永久關掉）', Math.abs(until - 7 * 86400000) < 60000, String(until));
   await reload(page, '#/');
-  check('重新打開：還在「稍後」期間，不提示', !(await home(page)).hint);
-  await page.eval(`import('/js/db.js').then((db) => db.setMeta('homeScreenSnoozeUntil', new Date(Date.now() - 1000).toISOString()))`);
+  check('重新打開：7 天內不提示', !(await home(page)).hint);
+  await page.eval(`import('/js/db.js').then(async (db) => db.setMeta('installGuide', { ...(await db.getMeta('installGuide')), hintAfter: new Date(Date.now() - 1000).toISOString() }))`);
   await reload(page, '#/');
   check('7 天過了：再提示一次', (await home(page)).hint);
-  await page.eval(`document.querySelector('.home-screen-hint #backup-now').click(); true`);
-  await page.waitFor(`document.querySelector('.toast')?.textContent.includes('已匯出備份')`, { label: '匯出備份' });
-  check('按「匯出備份」：記下備份時間（提示還在，加入主畫面之前都提醒）', Boolean(await meta(page, 'lastBackupAt')) && (await home(page)).hint);
   for (const theme of ['dark', 'light']) {
     await page.eval(`document.documentElement.dataset.theme = ${q(theme)}; true`);
     await settingsState(page);
@@ -215,18 +205,9 @@ try {
   }
   await finish(page, 'iPhone（有資料）');
 
-  page = await openPage(chrome, { ios: true });
-  await start(page, base, { onboarding: true });
-  const iosTour = await lastTourStep(page);
-  check('新手教學最後一步：iPhone 的 Safari 多一句「加入主畫面」', iosTour.includes('加入主畫面'), iosTour);
-  await finish(page, 'iPhone 新手教學');
-
   /* ===== iPhone 從主畫面開啟 ===== */
   page = await openPage(chrome, { ios: true, standalone: true });
-  await start(page, base, { onboarding: true });
-  const appTour = await lastTourStep(page);
-  check('從主畫面開啟：新手教學沒有「加入主畫面」', !appTour.includes('加入主畫面') && appTour.includes('使用教學'), appTour);
-  await page.eval(`document.querySelector('.tour-card [data-act="skip"]')?.click(); true`);
+  await start(page, base, { seed: true, hintDue: true });
   h = await home(page);
   check('從主畫面開啟：首頁沒有提示', !h.hint, q(h));
   s = await settingsState(page);
@@ -252,9 +233,9 @@ try {
 
   page = await openPage(chrome, { line: true, share: 'ok' });
   await start(page, base, { seed: true });
-  await page.eval(`document.querySelector('.home-screen-hint #backup-now').click(); true`);
+  await page.eval(`document.querySelector('.backup-reminder #backup-now').click(); true`);
   await page.waitFor(`location.hash === '#/backup' && document.querySelector('#export')`, { label: 'LINE：首頁的匯出備份 → 備份頁' });
-  check('LINE：首頁按「匯出備份」到備份頁，不下載、不記成已備份', (await page.eval('window.__downloads')) === 0 && !(await meta(page, 'lastBackupAt')));
+  check('LINE：首頁按「立即備份」到備份頁，不下載、不記成已備份', (await page.eval('window.__downloads')) === 0 && !(await meta(page, 'lastBackupAt')));
   check('LINE：備份頁說明這裡不能直接下載、資料是分開的', (await page.eval(`document.querySelector('#in-app-notice')?.textContent ?? ''`)).includes('分開'));
   await page.eval(`document.querySelector('#export').click(); true`);
   await page.waitFor(`document.querySelector('#share-backup')`, { label: 'LINE：分享備份檔的按鈕' });

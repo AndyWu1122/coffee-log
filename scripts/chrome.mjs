@@ -114,8 +114,12 @@ export async function launchChrome({ extraArgs = [] } = {}) {
   const client = connect(wsUrl);
   await client.opened;
 
-  /** 開新分頁；isolated 時用獨立的瀏覽器環境（IndexedDB、cookie 互不相通，像兩支不同的手機） */
-  async function newPage(url, { isolated = false } = {}) {
+  /**
+   * 開新分頁；isolated 時用獨立的瀏覽器環境（IndexedDB、cookie 互不相通，像兩支不同的手機）
+   * installed（預設 true）：當成已經安裝、從主畫面開啟的 App（navigator.standalone），首頁才不會先跳出安裝教學擋住畫面；
+   * 要測「在瀏覽器裡開啟」（安裝教學、iPhone 的 Safari）的測試傳 false
+   */
+  async function newPage(url, { isolated = false, installed = true } = {}) {
     const browserContextId = isolated ? (await client.send('Target.createBrowserContext')).browserContextId : undefined;
     const { targetId } = await client.send('Target.createTarget', { url: 'about:blank', browserContextId });
     const { sessionId } = await client.send('Target.attachToTarget', { targetId, flatten: true });
@@ -134,6 +138,11 @@ export async function launchChrome({ extraArgs = [] } = {}) {
     await send('Runtime.enable');
     await send('Log.enable');
     await send('Page.enable');
+    if (installed) {
+      await send('Page.addScriptToEvaluateOnNewDocument', {
+        source: `Object.defineProperty(Navigator.prototype, 'standalone', { configurable: true, get: () => true });`,
+      });
+    }
 
     const page = {
       errors,

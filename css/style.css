@@ -463,9 +463,31 @@ input:focus, select:focus, textarea:focus {
 }
 .notice-error { border-left-color: var(--danger); }
 
-/* 首頁的提示卡片：備份提醒、iPhone 的「加入主畫面」（一次只顯示一張） */
-.backup-reminder, .home-screen-hint { margin-bottom: 14px; }
-.backup-reminder p, .home-screen-hint p { margin: 0 0 4px; }
+/* 首頁的提示：備份提醒（卡片）、還沒安裝的小提示（一行，可以和備份提醒同時出現） */
+.backup-reminder { margin-bottom: 14px; }
+.backup-reminder p { margin: 0 0 4px; }
+.install-hint {
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.install-hint button { border: none; background: none; color: var(--text); font: inherit; cursor: pointer; }
+.install-hint-open {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px 6px 12px;
+  text-align: left;
+  font-size: 0.95rem;
+}
+.install-hint-go { margin-left: auto; white-space: nowrap; color: var(--accent); font-weight: 600; }
+.install-hint-close { flex: none; width: var(--tap); min-height: var(--tap); color: var(--text-dim); }
 .reminder-actions { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-top: 10px; }
 .reminder-actions .btn { min-height: 48px; }
 .last-backup { margin: 0; font-weight: 600; }
@@ -1180,6 +1202,70 @@ a.feed-body:active { background: var(--surface-2); }
 .tour-skip { margin-right: auto; background: none; border-color: transparent; color: var(--text-dim); }
 .tour-actions [data-act="next"] { min-width: 96px; }
 @media (prefers-reduced-motion: reduce) { .tour-spot { transition: none; } }
+
+/* ===== 安裝 App 的教學（js/views/installGuide.js）：沿用教學卡片，固定在畫面中央 ===== */
+.install-card {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(400px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 18px;
+  font-size: 1.05rem;
+}
+.install-title { font-size: 1.35rem; margin: 0 0 10px; outline: none; }
+.install-body p { margin: 0 0 10px; }
+.install-body .hint { margin: 0 0 8px; font-size: 0.9rem; color: var(--text-dim); }
+.install-body .hint strong { color: var(--text); }
+.install-body .btn-block { margin: 4px 0 8px; min-height: var(--tap); }
+.install-body .install-big { min-height: 60px; font-size: 1.25rem; font-weight: 700; }
+.install-steps { list-style: none; margin: 0 0 12px; padding: 0; counter-reset: install; }
+.install-steps li {
+  counter-increment: install;
+  display: grid;
+  grid-template-columns: 28px 30px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.install-steps li:first-child { border-top: none; }
+.install-steps li::before {
+  content: counter(install);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 700;
+  line-height: 28px;
+  text-align: center;
+}
+.install-steps small { color: var(--text-dim); font-size: 0.85rem; }
+.install-icon {
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* 「按鈕在哪裡」的示意圖：裝置外框淡、要按的按鈕用強調色圈起來 */
+.install-art { display: block; width: 100%; max-width: 280px; height: auto; margin: 0 auto 8px; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.install-art .art-frame { stroke: var(--text-dim); stroke-width: 2; }
+.install-art .art-bar { fill: var(--surface-2); stroke: var(--border); stroke-width: 1; }
+.install-art .art-url { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
+.install-art .art-dot { fill: var(--text-dim); }
+.install-art .art-ring { fill: var(--surface); stroke: var(--accent); stroke-width: 3; }
+.install-art .art-icon { stroke: var(--text); stroke-width: 2; color: var(--text); }
+.install-art .art-arrow { stroke: var(--accent); stroke-width: 3; }
+.install-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.install-pick .btn { min-height: 64px; font-size: 1.05rem; }
+.install-url { margin: 4px 0 6px; padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }
+.install-other { display: block; margin: 0 auto 4px; font-size: 0.9rem; }
+.install-other[hidden], .install-actions[hidden] { display: none; }
+.install-actions { margin-top: 4px; }
 
 /* ===== 沖煮熱度圖（js/views/heatmap.js）：統計、帳號、個人檔案共用 ===== */
 /* 和統計頁的卡片同樣的外觀（不用 .stats-card：統計頁的測試、程式用它找統計圖表） */

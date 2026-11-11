@@ -58,7 +58,8 @@ const fakePushScript = (sub) => `(() => {
 const CSP_SCRIPT = `window.__csp = []; document.addEventListener('securitypolicyviolation', (e) => window.__csp.push(e.effectiveDirective + ' ' + e.blockedURI));`;
 
 async function openPage(chrome, url, { sub, ua, standalone = false } = {}) {
-  const page = await chrome.newPage(null, { isolated: true });
+  // iPhone 的 Safari（不是從主畫面開啟）：關掉測試預設的「已安裝」
+  const page = await chrome.newPage(null, { isolated: true, installed: !ua || standalone });
   await page.cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   if (ua) await page.cdp('Emulation.setUserAgentOverride', { userAgent: ua, platform: 'iPhone' });
   await page.cdp('Page.addScriptToEvaluateOnNewDocument', { source: CSP_SCRIPT });

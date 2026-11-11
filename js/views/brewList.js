@@ -1,7 +1,7 @@
 // #/ 紀錄列表：上方切換「手沖｜拉花」（記住上次選的）；拉花的列表在 latteList.js
 import {
   listBrews, listBeans, latestBrewByBean, formatRatio, formatSeconds, flavorNote, getBackupStatus, snoozeBackupReminder,
-  formatDaysAgo, getStorageStatus, snoozeHomeScreenHint, METHODS, isInAppBrowser, getHomeTab, setHomeTab, HOME_TABS,
+  formatDaysAgo, getInstallHint, dismissInstallHint, METHODS, isInAppBrowser, getHomeTab, setHomeTab, HOME_TABS,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented } from './ui.js';
 import { exportBackup, errorReason } from './backup.js';
@@ -41,13 +41,13 @@ export async function render(container, { query = {}, isCurrent }) {
     history.replaceState(null, '', `${location.pathname}${location.search}#/`);
     await setHomeTab('brews'); // 從統計頁點豆子過來：一定是看手沖
   }
-  const [beans, latestByBean, backup, storage, tab] = await Promise.all([
-    listBeans({ includeArchived: true }), latestBrewByBean(), getBackupStatus(), getStorageStatus(), getHomeTab(),
+  const [beans, latestByBean, backup, installHint, tab] = await Promise.all([
+    listBeans({ includeArchived: true }), latestBrewByBean(), getBackupStatus(), getInstallHint(), getHomeTab(),
   ]);
   const rerender = () => render(container, { isCurrent });
 
-  // 上方：提示卡片（加入主畫面或備份提醒，一次一張）＋「手沖｜拉花」切換；兩個分頁都有
-  const top = `${storage.hint ? homeScreenHtml(storage) : backup.remind ? backupReminderHtml(backup) : ''}
+  // 上方：安裝 App 的小提示（一行）、備份提醒＋「手沖｜拉花」切換；兩個分頁都有
+  const top = `${installHint.show ? installHintHtml(installHint) : ''}${backup.remind ? backupReminderHtml(backup) : ''}
     <div class="home-tabs">${segmentedHtml('homeTab', HOME_TABS, tab)}</div>`;
   // 監聽器掛在這一頁自己的 .home 上（不是 #app）
   const bindTop = (root) => {
@@ -148,25 +148,28 @@ const backupReminderHtml = (backup) => `
   </div>`;
 
 /**
- * iPhone 的 Safari：提示加入主畫面（7 天沒打開可能被清掉資料）；顯示時取代備份提醒（有資料時一樣有「匯出備份」）
- * 主畫面的 App 和 Safari 的資料是分開的，所以有資料時要說怎麼搬過去
+ * 還沒安裝（不是從主畫面開啟）的小提示：安裝教學按「稍後」3 天後才出現，一行字，按了打開安裝教學
+ * ✕ 關掉就不再出現；sticky（iPhone 的瀏覽器裡已經有資料，7 天沒打開可能被清掉）只安靜 7 天
  */
-const homeScreenHtml = ({ hasData }) => `
-  <div class="notice home-screen-hint" role="alert">
-    <p><strong>📱 加入主畫面，資料比較安全</strong></p>
-    <p class="hint">在 Safari 開啟時，超過 7 天沒打開，iPhone 可能會清掉這個 App 的資料。按 Safari 的「分享」→「加入主畫面」，之後從主畫面打開。</p>
-    ${hasData ? '<p class="hint">主畫面的 App 和 Safari 的資料是分開的：先在這裡「匯出備份」，再到主畫面的 App 用 ☰ →「備份」匯入。</p>' : ''}
-    <div class="reminder-actions">
-      ${hasData ? '<button type="button" class="btn btn-primary" id="backup-now">匯出備份</button>' : ''}
-      <button type="button" class="btn" id="home-screen-later">稍後</button>
-    </div>
+const installHintHtml = ({ sticky }) => `
+  <div class="install-hint" role="status" data-sticky="${sticky}">
+    <button type="button" class="install-hint-open" id="install-hint-open">
+      <span aria-hidden="true">📲</span><span>${sticky ? '加入主畫面，資料才安全' : '安裝到主畫面，更好用'}</span><span class="install-hint-go">怎麼做 ›</span>
+    </button>
+    <button type="button" class="install-hint-close" id="install-hint-close" aria-label="${sticky ? '關閉，7 天後再提醒' : '關閉，不再提醒'}">✕</button>
   </div>`;
 
-/** 首頁提示卡片的按鈕（備份提醒、加入主畫面）：監聽器掛在卡片自己身上 */
+/** 首頁提示的按鈕（安裝提示、備份提醒）：監聽器掛在提示自己身上 */
 function bindReminders(container, rerender) {
-  container.querySelector('#home-screen-later')?.addEventListener('click', async () => {
-    await snoozeHomeScreenHint();
-    toast('7 天後再提醒');
+  const hintOpen = container.querySelector('#install-hint-open');
+  hintOpen?.addEventListener('click', async () => {
+    const { startInstallGuide } = await import('./installGuide.js');
+    await startInstallGuide({ manual: true, returnFocus: hintOpen });
+  });
+  container.querySelector('#install-hint-close')?.addEventListener('click', async () => {
+    const sticky = container.querySelector('.install-hint').dataset.sticky === 'true';
+    await dismissInstallHint();
+    if (sticky) toast('7 天後再提醒');
     rerender();
   });
   container.querySelector('#backup-now')?.addEventListener('click', async () => {

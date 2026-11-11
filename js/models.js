@@ -12,6 +12,7 @@ import { newId } from './id.js';
 import * as cloud from './cloud.js';
 import * as sync from './sync.js';
 import * as push from './push.js';
+import * as install from './install.js';
 
 // views 只依賴 models，風味輪資料、圖片解碼、分享卡片的計算由這裡轉出
 export { FLAVOR_WHEEL, flavorNote, sortFlavorNotes } from './flavorWheel.js';
@@ -914,8 +915,6 @@ export const setHomeTab = (tab) => db.setMeta(HOME_TAB_KEY, HOME_TABS.some((t) =
 // 資料只在這支手機的 IndexedDB：瀏覽器空間不夠時可能清掉（persist 可以要求不要清）；
 // iPhone 用 Safari 開時，超過 7 天沒打開就可能被清掉（從主畫面開的不會），而且主畫面的 App 和 Safari 的資料是分開的
 
-const HOME_SCREEN_SNOOZE_KEY = 'homeScreenSnoozeUntil'; // 首頁「加入主畫面」提示按「稍後」到什麼時候
-const HOME_SCREEN_SNOOZE_DAYS = 7;
 let persistRequested = false;
 
 /** iPhone、iPad 在 Safari（不是從主畫面）開啟 */
@@ -942,22 +941,96 @@ export async function ensurePersistentStorage() {
 }
 
 /**
- * 資料保存的狀態（設定頁、首頁的提示）：{ state, hasData, hint }
+ * 資料保存的狀態（設定頁）：{ state, hasData }
  * state：'ios-browser'（iPhone 的 Safari，最容易被清）｜'persisted'（瀏覽器答應保留）｜'best-effort'（空間不夠時可能被清）
- * hint：首頁要顯示「加入主畫面」的提示（iPhone 的 Safari、不在「稍後」期間）
  */
 export async function getStorageStatus() {
-  const [persisted, hasData, snoozeUntil] = await Promise.all([
-    db.isStoragePersisted().catch(() => false), hasLocalData(), db.getMeta(HOME_SCREEN_SNOOZE_KEY),
-  ]);
-  const ios = needsHomeScreen();
-  const snoozed = snoozeUntil != null && new Date() < new Date(snoozeUntil);
-  return { state: ios ? 'ios-browser' : persisted ? 'persisted' : 'best-effort', hasData, hint: ios && !snoozed };
+  const [persisted, hasData] = await Promise.all([db.isStoragePersisted().catch(() => false), hasLocalData()]);
+  return { state: needsHomeScreen() ? 'ios-browser' : persisted ? 'persisted' : 'best-effort', hasData };
 }
 
-/** 首頁「加入主畫面」提示按「稍後」：7 天內不再提示 */
-export const snoozeHomeScreenHint = () =>
-  db.setMeta(HOME_SCREEN_SNOOZE_KEY, new Date(Date.now() + HOME_SCREEN_SNOOZE_DAYS * 86400000).toISOString());
+/* ===== 安裝 App（views/installGuide.js；規則在 install.js） ===== */
+// 教學順序：安裝 → 新手教學。不是從主畫面開啟、沒看過的人，打開首頁時先顯示一次安裝教學（已經在用的人也是）
+// 「稍後」3 天後在首頁顯示一條小提示，關掉就不再出現；
+// 例外：iPhone 的瀏覽器裡已經有資料（7 天沒打開可能被清掉），關掉、略過都只安靜 7 天
+
+const INSTALL_KEY = 'installGuide'; // { seenAt, choice, hintAfter, quiet }；不匯出、匯入取代全部也不清除
+export const INSTALL_PROMPT_EVENT = 'coffee:installprompt'; // 瀏覽器說「現在可以安裝」（或不行了）時發出
+
+let installPrompt = null; // Android／電腦 Chrome、Edge 的 beforeinstallprompt 事件（留著，等使用者按「安裝」）
+
+/** app.js 一啟動就呼叫：事件很早就來，教學還沒打開也要先留著 */
+export function watchInstallPrompt() {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault(); // 不讓瀏覽器自己跳出橫幅
+    installPrompt = e;
+    window.dispatchEvent(new Event(INSTALL_PROMPT_EVENT));
+  });
+  window.addEventListener('appinstalled', () => {
+    installPrompt = null;
+    window.dispatchEvent(new Event(INSTALL_PROMPT_EVENT));
+  });
+}
+
+export const canPromptInstall = () => Boolean(installPrompt);
+
+/** 叫出系統的安裝視窗（要在點擊當下呼叫）→ 'accepted' | 'dismissed' | 'unavailable'；同一個事件只能用一次 */
+export async function promptInstall() {
+  const e = installPrompt;
+  if (!e) return 'unavailable';
+  installPrompt = null;
+  try {
+    await e.prompt();
+    return (await e.userChoice)?.outcome === 'accepted' ? 'accepted' : 'dismissed';
+  } catch (err) {
+    console.warn('無法叫出安裝視窗', err);
+    return 'unavailable';
+  } finally {
+    window.dispatchEvent(new Event(INSTALL_PROMPT_EVENT));
+  }
+}
+
+/** 已經是安裝好的 App（從主畫面開啟） */
+export const isStandalone = () => push.isStandalone();
+export const INSTALL_CHOICES = install.PLATFORM_CHOICES;
+export const installPlatform = () =>
+  install.detectPlatform({ userAgent: navigator.userAgent, maxTouchPoints: navigator.maxTouchPoints });
+
+/** 安裝教學要用的：{ platform, hasData }（hasData＝瀏覽器裡已經有紀錄，iPhone 要先備份再安裝） */
+export const getInstallInfo = async () => ({ platform: installPlatform(), hasData: await hasLocalData() });
+
+/** 要不要主動顯示安裝教學；回答「要」的同時就記成看過（和 claimOnboarding 一樣，中途關掉也算） */
+export async function claimInstallGuide() {
+  if (isStandalone()) return false;
+  const now = Date.now();
+  if (!install.guideState(await db.getMeta(INSTALL_KEY), { now }).auto) return false;
+  await db.setMeta(INSTALL_KEY, install.guideSeen(now));
+  return true;
+}
+
+/** 教學關掉時的選擇：'later'（稍後、Esc）｜'skip'（略過）｜'installed' */
+export async function recordInstallChoice(choice) {
+  await db.setMeta(INSTALL_KEY, install.afterChoice(await db.getMeta(INSTALL_KEY), choice, Date.now()));
+}
+
+/**
+ * 已經裝好了、但現在是在瀏覽器的分頁裡（Android：裝完還留在 Chrome）：新手教學留給主畫面的 App 第一次打開時
+ * （兩邊共用資料，在這裡顯示過，主畫面那邊就不會再顯示了）
+ */
+export const installedElsewhere = async () =>
+  !isStandalone() && (await db.getMeta(INSTALL_KEY))?.choice === 'installed';
+
+/** 首頁的小提示：{ show, sticky }（sticky＝iPhone 的瀏覽器裡有資料，關掉只安靜 7 天） */
+export async function getInstallHint() {
+  if (isStandalone()) return { show: false, sticky: false };
+  const sticky = needsHomeScreen() && await hasLocalData();
+  const { hint } = install.guideState(await db.getMeta(INSTALL_KEY), { now: Date.now(), sticky });
+  return { show: hint, sticky };
+}
+
+export async function dismissInstallHint() {
+  await db.setMeta(INSTALL_KEY, install.afterDismiss(await db.getMeta(INSTALL_KEY), Date.now()));
+}
 
 /* ===== 備份提醒 ===== */
 
@@ -1409,7 +1482,7 @@ export async function signOut() {
 }
 
 /** LINE、Facebook、Instagram 等 App 內建的瀏覽器：Google 不允許在裡面登入 */
-export const isInAppBrowser = () => /\bLine\/|FBAN|FBAV|Instagram|MicroMessenger/i.test(navigator.userAgent);
+export const isInAppBrowser = () => install.IN_APP_RE.test(navigator.userAgent);
 
 /* ----- 暱稱與頭像 ----- */
 
