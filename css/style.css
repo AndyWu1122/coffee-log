@@ -670,6 +670,29 @@ input:focus, select:focus, textarea:focus {
 }
 
 .filter-bar { display: grid; grid-template-columns: 3fr 2fr; gap: 10px; }
+/* 首頁上方的「手沖｜拉花」 */
+.home-tabs { margin-bottom: 12px; }
+/* 拉花的圖案篩選：一排可以橫向捲動的小按鈕（點擊範圍 44px） */
+.chips {
+  display: flex; gap: 8px;
+  overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+  margin: 0 calc(-1 * var(--gap)); padding: 0 var(--gap);
+}
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+}
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+/* 拉花表單的圖案：兩欄的大按鈕，沖咖啡時單手好按 */
+.pattern-picker .segmented button { min-height: 60px; font-size: 1.05rem; }
 .list-meta {
   display: flex;
   justify-content: space-between;
@@ -1007,7 +1030,7 @@ a.feed-body:active { background: var(--surface-2); }
 .stats-filters { display: grid; gap: 10px; }
 .stats-empty { padding: 32px 16px; }
 .stats-overview { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.stat-tile, .stats-card {
+.stat-tile, .stats-card, .latte-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1021,9 +1044,13 @@ a.feed-body:active { background: var(--surface-2); }
   font-size: 1.05rem; line-height: 1.35;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
 }
-.stats-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-.stats-card h2 { margin: 0; font-size: 1.05rem; }
-.stats-card > .hint { margin: 0; font-size: 0.85rem; }
+.stats-card, .latte-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.stats-card h2, .latte-card h2 { margin: 0; font-size: 1.05rem; }
+.stats-card > .hint, .latte-card > .hint { margin: 0; font-size: 0.85rem; }
+/* 統計頁的拉花：兩個小數字並排（卡片裡的 tile 用底色區分，不再加框） */
+.latte-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.latte-tiles .stat-tile { background: var(--surface-2); border-color: transparent; }
+.latte-card > .btn { justify-self: start; }
 .stats-sub { margin: 6px 0 0; font-size: 0.95rem; font-weight: 600; color: var(--text-dim); }
 .chart-empty { margin: 8px 0; }
 .chart-detail { margin: 0; min-height: 1.5em; font-size: 0.9rem; color: var(--text); font-variant-numeric: tabular-nums; }

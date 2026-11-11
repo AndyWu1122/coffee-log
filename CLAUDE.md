@@ -40,11 +40,11 @@ js/cloud.js        # 唯一存取 Supabase 的地方（角色和 db.js 一樣）
 js/sync.js         # 好友紀錄的同步（本機 friends 紀錄 → shared_brews）、熱度圖的同步（→ brew_activity），只由 models.js 使用
 js/push.js         # 推播通知的瀏覽器那一邊（Notification、PushManager、iOS 主畫面判斷），只由 models.js 使用
 js/vendor/         # 第三方檔案原封不動（supabase-js UMD、qrcode-generator），來源與 SRI 見 js/vendor/README.md
-js/views/          # brewList, brewForm, beanList, beanForm, grinderList, grinderForm, dripperList, dripperForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, changelog（更新內容）, settings（設定與關於）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, profile（個人檔案）, stats（統計：SVG 圖表）, originMap（產地地圖「我的足跡」＋路由）, originExplore（產地地圖「認識產區」：介紹、圖鑑、想買清單）, originMapSvg（兩個模式共用的座標、放大範圍、模式切換、風味標籤）, privacy（隱私說明）, feedback（意見回饋）, notifications（通知設定）, admin（開發者後台）, tour（新手教學：遮罩＋說明卡片，不是路由）, heatmap（沖煮熱度圖的 SVG，統計／帳號／個人檔案共用）, ui（共用 DOM 工具）
+js/views/          # brewList（首頁＋「手沖｜拉花」切換）, brewForm, latteList（首頁的拉花分頁，由 brewList 呼叫）, latteForm（拉花表單）, beanList, beanForm, grinderList, grinderForm, dripperList, dripperForm, backup, shareCard（分享卡片頁＋Canvas 繪製）, flavorPicker（風味輪 SVG）, changelog（更新內容）, settings（設定與關於）, account（帳號）, friends（好友管理）, feed（社群：全部／我的）, feedDetail（紀錄詳細、編輯連結、檢舉、封鎖）, comments（詳細頁的留言區）, profile（個人檔案）, stats（統計：SVG 圖表）, originMap（產地地圖「我的足跡」＋路由）, originExplore（產地地圖「認識產區」：介紹、圖鑑、想買清單）, originMapSvg（兩個模式共用的座標、放大範圍、模式切換、風味標籤）, privacy（隱私說明）, feedback（意見回饋）, notifications（通知設定）, admin（開發者後台）, tour（新手教學：遮罩＋說明卡片，不是路由）, heatmap（沖煮熱度圖的 SVG，統計／帳號／個人檔案共用）, ui（共用 DOM 工具）
 icons/             # icons/flags/<小寫國家代碼>.svg：產地地圖的國旗（只有 COUNTRIES 的 32 國，svgo 壓縮過，來源與壓縮方式見 icons/flags/README.md）
 docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟、部署指令）、overnight-report.md（2026-10-26 通宵工作的報告）、roadmap.md（之後要開發、還沒開始的功能）、user-feedback.md（使用者回饋、判斷與決定）
 supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）、functions/admin-delete-user（開發者刪別人的帳號）、functions/_shared/account.ts（兩者共用的刪除流程）、functions/feedback（意見回饋：存檔＋寄 Email 給站長；mail.ts 是設定檢查與錯誤說明的純函式）、functions/send-push（推播通知）、functions/_shared/webpush.ts（VAPID 簽章與 RFC 8291 加密，只用 Web Crypto）、functions/_shared/local.ts（`isLocalSupabase`：只有已知的本機網址才用公開的測試金鑰，其他一律當正式環境）
-scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs、webpush-test.mjs、onboarding-test.mjs、bean-photo-test.mjs、heatmap-test.mjs、origins-test.mjs、origin-map-ui-test.mjs、brew-ui-test.mjs、storage-test.mjs、glass-contrast-test.mjs（最後十四個不需要 Supabase）、build-worldmap.mjs（產生 js/worldMap.js，不是測試）、supabase-activity-test.mjs、social-heatmap-test.mjs、supabase-push-test.mjs、social-push-test.mjs、push-helpers.mjs（推播測試共用：解密、假推播伺服器）、vapid-keys.mjs（站長產生正式金鑰用，不是測試）
+scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs、webpush-test.mjs、onboarding-test.mjs、bean-photo-test.mjs、heatmap-test.mjs、origins-test.mjs、origin-map-ui-test.mjs、brew-ui-test.mjs、storage-test.mjs、glass-contrast-test.mjs、latte-test.mjs、latte-ui-test.mjs（最後十六個不需要 Supabase）、build-worldmap.mjs（產生 js/worldMap.js，不是測試）、supabase-activity-test.mjs、social-heatmap-test.mjs、supabase-push-test.mjs、social-push-test.mjs、push-helpers.mjs（推播測試共用：解密、假推播伺服器）、vapid-keys.mjs（站長產生正式金鑰用，不是測試）
 tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mjs 用 headless Chrome 開；不屬於 App、不放進 ASSETS）
 ```
 
@@ -52,7 +52,7 @@ tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mj
 views → models → db／cloud，每層只呼叫下一層。views 不可直接碰 IndexedDB 或 Supabase。
 - view 的事件監聽器掛在這一頁自己的元素上，**不要掛在 `render` 收到的 container（`#app`）**：`#app` 換頁不會被替換，監聽器會殘留並帶著舊資料處理之後的點擊
 
-## 資料模型（備份 schemaVersion: 8／IndexedDB DB_VERSION: 8）
+## 資料模型（備份 schemaVersion: 9／IndexedDB DB_VERSION: 9）
 **beans**：id, name, origin(產地文字，表單上叫「莊園 / 批次」), country(國家代碼，選填，'' ＝沒選；v1.15.0 加入), region(產區 key 如 'ET.yirgacheffe'，選填，必須屬於 country), process(washed/natural/honey/other), roastLevel(light/light-medium/medium-light/medium/dark，即 淺/淺中/中淺/中/深焙), roastDate(YYYY-MM-DD), bagWeightG(整包重量 g，選填), archived(bool), createdAt
 **grinders**：id, name(必填), notes(選填，例如刻度說明), archived(bool), createdAt
 **drippers**（DB v6 加入）：id, name(必填，≤ 100 字), notes(選填), archived(bool), createdAt
@@ -65,6 +65,12 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
   - 豆子列表卡片右邊顯示縮圖（和紀錄卡片同樣的 `.has-thumb`／`.card-thumb`），離開頁面時 revoke
   - **只存在這支手機、不上傳到社群**（雲端結構、權限都沒有豆子照片）；隱私說明有寫
 **wishlist**（DB v8 加入，keyPath key）：key(`region:<產區 key>`), kind('region'), target(產區 key), createdAt；想買清單，只存在這支手機、**會匯出**（之後「好友的豆子推薦」也放這裡，用別的 kind）
+**latteArts**（DB v9 加入，keyPath id，索引 madeAt、espressoBeanId）：id, madeAt, pattern(heart/tulip/rosetta/swan/other＝愛心/鬱金香/葉子/天鵝/其他，`models.LATTE_PATTERNS`，**key 不能改名**), patternNote(選「其他」時的說明，≤ 50 字), milk(≤ 50), cup(≤ 50), espressoBeanId(選填，'' ＝不指定), selfScore(1–5 整數，必填), notes, visibility(private/friends；1.24.0 表單還沒有「誰看得到」，一律 private), createdAt
+**latteArtPhotos**／**latteArtThumbs**（DB v9 加入，keyPath artId）：拉花的照片（每杯最多 1 張），格式、處理方式和 photos／thumbs 完全一樣；**另開 store、不和紀錄照片共用**（photos 的 key 是 brewId，備份、匯入驗證、同步都直接 getAll('photos') 當成紀錄的照片）
+  - `saveLatteArt(input, { photo })`／`deleteLatteArt` 和 `saveBrew` 同樣的語意（`db.transact` 涵蓋 latteArts、latteArtPhotos、latteArtThumbs）
+  - 首頁上方「手沖｜拉花」（`.home-tabs`）記在 meta `homeTab`（不放 localStorage）；`#/?bean=` 會切回手沖；拉花分頁：依日期分組的卡片（圖案、自評星星、牛奶／杯子／豆子、縮圖）、圖案篩選（`.latte-filter .chip`，切頁後保留）；＋ 依分頁到 `#/brew/new` 或 `#/latte/new`
+  - 表單：照片在最上面 → 圖案（兩欄大按鈕，選「其他」才出現說明）→ 自評 → 牛奶、杯子（`<datalist>` 列以前用過的）→ 豆子（選填，預設上一杯拉花用的）→ 時間 → 筆記；「再拉一杯」（`latteTemplateFrom`）帶入圖案（含說明）、牛奶、杯子、豆子
+  - 被拉花引用的豆子也不能刪，只能封存；「有資料」（資料保存、新手教學、更新內容）與備份提醒都把拉花算進去
 **sync**（DB v5 加入，keyPath brewId）：brewId, userId, row(上次同步的 shared_brews 內容 JSON), photoAt(上次同步的照片 createdAt), error(''/rate_limited/invalid/failed/removed), failedRow, failedOn；**不匯出、匯入取代全部時也不清除**
 - brews 建索引：beanId、brewedAt、grinderId（v2 加入）、dripperId（v6 加入）
 - **沖煮方式（1.21.0）**：表單最上面「手沖｜賽風」；賽風隱藏濾杯欄位、存檔時 `dripperId` 一律 ''（`normalizeBrew`）；新紀錄預設和最近一筆一樣（`defaultBrewMethod`），「帶入上次參數」「再沖一杯」也帶入；首頁卡片、分享卡片、社群的賽風紀錄在濾杯的位置標「賽風」，手沖不另外標；沒有加 DB 欄位索引，所以 DB_VERSION 不變
@@ -82,7 +88,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - id 用 crypto.randomUUID()
 
 ## 路由（hash）
-`#/` 紀錄列表（`?bean=<id>` 帶入豆子篩選，統計頁用）｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/drippers`｜`#/drippers/new`｜`#/drippers/<id>`｜`#/account` 帳號｜`#/friends` 好友管理｜`#/social` 社群（全部）｜`#/social?mine=1` 社群（我的）｜`#/social/<owner>/<id>` 紀錄詳細（`?comments=1` 捲到留言區）｜`#/user/<id>` 個人檔案｜`#/stats` 統計｜`#/origins` 產地地圖｜`#/origins/<國家代碼>` 放大到一個國家（`?mode=explore` 認識產區，`&region=<產區 key>` 直接打開那個產區）｜`#/privacy` 隱私說明｜`#/changelog` 更新內容｜`#/settings` 設定與關於｜`#/feedback` 意見回饋｜`#/notifications` 通知設定｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）｜`#/admin?tab=reports|posts|users|feedback|log` 開發者後台｜`#/admin/user/<id>`｜`#/admin/post/<owner>/<id>`
+`#/` 紀錄列表（`?bean=<id>` 帶入豆子篩選，統計頁用）｜`#/brew/new`｜`#/brew/new?from=<id>` 複製參數新增｜`#/brew/<id>` 編輯｜`#/brew/<id>/share` 分享卡片｜`#/latte/new`｜`#/latte/new?from=<id>` 再拉一杯｜`#/latte/<id>` 編輯拉花｜`#/beans`｜`#/beans/new`｜`#/beans/<id>`｜`#/backup` 匯出匯入｜`#/grinders`｜`#/grinders/new`｜`#/grinders/<id>`｜`#/drippers`｜`#/drippers/new`｜`#/drippers/<id>`｜`#/account` 帳號｜`#/friends` 好友管理｜`#/social` 社群（全部）｜`#/social?mine=1` 社群（我的）｜`#/social/<owner>/<id>` 紀錄詳細（`?comments=1` 捲到留言區）｜`#/user/<id>` 個人檔案｜`#/stats` 統計｜`#/origins` 產地地圖｜`#/origins/<國家代碼>` 放大到一個國家（`?mode=explore` 認識產區，`&region=<產區 key>` 直接打開那個產區）｜`#/privacy` 隱私說明｜`#/changelog` 更新內容｜`#/settings` 設定與關於｜`#/feedback` 意見回饋｜`#/notifications` 通知設定｜`#/friends/add?code=<好友代碼>`（QR code 連到這裡）｜`#/admin?tab=reports|posts|users|feedback|log` 開發者後台｜`#/admin/user/<id>`｜`#/admin/post/<owner>/<id>`
 - 1.1.0 以前的 `#/feed`、`#/feed/<owner>/<id>` 由 app.js 轉址到 `#/social…`
 
 ## 介面配置
@@ -154,6 +160,11 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 - 點擊（不是 hover）才顯示詳細數字（圖下方的 `.chart-detail`）；橫條每列 ≥ 44px；點「每支豆子」的長條跳到 `#/?bean=<id>`
 - 橫條：名稱｜長條｜數值三欄（名稱太長截斷），各列長條同寬才能比較；每週超過 14 週改成在自己的框裡橫向捲動（Y 軸固定在框外）
 - 測試：`stats-test.mjs`（計算）、`stats-ui-test.mjs`（390px、深淺色、有資料／沒資料的截圖、文字重疊、CSP）
+- **拉花（1.24.0）**：最下面一張 `#stats-latte`（外層 `.latte-card`，**不是 `.stats-card`**，理由同熱度圖）；`getStats` 回傳的 `latte`＝`stats.computeLatteStats`；只套用期間（豆子、沖煮方式篩選是手沖的）；手沖不到 3 杯時照樣顯示
+  - 本月練習幾杯（本機日期的日曆月，不受期間影響）、期間內幾杯；每種圖案的平均自評（依 pattern 分組，「其他」不分說明；樣本少的規則同手沖）；自評的變化（和評分變化同一個圖 `ratingChartHtml(trend, { kind: 'latte' })`，點的欄位是 `at`、`rating`、`label`）
+  - 沒有任何拉花：卡片寫「還沒有拉花紀錄」＋連結到 `#/latte/new`
+  - 熱度圖、產地地圖只算手沖
+  - 測試：`latte-test.mjs`（Node：平均、樣本少、移動平均、期間、本月邊界）、`latte-ui-test.mjs`（headless Chrome：從 DB v8（commit e3af7c2 的 db.js）升級、首頁切換與記住、表單、照片 EXIF、再拉一杯、篩選、豆子不能刪、備份 v9／v8／v1、統計卡片、XSS、深淺色截圖、CSP）
 
 ## 沖煮熱度圖（1.14.0）
 - GitHub 風格：53 欄（週，最右是本週）× 7 列（週一→週日），每天一個圓點，今天加外框；上方月份、左邊「一、三、五」；圖例「少 ○○○○○ 多」；下方近一年總杯數、目前連續、最長連續
@@ -212,12 +223,13 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 ## 備份
 - 匯出全部資料為 JSON（含 schemaVersion），可匯入還原
 - 匯入分「合併」（依 id 覆蓋）與「取代全部」；整份檔案驗證通過才在單一交易內寫入
-- 匯入接受 schemaVersion 1–8：v1–v7 的紀錄沒有 method（補成手沖；不認得的值整份不匯入）；v1–v6 沒有 wishlist（視為空陣列，「取代全部」會清空想買清單）；wishlist 只認得 kind 'region' 且產區在清單裡，否則整份不匯入；v1–v5 的豆子沒有 country、region（補成 ''）；不認得的國家、對不上的產區整份不匯入；v1 沒有 grinders（視為空陣列），brews 沒有 grinderId（補成 ''）；v1、v2 沒有 photos（視為空陣列）；v1–v4 沒有 beanPhotos（視為空陣列）
+- 匯入接受 schemaVersion 1–9：v1–v8 沒有 latteArts、latteArtPhotos（視為空陣列，「取代全部」會清空拉花）；拉花的驗證和表單同一套（`validateLatteArt`），引用的豆子要在檔案裡（合併時也可以是本機的），否則整份不匯入；v1–v7 的紀錄沒有 method（補成手沖；不認得的值整份不匯入）；v1–v6 沒有 wishlist（視為空陣列，「取代全部」會清空想買清單）；wishlist 只認得 kind 'region' 且產區在清單裡，否則整份不匯入；v1–v5 的豆子沒有 country、region（補成 ''）；不認得的國家、對不上的產區整份不匯入；v1 沒有 grinders（視為空陣列），brews 沒有 grinderId（補成 ''）；v1、v2 沒有 photos（視為空陣列）；v1–v4 沒有 beanPhotos（視為空陣列）
 - v1–v3 沒有 drippers：用和 DB 升級同一套規則（`mergeDripperNames`）從紀錄的濾杯文字建立；「合併」時名稱相同的沿用本機已有的濾杯（含封存），「取代全部」時全部新建；v4 的紀錄指向不存在的濾杯就整份不匯入
 - 照片（v3）：匯出時可選「包含照片」（預設開），`photos: [{ brewId, width, height, createdAt, data(base64 JPEG) }]`，`photosIncluded` 記錄有沒有勾；匯出前顯示預估檔案大小
-- 豆子照片（v5）：`beanPhotos: [{ beanId, width, height, createdAt, data }]`，跟著同一個「包含照片」；驗證規則和紀錄照片同一套（`parseImportPhotos` 的 kind `bean`）；備份頁、匯入結果的「n 張照片」是兩種合計
+- 豆子照片（v5）：`beanPhotos: [{ beanId, width, height, createdAt, data }]`，跟著同一個「包含照片」；驗證規則和紀錄照片同一套（`parseImportPhotos` 的 kind `bean`）；備份頁、匯入結果的「n 張照片」是紀錄、豆子、拉花合計
+- 拉花（v9）：`latteArts`、`latteArtPhotos: [{ artId, width, height, createdAt, data }]`，跟著同一個「包含照片」，驗證用 `parseImportPhotos` 的 kind `latte`
 - 匯入照片的驗證：brewId 對得到紀錄、不重複、base64 正確、≤ 2MB、JPEG 檔頭解析得出尺寸（≤ 4096px），再實際解碼產生縮圖；任一張失敗整份不匯入
-- 「取代全部」連照片（含豆子照片）一起清空
+- 「取代全部」連照片（含豆子、拉花的照片）一起清空
 - 按「匯出」就記下 lastBackupAt（瀏覽器無法確認檔案是否存好；匯入不算備份）
   - **例外（1.22.3）**：LINE、Facebook 等 App 內建的瀏覽器（`models.isInAppBrowser()`）會忽略 `<a download>`，所以不下載：「匯出 JSON」只準備檔案 → 再按「分享備份檔」（`navigator.share`，要在點擊當下呼叫）→ 分享完成才記 lastBackupAt；`canShare` 不支援就寫「還沒有備份」、請用 Safari／Chrome；首頁的「立即備份」「匯出備份」在這裡改成到備份頁
   - 什麼都沒有（豆子、磨豆機、濾杯、紀錄、想買清單都是 0，`getBackupSummary().empty`）時不匯出，只提示；按下時才檢查，按鈕不停用

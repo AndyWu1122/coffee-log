@@ -16,7 +16,7 @@ const ratioRange = (from, to) => `1:${from}–1:${to}`;
 
 export async function render(container, { isCurrent }) {
   setTitle('統計');
-  const [{ stats, beanOptions, beanId, methodOptions, method }, heatmap] = await Promise.all([getStats(filter), getMyHeatmap(filter.heatMode)]);
+  const [{ stats, beanOptions, beanId, methodOptions, method, latte }, heatmap] = await Promise.all([getStats(filter), getMyHeatmap(filter.heatMode)]);
   if (!isCurrent()) return;
   filter.beanId = beanId;
   filter.method = method;
@@ -39,6 +39,7 @@ export async function render(container, { isCurrent }) {
       <p>${stats.cups ? `這段期間只有 ${stats.cups} 杯，` : '這段期間還沒有紀錄，'}多記幾杯就能看到趨勢</p>
       ${filter.period !== 'all' && beanOptions.length ? '<p class="hint">也可以切到「全部」看看。</p>' : ''}
     </div>`}
+    ${latteHtml(latte)}
   </div>`;
 
   const page = container.querySelector('#stats-page');
@@ -47,9 +48,10 @@ export async function render(container, { isCurrent }) {
   bindSegmented(page.querySelector('.stats-filters'), (name, value) => { filter.period = value || filter.period; rerender(); });
   page.querySelector('#stats-bean').addEventListener('change', (e) => { filter.beanId = e.target.value; rerender(); });
   page.querySelector('#stats-method')?.addEventListener('change', (e) => { filter.method = e.target.value; rerender(); });
-  if (!stats.enough) return;
-  bindRatingChart(page, stats.ratingTrend);
   bindDetails(page);
+  bindRatingChart(page.querySelector('.chart-latte'), latte.trend);
+  if (!stats.enough) return;
+  bindRatingChart(page.querySelector('.chart-rating'), stats.ratingTrend);
   // 每週的圖很寬時（在自己的框裡橫向捲動）：預設捲到最新的一週
   const weekScroll = page.querySelector('.stats-card .chart-scroll');
   if (weekScroll) weekScroll.scrollLeft = weekScroll.scrollWidth;
@@ -98,8 +100,9 @@ const LINE = { w: 340, h: 190, left: 26, right: 10, top: 12, bottom: 26 };
 const lineX = (i, n) => LINE.left + (n === 1 ? 0.5 : i / (n - 1)) * (LINE.w - LINE.left - LINE.right);
 const lineY = (v) => LINE.top + ((5 - v) / 4) * (LINE.h - LINE.top - LINE.bottom);
 
-function ratingChartHtml({ points, movingAvg }) {
-  if (points.length < 3) return notEnough('有評分的紀錄少於 3 杯，多記幾杯有評分的就能看到變化');
+/** 評分（自評）隨時間的折線圖；手沖、拉花共用（點的 at、rating、label） */
+function ratingChartHtml({ points, movingAvg }, { kind = 'rating', title = '評分變化', empty = '有評分的紀錄少於 3 杯，多記幾杯有評分的就能看到變化' } = {}) {
+  if (points.length < 3) return notEnough(empty);
   const n = points.length;
   const grid = [1, 2, 3, 4, 5].map((v) => `
     <line class="chart-grid" x1="${LINE.left}" x2="${LINE.w - LINE.right}" y1="${lineY(v)}" y2="${lineY(v)}"></line>
@@ -110,25 +113,24 @@ function ratingChartHtml({ points, movingAvg }) {
   const r = n > 60 ? 3 : 4;
   const dots = points.map((p, i) => `<circle class="chart-dot" data-i="${i}" cx="${lineX(i, n).toFixed(1)}" cy="${lineY(p.rating).toFixed(1)}" r="${r}"></circle>`).join('');
   const xLabels = `
-    <text class="chart-label" x="${LINE.left}" y="${LINE.h - 6}" text-anchor="start">${esc(mdOf(points[0].brewedAt))}</text>
-    <text class="chart-label" x="${LINE.w - LINE.right}" y="${LINE.h - 6}" text-anchor="end">${esc(mdOf(points[n - 1].brewedAt))}</text>`;
+    <text class="chart-label" x="${LINE.left}" y="${LINE.h - 6}" text-anchor="start">${esc(mdOf(points[0].at))}</text>
+    <text class="chart-label" x="${LINE.w - LINE.right}" y="${LINE.h - 6}" text-anchor="end">${esc(mdOf(points[n - 1].at))}</text>`;
   return `
     <div class="chart-legend">
       <span><i class="legend-dot"></i>每一杯</span>
       ${movingAvg.length > 1 ? '<span><i class="legend-line"></i>7 杯平均</span>' : '<span class="hint">滿 8 杯會畫出 7 杯平均</span>'}
     </div>
-    <svg class="chart chart-rating" viewBox="0 0 ${LINE.w} ${LINE.h}" role="img"
-      aria-label="評分變化，${n} 杯，從 ${esc(mdOf(points[0].brewedAt))} 到 ${esc(mdOf(points[n - 1].brewedAt))}">
+    <svg class="chart chart-${kind}" viewBox="0 0 ${LINE.w} ${LINE.h}" role="img"
+      aria-label="${esc(title)}，${n} 杯，從 ${esc(mdOf(points[0].at))} 到 ${esc(mdOf(points[n - 1].at))}">
       ${grid}${ma}${dots}${xLabels}
       <rect class="chart-hit" x="${LINE.left - 10}" y="0" width="${LINE.w - LINE.left - LINE.right + 20}" height="${LINE.h - LINE.bottom + 6}"></rect>
     </svg>`;
 }
 
 /** 折線圖：點哪裡就選最近的那一杯（點很密時也點得到） */
-function bindRatingChart(page, { points, movingAvg }) {
-  const svg = page.querySelector('.chart-rating');
+function bindRatingChart(svg, { points, movingAvg }) {
   if (!svg) return;
-  const detail = svg.closest('.stats-card').querySelector('.chart-detail');
+  const detail = svg.closest('.stats-card, .latte-card').querySelector('.chart-detail');
   const maAt = new Map(movingAvg.map((m) => [m.index, m.value]));
   svg.querySelector('.chart-hit').addEventListener('click', (e) => {
     const rect = svg.getBoundingClientRect();
@@ -140,7 +142,7 @@ function bindRatingChart(page, { points, movingAvg }) {
     for (const dot of svg.querySelectorAll('.chart-dot')) dot.classList.toggle('is-selected', Number(dot.dataset.i) === best);
     const p = points[best];
     const avg = maAt.has(best) ? `（7 杯平均 ${maAt.get(best).toFixed(1)}）` : '';
-    detail.textContent = `${mdOf(p.brewedAt)} ${p.beanName}：${p.rating} 分${avg}`;
+    detail.textContent = `${mdOf(p.at)} ${p.label}：${p.rating} 分${avg}`;
   });
 }
 
@@ -266,13 +268,43 @@ function weeklyChartHtml(weeks) {
   </div>`;
 }
 
+/* ===== 7. 拉花（只套用期間；外層是 .latte-card，不是 .stats-card：手沖的圖表、測試用 .stats-card 找） ===== */
+
+function latteHtml(l) {
+  if (!l.total) {
+    return `<section class="latte-card" id="stats-latte">
+      <h2>拉花</h2>
+      <p class="hint">還沒有拉花紀錄。在紀錄頁上方切到「拉花」就能開始記錄。</p>
+      <a class="btn" href="#/latte/new">記錄一杯拉花</a>
+    </section>`;
+  }
+  const period = STATS_PERIODS.find((p) => p.value === filter.period)?.label ?? '';
+  const rows = l.patterns.map((p) => detailRow({
+    name: p.name, value: p.avg, max: 5, label: `${score(p.avg)}${cupsNote(p.cups, p.small)}`,
+    detail: `${p.name}：平均自評 ${score(p.avg)} 分，${p.cups} 杯${p.small ? '（樣本少，參考就好）' : ''}`,
+  })).join('');
+  return `<section class="latte-card" id="stats-latte">
+    <h2>拉花</h2>
+    <p class="hint">自己打的分數・圖案與進步曲線只算${esc(period)}</p>
+    <div class="latte-tiles">
+      <div class="stat-tile"><div class="stat-label">本月練習</div><div class="stat-value">${l.thisMonth} 杯</div></div>
+      <div class="stat-tile"><div class="stat-label">${esc(period)}</div><div class="stat-value">${l.cups} 杯</div></div>
+    </div>
+    <h3 class="stats-sub">每種圖案的平均自評</h3>
+    ${rows ? `<div class="hbars is-stacked">${rows}${scoreAxis()}</div>` : notEnough('這段期間沒有拉花紀錄')}
+    <h3 class="stats-sub">自評的變化</h3>
+    ${ratingChartHtml(l.trend, { kind: 'latte', title: '拉花自評的變化', empty: '這段期間少於 3 杯，多拉幾杯就能看到進步曲線' })}
+    <p class="chart-detail" aria-live="polite">點圖表看詳細數字</p>
+  </section>`;
+}
+
 /* ===== 點擊顯示詳細（長條、直條共用） ===== */
 
 function bindDetails(page) {
   page.addEventListener('click', (e) => {
     const target = e.target.closest('[data-detail]');
     if (!target) return;
-    const cardEl = target.closest('.stats-card');
+    const cardEl = target.closest('.stats-card, .latte-card');
     cardEl.querySelector('.chart-detail').textContent = target.dataset.detail;
     for (const el of cardEl.querySelectorAll('.is-selected')) el.classList.remove('is-selected');
     target.classList.add('is-selected');

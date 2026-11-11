@@ -49,7 +49,7 @@ export async function render(container, { isCurrent }) {
     <section class="section panel" id="export-section">
       <h2>匯出</h2>
       <p class="last-backup${status.remind ? ' is-overdue' : ''}" id="last-backup">${esc(lastBackupText(status))}</p>
-      <p class="hint">${summary.empty ? '還沒有資料可以匯出。' : `目前有 ${summary.beans} 支豆子、${summary.grinders} 台磨豆機、${summary.drippers} 支濾杯、${summary.brews} 筆紀錄、${summary.photos} 張照片。`}資料只存在這支手機上，建議定期匯出，存到雲端硬碟。</p>
+      <p class="hint">${summary.empty ? '還沒有資料可以匯出。' : `目前有 ${summary.beans} 支豆子、${summary.grinders} 台磨豆機、${summary.drippers} 支濾杯、${summary.brews} 筆紀錄、${summary.latteArts} 杯拉花、${summary.photos} 張照片。`}資料只存在這支手機上，建議定期匯出，存到雲端硬碟。</p>
       ${inApp ? `<div class="notice" id="in-app-notice">你現在是在 LINE、Facebook 這類 App 內建的瀏覽器裡：這裡不能直接下載檔案，而且這裡的資料和 Safari／Chrome 是分開的。要把這裡的資料帶走，請按「匯出 JSON」後再按「分享備份檔」。</div>` : ''}
       <label class="switch-row is-compact"><input type="checkbox" id="include-photos" checked><span>包含照片</span></label>
       <p class="hint" id="export-size"></p>
@@ -150,7 +150,7 @@ export async function render(container, { isCurrent }) {
     const replace = segmentedValue(container, 'mode') === 'replace';
     if (replace) {
       const current = await getBackupSummary();
-      const ok = confirm(`將刪除現有的 ${current.beans} 支豆子、${current.grinders} 台磨豆機、${current.drippers} 支濾杯、${current.brews} 筆紀錄、${current.photos} 張照片，改用備份檔內容。確定？`);
+      const ok = confirm(`將刪除現有的 ${current.beans} 支豆子、${current.grinders} 台磨豆機、${current.drippers} 支濾杯、${current.brews} 筆紀錄、${current.latteArts} 杯拉花、${current.photos} 張照片，改用備份檔內容。確定？`);
       if (!ok) return;
     }
 
@@ -174,7 +174,7 @@ export async function render(container, { isCurrent }) {
         </div>`;
       return;
     }
-    toast(`已匯入 ${result.beans} 支豆子、${result.grinders} 台磨豆機、${result.drippers} 支濾杯、${result.brews} 筆紀錄、${result.photos} 張照片`);
+    toast(`已匯入 ${result.beans} 支豆子、${result.grinders} 台磨豆機、${result.drippers} 支濾杯、${result.brews} 筆紀錄、${result.latteArts} 杯拉花、${result.photos} 張照片`);
     notifyBadgesChanged(); // 紀錄變了，該不該備份可能跟著變
     location.hash = '#/';
   });

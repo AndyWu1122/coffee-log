@@ -584,7 +584,7 @@ try {
 
   /* ===== 備份 ===== */
   const exported = await page.eval(`import('/js/models.js').then((m) => m.exportData({ includePhotos: false })).then((d) => ({ v: d.schemaVersion, guji: d.beans.find((b) => b.id === 'b-guji'), wish: d.wishlist.length }))`);
-  check('匯出 schemaVersion 8，豆子帶著國家、產區', exported.v === 8 && exported.guji.country === 'ET' && exported.guji.region === 'ET.guji', q(exported));
+  check('匯出 schemaVersion 8 以上，豆子帶著國家、產區', exported.v >= 8 && exported.guji.country === 'ET' && exported.guji.region === 'ET.guji', q(exported));
   const v5 = await page.eval(`import('/js/models.js').then(async (m) => {
     const d = await m.exportData({ includePhotos: false });
     const { wishlist, ...rest } = d; // v5 沒有想買清單
@@ -684,7 +684,7 @@ try {
   await old.waitFor(`document.querySelector('.origin-progress')`, { label: '升級後打開認識產區' });
   const upgraded = await old.eval(`import('/js/db.js').then(async (db) => { const conn = await db.openDB();
     return { version: conn.version, wishlist: conn.objectStoreNames.contains('wishlist'), beans: (await db.getAll('beans')).length, brews: (await db.getAll('brews')).length }; })`);
-  check('升級到 DB v8：多了 wishlist，舊的豆子、紀錄都在', upgraded.version === 8 && upgraded.wishlist && upgraded.beans === 2 && upgraded.brews === 3, q(upgraded));
+  check('升級到 DB v8 以上：多了 wishlist，舊的豆子、紀錄都在', upgraded.version >= 8 && upgraded.wishlist && upgraded.beans === 2 && upgraded.brews === 3, q(upgraded));
   // 沒有 App 的頁面（manifest.json）瀏覽器會自己抓 /favicon.ico，和 App 無關
   const oldErrors = old.errors.filter((e) => !e.includes('/favicon.ico'));
   const progress = await old.eval(`document.querySelector('.origin-progress-text').textContent.replace(/\\s+/g, '')`);

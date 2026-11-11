@@ -15,6 +15,9 @@ const routes = [
   { pattern: /^\/brew\/new$/, tab: 'brews', back: '#/', load: () => import('./views/brewForm.js') },
   { pattern: /^\/brew\/([\w-]+)$/, tab: 'brews', back: '#/', load: () => import('./views/brewForm.js') },
   { pattern: /^\/brew\/([\w-]+)\/share$/, tab: 'brews', back: ([id]) => `#/brew/${id}`, load: () => import('./views/shareCard.js') },
+  // 拉花（首頁上方切到「拉花」）：#/latte/new?from=<id> 是「再拉一杯」
+  { pattern: /^\/latte\/new$/, tab: 'brews', back: '#/', load: () => import('./views/latteForm.js') },
+  { pattern: /^\/latte\/([\w-]+)$/, tab: 'brews', back: '#/', load: () => import('./views/latteForm.js') },
   { pattern: /^\/beans$/, tab: 'beans', load: () => import('./views/beanList.js') },
   { pattern: /^\/beans\/new$/, tab: 'beans', back: '#/beans', load: () => import('./views/beanForm.js') },
   { pattern: /^\/beans\/([\w-]+)$/, tab: 'beans', back: '#/beans', load: () => import('./views/beanForm.js') },

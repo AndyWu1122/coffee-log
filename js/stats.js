@@ -49,6 +49,15 @@ function rankByRating(brews, keyOf, nameOf) {
   })).sort((a, b) => Number(a.small) - Number(b.small) || b.avg - a.avg || b.cups - a.cups || a.name.localeCompare(b.name));
 }
 
+/** 評分點（依時間舊→新）的 7 杯移動平均：從第 7 杯開始 [{ index, value }] */
+function movingAverage(points) {
+  const out = [];
+  for (let i = MA_WINDOW - 1; i < points.length; i++) {
+    out.push({ index: i, value: average(points.slice(i - MA_WINDOW + 1, i + 1).map((p) => p.rating)) });
+  }
+  return out;
+}
+
 /** 次數最多的前 N 名 [{ value, count }]（次數相同時值小的在前） */
 function topCounts(values) {
   const counts = new Map();
@@ -100,11 +109,11 @@ export function computeStats({ brews = [], beans = [], grinders = [], drippers =
   }
   const [topId, top] = [...beanCups].sort(([, a], [, b]) => b.cups - a.cups || b.last.localeCompare(a.last))[0] ?? [];
 
-  const points = rated.map((b) => ({ brewId: b.id, brewedAt: b.brewedAt, rating: b.rating, beanName: nameOfBean(b.beanId) }));
-  const movingAvg = [];
-  for (let i = MA_WINDOW - 1; i < points.length; i++) {
-    movingAvg.push({ index: i, value: average(points.slice(i - MA_WINDOW + 1, i + 1).map((p) => p.rating)) });
-  }
+  // at、label 是評分圖共用的欄位（拉花的自評圖也用同一個圖）
+  const points = rated.map((b) => ({
+    brewId: b.id, brewedAt: b.brewedAt, rating: b.rating, beanName: nameOfBean(b.beanId), at: b.brewedAt, label: nameOfBean(b.beanId),
+  }));
+  const movingAvg = movingAverage(points);
 
   const ratios = topCounts(selected.filter((b) => b.coffeeG > 0 && b.waterG > 0).map((b) => ratioBucket(b.waterG / b.coffeeG)))
     .map(({ value, count }) => ({ from: value, to: value + 0.5, count }));
@@ -133,5 +142,30 @@ export function computeStats({ brews = [], beans = [], grinders = [], drippers =
     grinders: rankByRating(selected, (b) => b.grinderId, (id) => grinderName.get(id) ?? '（已刪除的磨豆機）')
       .map(({ key, ...rest }) => ({ id: key, ...rest })),
     weeks: fromDate ? weeklyCounts(selected, fromDate, localDate(now)) : [],
+  };
+}
+
+/**
+ * 統計頁的「拉花」：arts＝全部拉花紀錄；period 和手沖同一個期間；patternName(key) → 圖案名稱
+ * 回傳 { total（全部杯數）, cups（期間內）, thisMonth（本機日期的這個月，不受期間影響）, enough, patterns, trend }
+ * patterns：每種圖案的平均自評（樣本少的排後面，和手沖的排序規則一樣）；trend：自評隨時間（點＋7 杯移動平均）
+ */
+export function computeLatteStats({ arts = [], period = 'all', now = new Date(), patternName = (k) => k } = {}) {
+  const days = PERIODS[period] ?? null;
+  const since = days == null ? null : now.getTime() - days * DAY;
+  const scored = arts.filter((a) => Number.isInteger(a.selfScore) && a.selfScore >= 1 && a.selfScore <= 5);
+  const selected = scored
+    .filter((a) => since == null || new Date(a.madeAt).getTime() >= since)
+    .sort((a, b) => a.madeAt.localeCompare(b.madeAt));
+  const month = localDate(now).slice(0, 7);
+  const asRated = selected.map((a) => ({ ...a, rating: a.selfScore }));
+  const points = asRated.map((a) => ({ artId: a.id, at: a.madeAt, rating: a.rating, label: patternName(a.pattern) }));
+  return {
+    total: arts.length,
+    cups: selected.length,
+    thisMonth: arts.filter((a) => localDate(a.madeAt).slice(0, 7) === month).length,
+    enough: selected.length >= MIN_CUPS,
+    patterns: rankByRating(asRated, (a) => a.pattern, patternName).map(({ key, ...rest }) => ({ pattern: key, ...rest })),
+    trend: { points, movingAvg: movingAverage(points) },
   };
 }

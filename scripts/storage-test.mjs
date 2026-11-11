@@ -267,7 +267,7 @@ try {
   await page.waitFor(`document.getElementById('toast').textContent.includes('已匯出') && !document.querySelector('#share-backup')`, { label: 'LINE：分享完成' });
   const shared = await page.eval(`(() => { const s = window.__shared[0]; const d = JSON.parse(s.text); return { n: window.__shared.length, name: s.name, type: s.type, v: d.schemaVersion, brews: d.brews.length, beans: d.beans.length }; })()`);
   check('LINE：分享出去的是完整的備份檔（檔名、JSON、內容）',
-    shared.n === 1 && /^coffee-log-\d{4}-\d{2}-\d{2}\.json$/.test(shared.name) && shared.type === 'application/json' && shared.v === 8 && shared.brews === 1 && shared.beans === 1, q(shared));
+    shared.n === 1 && /^coffee-log-\d{4}-\d{2}-\d{2}\.json$/.test(shared.name) && shared.type === 'application/json' && shared.v >= 8 && shared.brews === 1 && shared.beans === 1, q(shared));
   check('LINE：分享完成才記下備份時間', Boolean(await meta(page, 'lastBackupAt')));
   for (const theme of ['dark', 'light']) {
     await page.eval(`document.documentElement.dataset.theme = ${q(theme)}; true`);

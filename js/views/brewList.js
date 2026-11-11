@@ -1,10 +1,11 @@
-// #/ 沖煮紀錄列表
+// #/ 紀錄列表：上方切換「手沖｜拉花」（記住上次選的）；拉花的列表在 latteList.js
 import {
   listBrews, listBeans, latestBrewByBean, formatRatio, formatSeconds, flavorNote, getBackupStatus, snoozeBackupReminder,
-  formatDaysAgo, getStorageStatus, snoozeHomeScreenHint, METHODS, isInAppBrowser,
+  formatDaysAgo, getStorageStatus, snoozeHomeScreenHint, METHODS, isInAppBrowser, getHomeTab, setHomeTab, HOME_TABS,
 } from '../models.js';
-import { esc, setTitle, toast } from './ui.js';
+import { esc, setTitle, toast, segmentedHtml, bindSegmented } from './ui.js';
 import { exportBackup, errorReason } from './backup.js';
+import { latteContent } from './latteList.js';
 
 const timeFmt = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false });
 const weekdayFmt = new Intl.DateTimeFormat('zh-TW', { weekday: 'narrow' });
@@ -38,10 +39,37 @@ export async function render(container, { query = {}, isCurrent }) {
     filter.beanId = query.bean;
     filter.minRating = '';
     history.replaceState(null, '', `${location.pathname}${location.search}#/`);
+    await setHomeTab('brews'); // 從統計頁點豆子過來：一定是看手沖
   }
-  const [beans, latestByBean, backup, storage] = await Promise.all([
-    listBeans({ includeArchived: true }), latestBrewByBean(), getBackupStatus(), getStorageStatus(),
+  const [beans, latestByBean, backup, storage, tab] = await Promise.all([
+    listBeans({ includeArchived: true }), latestBrewByBean(), getBackupStatus(), getStorageStatus(), getHomeTab(),
   ]);
+  const rerender = () => render(container, { isCurrent });
+
+  // 上方：提示卡片（加入主畫面或備份提醒，一次一張）＋「手沖｜拉花」切換；兩個分頁都有
+  const top = `${storage.hint ? homeScreenHtml(storage) : backup.remind ? backupReminderHtml(backup) : ''}
+    <div class="home-tabs">${segmentedHtml('homeTab', HOME_TABS, tab)}</div>`;
+  // 監聽器掛在這一頁自己的 .home 上（不是 #app）
+  const bindTop = (root) => {
+    bindReminders(root, rerender);
+    bindSegmented(root.querySelector('.home-tabs'), async (name, value) => {
+      if (!value || value === tab) return;
+      await setHomeTab(value);
+      rerender();
+    });
+  };
+
+  if (tab === 'latte') {
+    const latte = await latteContent();
+    if (!isCurrent()) { latte.cleanup(); return; }
+    revokeThumbs();
+    container.innerHTML = `<div class="home">${top}${latte.html}</div>`;
+    const root = container.querySelector('.home');
+    bindTop(root);
+    latte.bind(root, rerender);
+    return latte.cleanup;
+  }
+
   // 豆子選項：未封存的，加上有紀錄的已封存豆子
   const beanOptions = beans.filter((b) => !b.archived || latestByBean.has(b.id));
   if (filter.beanId && !beanOptions.some((b) => b.id === filter.beanId)) filter.beanId = '';
@@ -50,9 +78,8 @@ export async function render(container, { query = {}, isCurrent }) {
   if (!isCurrent()) return;
   revokeThumbs();
 
-  const rerender = () => render(container, { isCurrent });
   if (latestByBean.size === 0) {
-    container.innerHTML = (storage.hint ? homeScreenHtml(storage) : '') + (beans.length === 0
+    container.innerHTML = `<div class="home">${top}${beans.length === 0
       ? `<div class="empty">
            <p>歡迎！先新增一支豆子，再開始記錄沖煮</p>
            <a class="btn btn-primary" href="#/beans/new">新增豆子</a>
@@ -60,24 +87,17 @@ export async function render(container, { query = {}, isCurrent }) {
       : `<div class="empty">
            <p>還沒有沖煮紀錄</p>
            <a class="btn btn-primary" href="#/brew/new">新增第一筆</a>
-         </div>`);
+         </div>`}
+      <a class="fab" href="#/brew/new" aria-label="新增紀錄">＋</a>
+    </div>`;
     // 空白時也放 ＋（新手教學會標示它；沒有豆子時表單會請他先新增豆子）
-    container.insertAdjacentHTML('beforeend', '<a class="fab" href="#/brew/new" aria-label="新增紀錄">＋</a>');
-    bindReminders(container, rerender);
+    bindTop(container.querySelector('.home'));
     return;
   }
 
   const filtered = filter.beanId || filter.minRating;
-  container.innerHTML = `
-    ${storage.hint ? homeScreenHtml(storage) : backup.remind ? `
-      <div class="notice backup-reminder" role="alert">
-        <p><strong>⚠ ${backup.lastBackupAt ? `上次備份是 ${formatDaysAgo(backup.daysSince)}` : '還沒備份過資料'}</strong></p>
-        <p class="hint">資料只存在這支手機上，建議定期匯出備份。</p>
-        <div class="reminder-actions">
-          <button type="button" class="btn btn-primary" id="backup-now">立即備份</button>
-          <button type="button" class="btn" id="backup-later">稍後</button>
-        </div>
-      </div>` : ''}
+  container.innerHTML = `<div class="home">
+    ${top}
     <div class="filter-bar">
       <select id="filter-bean" aria-label="依豆子篩選">
         <option value="">全部豆子</option>
@@ -103,18 +123,29 @@ export async function render(container, { query = {}, isCurrent }) {
           </section>`).join('')
       : '<div class="empty"><p>沒有符合條件的紀錄</p></div>'}
     <a class="fab" href="#/brew/new" aria-label="新增紀錄">＋</a>
-  `;
+  </div>`;
 
-  container.querySelector('#filter-bean').addEventListener('change', (e) => { filter.beanId = e.target.value; rerender(); });
-  container.querySelector('#filter-rating').addEventListener('change', (e) => { filter.minRating = e.target.value; rerender(); });
-  container.querySelector('#clear-filter')?.addEventListener('click', () => {
+  const root = container.querySelector('.home');
+  root.querySelector('#filter-bean').addEventListener('change', (e) => { filter.beanId = e.target.value; rerender(); });
+  root.querySelector('#filter-rating').addEventListener('change', (e) => { filter.minRating = e.target.value; rerender(); });
+  root.querySelector('#clear-filter')?.addEventListener('click', () => {
     filter.beanId = '';
     filter.minRating = '';
     rerender();
   });
-  bindReminders(container, rerender);
+  bindTop(root);
   return revokeThumbs;
 }
+
+const backupReminderHtml = (backup) => `
+  <div class="notice backup-reminder" role="alert">
+    <p><strong>⚠ ${backup.lastBackupAt ? `上次備份是 ${formatDaysAgo(backup.daysSince)}` : '還沒備份過資料'}</strong></p>
+    <p class="hint">資料只存在這支手機上，建議定期匯出備份。</p>
+    <div class="reminder-actions">
+      <button type="button" class="btn btn-primary" id="backup-now">立即備份</button>
+      <button type="button" class="btn" id="backup-later">稍後</button>
+    </div>
+  </div>`;
 
 /**
  * iPhone 的 Safari：提示加入主畫面（7 天沒打開可能被清掉資料）；顯示時取代備份提醒（有資料時一樣有「匯出備份」）

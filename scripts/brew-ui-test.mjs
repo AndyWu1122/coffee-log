@@ -392,7 +392,7 @@ try {
     const after8 = await m.getBrew(${q(siphon.id)});
     return { exported, r7: r7.ok, after7: after7.method, rBad: rBad.ok, r8: r8.ok, after8: after8.method, after8Dripper: after8.dripperId };
   })`);
-  check('備份：匯出 schemaVersion 8、帶 method', backup.exported.v === 8 && backup.exported.method === 'siphon', q(backup));
+  check('備份：匯出 schemaVersion 8 以上、帶 method', backup.exported.v >= 8 && backup.exported.method === 'siphon', q(backup));
   check('備份：v7 舊檔匯入後算手沖', backup.r7 && backup.after7 === 'pourover', q(backup));
   check('備份：不認得的沖煮方式整份不匯入', backup.rBad === false, q(backup));
   check('備份：v8 匯入還原賽風', backup.r8 && backup.after8 === 'siphon' && backup.after8Dripper === '', q(backup));

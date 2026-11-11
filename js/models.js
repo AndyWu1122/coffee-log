@@ -4,7 +4,7 @@ import { isFlavorNote, sortFlavorNotes, flavorNote } from './flavorWheel.js';
 import { compressPhoto, compressAvatar, makeThumb, blobToBase64, base64ToBytes, base64Length, jpegSize, PHOTO_TYPES } from './image.js';
 import { shareFileName } from './cardLayout.js';
 import { CHANGELOG, compareVersions } from './changelog.js';
-import { computeStats } from './stats.js';
+import { computeStats, computeLatteStats } from './stats.js';
 import { summarize, fromActivity, buildHeatmap } from './heatmap.js';
 import { mergeDripperNames } from './drippers.js';
 import { COUNTRY_BY_CODE, REGION_BY_KEY, originLabel, summarizeOrigins } from './origins.js';
@@ -25,9 +25,9 @@ export {
   COUNTRIES, REGIONS, ORIGIN_GROUPS, COUNTRY_BY_CODE, REGION_BY_KEY, CUP_LEVELS, regionsOf, matchOrigin, beanPlace, originLabel,
 } from './origins.js';
 
-// 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos；v4 加入 drippers 與 brews.dripperId；v5 加入 beanPhotos；v6 加入 beans.country、region；v7 加入 wishlist；v8 加入 brews.method。匯入時接受所有舊版
-export const SCHEMA_VERSION = 8;
-const IMPORTABLE_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8];
+// 備份檔格式版本。v2 加入 grinders 與 brews.grinderId；v3 加入 photos；v4 加入 drippers 與 brews.dripperId；v5 加入 beanPhotos；v6 加入 beans.country、region；v7 加入 wishlist；v8 加入 brews.method；v9 加入 latteArts、latteArtPhotos。匯入時接受所有舊版
+export const SCHEMA_VERSION = 9;
+const IMPORTABLE_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 export const PROCESS = { washed: '水洗', natural: '日曬', honey: '蜜處理', other: '其他' };
 // 由淺到深排列
@@ -41,6 +41,9 @@ export const VISIBILITY = { private: '只有我', friends: '好友' };
 export const METHODS = { pourover: '手沖', siphon: '賽風' };
 /** 紀錄的沖煮方式（舊紀錄沒有 method＝手沖） */
 export const brewMethod = (brew) => brew?.method || 'pourover';
+// 拉花的圖案（key 會存在紀錄上、之後也會上傳，不能改名）
+export const LATTE_PATTERNS = { heart: '愛心', tulip: '鬱金香', rosetta: '葉子', swan: '天鵝', other: '其他' };
+export const LATTE_TEXT_MAX = 50; // 圖案說明、牛奶、杯子（之後分享時雲端的上限也是 50）
 
 /* ===== 日期工具（id 產生在 js/id.js） ===== */
 
@@ -178,6 +181,23 @@ function sharedLimitErrors(b) {
   return errors;
 }
 
+/** 拉花紀錄的驗證（豆子是否存在由 saveLatteArt／匯入另外檢查） */
+export function validateLatteArt(a) {
+  const errors = {};
+  if (!a.madeAt || Number.isNaN(new Date(a.madeAt).getTime())) errors.madeAt = '請輸入時間';
+  if (!Object.hasOwn(LATTE_PATTERNS, a.pattern ?? '')) errors.pattern = '請選擇圖案';
+  if (!(Number.isInteger(a.selfScore) && a.selfScore >= 1 && a.selfScore <= 5)) errors.selfScore = '請幫自己打分（1–5）';
+  for (const key of ['patternNote', 'milk', 'cup']) {
+    if (charLength(a[key]) > LATTE_TEXT_MAX) errors[key] = `最多 ${LATTE_TEXT_MAX} 字`;
+    else if (/[\u0000-\u001f\u007f]/.test(a[key] ?? '')) errors[key] = '不能有換行等特殊字元';
+  }
+  if (a.visibility === 'friends') {
+    if (charLength(a.notes) > SHARED_NOTES_MAX) errors.notes ??= `分享給好友的筆記最多 ${SHARED_NOTES_MAX} 字（目前 ${charLength(a.notes)} 字）`;
+    if (a.madeAt && new Date(a.madeAt) > new Date(Date.now() + 86400000)) errors.madeAt ??= '分享給好友的紀錄，時間不能是未來';
+  }
+  return { ok: Object.keys(errors).length === 0, errors };
+}
+
 export function validateGrinder(g) {
   const errors = {};
   if (!g.name?.trim()) errors.name = '請輸入磨豆機名稱';
@@ -238,6 +258,24 @@ function normalizeBrew(input) {
       : [],
     notes: String(input.notes ?? '').trim(),
     visibility: input.visibility === 'friends' ? 'friends' : 'private', // 舊紀錄沒有這個欄位：只有我
+  };
+}
+
+function normalizeLatteArt(input) {
+  const pattern = input.pattern || '';
+  return {
+    id: input.id || newId(),
+    madeAt: toIso(input.madeAt),
+    pattern, // 不認得的值保留，交給驗證擋下
+    // 選「其他」時才有意義的補充說明（例如「多層愛心」）；其他圖案也保留，切回「其他」時還在
+    patternNote: String(input.patternNote ?? '').trim(),
+    milk: String(input.milk ?? '').trim(),
+    cup: String(input.cup ?? '').trim(),
+    espressoBeanId: input.espressoBeanId || '', // '' ＝未指定
+    selfScore: toNum(input.selfScore),
+    notes: String(input.notes ?? '').trim(),
+    visibility: input.visibility === 'friends' ? 'friends' : 'private',
+    createdAt: toIso(input.createdAt) ?? new Date().toISOString(),
   };
 }
 
@@ -390,11 +428,16 @@ export async function setBeanArchived(id, archived) {
   await db.put('beans', { ...bean, archived: Boolean(archived) });
 }
 
-/** 有紀錄引用的豆子不可刪除；照片、縮圖一起刪（同一個交易） */
+/** 有紀錄（沖煮或拉花）引用的豆子不可刪除；照片、縮圖一起刪（同一個交易） */
 export async function deleteBean(id) {
-  const count = await db.countByIndex('brews', 'beanId', id);
+  const [count, latteCount] = await Promise.all([
+    db.countByIndex('brews', 'beanId', id), db.countByIndex('latteArts', 'espressoBeanId', id),
+  ]);
   if (count > 0) {
     return { ok: false, message: `這支豆子有 ${count} 筆沖煮紀錄，無法刪除，請改用「封存」` };
+  }
+  if (latteCount > 0) {
+    return { ok: false, message: `這支豆子有 ${latteCount} 杯拉花紀錄，無法刪除，請改用「封存」` };
   }
   await db.transact(BEAN_PHOTO_STORES, (s) => {
     for (const store of Object.values(s)) store.delete(id);
@@ -629,8 +672,8 @@ export const STATS_PERIODS = [
  * methodOptions：紀錄裡有的沖煮方式（只有一種時是空陣列，不顯示篩選）；method：'' 為全部
  */
 export async function getStats({ period = '30', beanId = '', method = '' } = {}) {
-  const [brews, beans, grinders, drippers] = await Promise.all([
-    db.getAll('brews'), db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'),
+  const [brews, beans, grinders, drippers, arts] = await Promise.all([
+    db.getAll('brews'), db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'), db.getAll('latteArts'),
   ]);
   const used = new Set(brews.map((b) => b.beanId));
   const beanOptions = beans.filter((b) => used.has(b.id)).sort(byArchivedThenNewest)
@@ -643,6 +686,8 @@ export async function getStats({ period = '30', beanId = '', method = '' } = {})
   return {
     stats: computeStats({ brews, beans, grinders, drippers, period, beanId: known ? beanId : '', method: m }),
     beanOptions, beanId: known ? beanId : '', methodOptions, method: m,
+    // 拉花只套用期間（豆子、沖煮方式的篩選是手沖的）
+    latte: computeLatteStats({ arts, period, patternName: (k) => LATTE_PATTERNS[k] ?? k }),
   };
 }
 
@@ -745,6 +790,96 @@ export async function latestBrewByBean() {
   return latest;
 }
 
+/* ===== 拉花（紀錄頁的「拉花」分頁；照片和沖煮紀錄的照片分開存） ===== */
+
+const LATTE_STORES = ['latteArts', 'latteArtPhotos', 'latteArtThumbs'];
+
+/** 拉花列表：依 madeAt 新→舊，附上豆名（沒指定是 ''）、縮圖 thumb；pattern：只列這個圖案（'' 全部） */
+export async function listLatteArts({ pattern = '' } = {}) {
+  const [arts, beans, thumbs] = await Promise.all([db.getAll('latteArts'), db.getAll('beans'), db.getAll('latteArtThumbs')]);
+  const beanById = new Map(beans.map((b) => [b.id, b]));
+  const thumbById = new Map(thumbs.map((t) => [t.artId, t.blob]));
+  return arts
+    .filter((a) => !pattern || a.pattern === pattern)
+    .sort((a, b) => b.madeAt.localeCompare(a.madeAt))
+    .map((a) => ({
+      ...a,
+      beanName: a.espressoBeanId ? beanById.get(a.espressoBeanId)?.name ?? '（已刪除的豆子）' : '',
+      thumb: thumbById.get(a.id) ?? null,
+    }));
+}
+
+/** 有沒有任何拉花紀錄（首頁決定要不要顯示圖案篩選） */
+export const countLatteArts = async () => (await db.getAllKeys('latteArts')).length;
+
+export const getLatteArt = (id) => db.get('latteArts', id);
+/** 拉花的照片 { artId, blob, width, height, createdAt } 或 undefined */
+export const getLatteArtPhoto = (artId) => db.get('latteArtPhotos', artId);
+
+/** 以前用過的牛奶、杯子（表單的建議選項；新→舊、不重複） */
+export async function latteSuggestions() {
+  const arts = (await db.getAll('latteArts')).sort((a, b) => b.madeAt.localeCompare(a.madeAt));
+  const uniq = (key) => [...new Set(arts.map((a) => a[key]).filter(Boolean))].slice(0, 20);
+  return { milk: uniq('milk'), cup: uniq('cup') };
+}
+
+/**
+ * 新增或更新拉花；回傳 { ok, art } 或 { ok: false, errors }
+ * photo：和 saveBrew 一樣（undefined 不動；null 刪除；preparePhoto 的結果則存成這杯的照片），紀錄與照片在同一個交易寫入
+ */
+export async function saveLatteArt(input, { photo } = {}) {
+  const existing = input.id ? await db.get('latteArts', input.id) : null;
+  // id、建立時間沿用既有資料
+  const art = normalizeLatteArt({ ...input, id: existing?.id, createdAt: existing?.createdAt });
+  const { errors } = validateLatteArt(art);
+  if (art.espressoBeanId && !(await db.get('beans', art.espressoBeanId))) errors.espressoBeanId = '找不到這支豆子';
+  if (photo && !(photo.blob instanceof Blob && photo.thumb instanceof Blob)) errors.photo = '照片資料錯誤，請重新選擇';
+  if (Object.keys(errors).length) return { ok: false, errors };
+  await db.transact(LATTE_STORES, (s) => {
+    s.latteArts.put(art);
+    if (photo === null) {
+      s.latteArtPhotos.delete(art.id);
+      s.latteArtThumbs.delete(art.id);
+    } else if (photo) {
+      const { blob, thumb, width, height } = photo;
+      s.latteArtPhotos.put({ artId: art.id, blob, width, height, createdAt: new Date().toISOString() });
+      s.latteArtThumbs.put({ artId: art.id, blob: thumb });
+    }
+  });
+  ensurePersistentStorage();
+  return { ok: true, art };
+}
+
+/** 刪除拉花，連同照片、縮圖（同一個交易） */
+export async function deleteLatteArt(id) {
+  await db.transact(LATTE_STORES, (s) => {
+    for (const store of Object.values(s)) store.delete(id);
+  });
+}
+
+/** 「再拉一杯」要複製的：圖案（含說明）、牛奶、杯子、豆子；自評、筆記、照片是每杯的結果，不複製；可見度回到只有我 */
+export function latteTemplateFrom(art) {
+  const { pattern, patternNote = '', milk = '', cup = '', espressoBeanId = '' } = art;
+  return { pattern, patternNote: pattern === 'other' ? patternNote : '', milk, cup, espressoBeanId };
+}
+
+/** 新拉花預設的豆子：最近一杯拉花用的那支（還在選項裡才用），否則不指定 */
+export async function defaultLatteBeanId(beanOptions) {
+  const arts = await db.getAll('latteArts');
+  const latest = arts.reduce((cur, a) => (!cur || a.madeAt > cur.madeAt ? a : cur), null);
+  return latest?.espressoBeanId && beanOptions.some((b) => b.id === latest.espressoBeanId) ? latest.espressoBeanId : '';
+}
+
+/* ===== 首頁的分頁（手沖｜拉花）：記住上次選的（meta，不匯出；不放 localStorage） ===== */
+
+const HOME_TAB_KEY = 'homeTab';
+export const HOME_TABS = [{ value: 'brews', label: '手沖' }, { value: 'latte', label: '拉花' }];
+export async function getHomeTab() {
+  const tab = await db.getMeta(HOME_TAB_KEY);
+  return HOME_TABS.some((t) => t.value === tab) ? tab : 'brews';
+}
+export const setHomeTab = (tab) => db.setMeta(HOME_TAB_KEY, HOME_TABS.some((t) => t.value === tab) ? tab : 'brews');
+
 /* ===== 資料保存 ===== */
 // 資料只在這支手機的 IndexedDB：瀏覽器空間不夠時可能清掉（persist 可以要求不要清）；
 // iPhone 用 Safari 開時，超過 7 天沒打開就可能被清掉（從主畫面開的不會），而且主畫面的 App 和 Safari 的資料是分開的
@@ -757,8 +892,8 @@ let persistRequested = false;
 export const needsHomeScreen = () => push.isIos() && !push.isStandalone();
 
 const hasLocalData = async () => {
-  const [beans, brews] = await Promise.all([db.getAllKeys('beans'), db.getAllKeys('brews')]);
-  return beans.length + brews.length > 0;
+  const [beans, brews, arts] = await Promise.all([db.getAllKeys('beans'), db.getAllKeys('brews'), db.getAllKeys('latteArts')]);
+  return beans.length + brews.length + arts.length > 0;
 };
 
 /**
@@ -805,13 +940,15 @@ const BACKUP_SNOOZE_DAYS = 3;  // 按「稍後」後幾天內不再提醒
  * remind：overdue 且不在「稍後」期間（首頁的提醒卡片）
  */
 export async function getBackupStatus() {
-  const [lastBackupAt, snoozeUntil, brews] = await Promise.all([
-    db.getMeta('lastBackupAt'), db.getMeta('backupSnoozeUntil'), db.getAll('brews'),
+  const [lastBackupAt, snoozeUntil, brews, arts] = await Promise.all([
+    db.getMeta('lastBackupAt'), db.getMeta('backupSnoozeUntil'), db.getAll('brews'), db.getAll('latteArts'),
   ]);
   const today = todayLocal();
   const daysSince = lastBackupAt ? daysBetween(toLocalDateStr(lastBackupAt), today) : null;
-  const since = lastBackupAt ?? brews.reduce((min, b) => (!min || b.brewedAt < min ? b.brewedAt : min), null);
-  const overdue = brews.length > 0 && since != null && daysBetween(toLocalDateStr(since), today) >= BACKUP_REMIND_DAYS;
+  // 沖煮紀錄和拉花都算（只記拉花的人也要提醒備份）
+  const times = [...brews.map((b) => b.brewedAt), ...arts.map((a) => a.madeAt)];
+  const since = lastBackupAt ?? times.reduce((min, t) => (!min || t < min ? t : min), null);
+  const overdue = times.length > 0 && since != null && daysBetween(toLocalDateStr(since), today) >= BACKUP_REMIND_DAYS;
   const snoozed = snoozeUntil != null && new Date() < new Date(snoozeUntil);
   return { lastBackupAt, daysSince, overdue, remind: overdue && !snoozed };
 }
@@ -839,8 +976,7 @@ export async function getChangelogStatus(version) {
   if (!version) return { unseen: false, seen: null };
   const seen = await db.getMeta(CHANGELOG_SEEN_KEY);
   if (seen == null) {
-    const [brews, beans] = await Promise.all([db.getAll('brews'), db.getAll('beans')]);
-    if (!brews.length && !beans.length) {
+    if (!(await hasLocalData())) {
       await db.setMeta(CHANGELOG_SEEN_KEY, version);
       return { unseen: false, seen: version };
     }
@@ -864,9 +1000,9 @@ const ONBOARDING_KEY = 'onboardingSeen'; // 看過新手教學的時間（ISO）
  */
 export async function claimOnboarding() {
   if (await db.getMeta(ONBOARDING_KEY)) return false;
-  const [brews, beans] = await Promise.all([db.getAll('brews'), db.getAll('beans')]);
+  const hasData = await hasLocalData();
   await db.setMeta(ONBOARDING_KEY, new Date().toISOString());
-  return !brews.length && !beans.length;
+  return !hasData;
 }
 
 /** 這一段比上次看過的版本新（更新內容頁標「新」） */
@@ -883,47 +1019,54 @@ const MAX_PHOTO_SIDE = 4096;             // 匯入時照片長寬上限（App �
 /** 備份檔的照片欄位（data 為 base64 JPEG）；縮圖不匯出，匯入時重新產生 */
 const photoMeta = (p) => ({ brewId: p.brewId, width: p.width, height: p.height, createdAt: p.createdAt });
 const beanPhotoMeta = (p) => ({ beanId: p.beanId, width: p.width, height: p.height, createdAt: p.createdAt });
+const lattePhotoMeta = (p) => ({ artId: p.artId, width: p.width, height: p.height, createdAt: p.createdAt });
 
 /**
- * 匯出用的資料。includePhotos：false 時 photos、beanPhotos 為空陣列，photosIncluded 標記為 false
+ * 匯出用的資料。includePhotos：false 時 photos、beanPhotos、latteArtPhotos 為空陣列，photosIncluded 標記為 false
  * （之後匯入「取代全部」時可以提醒這份備份不含照片）
  */
 export async function exportData({ includePhotos = true } = {}) {
-  const [beans, grinders, drippers, brews, wishlist, photoRows, beanPhotoRows] = await Promise.all([
-    db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'), db.getAll('brews'), db.getAll('wishlist'),
-    includePhotos ? db.getAll('photos') : [], includePhotos ? db.getAll('beanPhotos') : [],
+  const [beans, grinders, drippers, brews, wishlist, latteArts, photoRows, beanPhotoRows, lattePhotoRows] = await Promise.all([
+    db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'), db.getAll('brews'), db.getAll('wishlist'), db.getAll('latteArts'),
+    includePhotos ? db.getAll('photos') : [], includePhotos ? db.getAll('beanPhotos') : [], includePhotos ? db.getAll('latteArtPhotos') : [],
   ]);
-  const photos = [];
-  for (const p of photoRows) photos.push({ ...photoMeta(p), data: await blobToBase64(p.blob) });
-  const beanPhotos = [];
-  for (const p of beanPhotoRows) beanPhotos.push({ ...beanPhotoMeta(p), data: await blobToBase64(p.blob) });
+  const encode = async (rows, meta) => {
+    const out = [];
+    for (const p of rows) out.push({ ...meta(p), data: await blobToBase64(p.blob) });
+    return out;
+  };
   return {
     schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), photosIncluded: includePhotos,
-    beans, grinders, drippers, brews, wishlist, photos, beanPhotos,
+    beans, grinders, drippers, brews, wishlist, latteArts,
+    photos: await encode(photoRows, photoMeta),
+    beanPhotos: await encode(beanPhotoRows, beanPhotoMeta),
+    latteArtPhotos: await encode(lattePhotoRows, lattePhotoMeta),
   };
 }
 
 /**
  * 備份頁用的摘要：各類筆數，以及含照片／不含照片時的預估檔案大小（位元組）
- * photos 是紀錄和豆子的照片合計（beanPhotos 是其中豆子的）；只讀照片的 Blob.size，不讀圖片內容
+ * photos 是紀錄、豆子、拉花的照片合計（beanPhotos 是其中豆子的）；只讀照片的 Blob.size，不讀圖片內容
  */
 export async function getBackupSummary() {
-  const [beans, grinders, drippers, brews, wishlist, photoRows, beanPhotoRows] = await Promise.all([
-    db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'), db.getAll('brews'), db.getAll('wishlist'), db.getAll('photos'), db.getAll('beanPhotos'),
+  const [beans, grinders, drippers, brews, wishlist, latteArts, photoRows, beanPhotoRows, lattePhotoRows] = await Promise.all([
+    db.getAll('beans'), db.getAll('grinders'), db.getAll('drippers'), db.getAll('brews'), db.getAll('wishlist'), db.getAll('latteArts'),
+    db.getAll('photos'), db.getAll('beanPhotos'), db.getAll('latteArtPhotos'),
   ]);
-  const base = { schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), photosIncluded: true, beans, grinders, drippers, brews, wishlist };
+  const base = { schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), photosIncluded: true, beans, grinders, drippers, brews, wishlist, latteArts };
   const bytes = (data) => new TextEncoder().encode(JSON.stringify(data, null, 2)).length; // 與 downloadJson 的格式一致
-  const withoutPhotos = bytes({ ...base, photosIncluded: false, photos: [], beanPhotos: [] });
+  const withoutPhotos = bytes({ ...base, photosIncluded: false, photos: [], beanPhotos: [], latteArtPhotos: [] });
   const withPhotos = bytes({
     ...base,
     photos: photoRows.map((p) => ({ ...photoMeta(p), data: '' })),
     beanPhotos: beanPhotoRows.map((p) => ({ ...beanPhotoMeta(p), data: '' })),
-  }) + [...photoRows, ...beanPhotoRows].reduce((s, p) => s + base64Length(p.blob.size), 0);
+    latteArtPhotos: lattePhotoRows.map((p) => ({ ...lattePhotoMeta(p), data: '' })),
+  }) + [...photoRows, ...beanPhotoRows, ...lattePhotoRows].reduce((s, p) => s + base64Length(p.blob.size), 0);
   return {
-    beans: beans.length, grinders: grinders.length, drippers: drippers.length, brews: brews.length,
-    photos: photoRows.length + beanPhotoRows.length, beanPhotos: beanPhotoRows.length,
+    beans: beans.length, grinders: grinders.length, drippers: drippers.length, brews: brews.length, latteArts: latteArts.length,
+    photos: photoRows.length + beanPhotoRows.length + lattePhotoRows.length, beanPhotos: beanPhotoRows.length,
     // 什麼都沒有（備份頁不讓匯出空的檔案）
-    empty: beans.length + grinders.length + drippers.length + brews.length + wishlist.length === 0,
+    empty: beans.length + grinders.length + drippers.length + brews.length + wishlist.length + latteArts.length === 0,
     sizeWithPhotos: withPhotos, sizeWithoutPhotos: withoutPhotos,
   };
 }
@@ -940,6 +1083,7 @@ export const exportFileName = () => `coffee-log-${todayLocal()}.json`;
 const IMPORT_PHOTO_KINDS = {
   brew: { key: 'brewId', noun: '張照片', owner: '筆紀錄', ownerName: '紀錄' },
   bean: { key: 'beanId', noun: '張豆子照片', owner: '支豆子', ownerName: '豆子' },
+  latte: { key: 'artId', noun: '張拉花照片', owner: '杯拉花', ownerName: '拉花紀錄' },
 };
 
 /**
@@ -1003,6 +1147,10 @@ export async function importData(text, { replace = false, onProgress } = {}) {
   if (data.beanPhotos === undefined) data.beanPhotos = []; // v1–v4
   if (data.wishlist === undefined) data.wishlist = []; // v1–v6
   if (!Array.isArray(data.wishlist)) return { ok: false, errors: ['檔案的 wishlist 格式錯誤'] };
+  if (data.latteArts === undefined) data.latteArts = []; // v1–v8
+  if (data.latteArtPhotos === undefined) data.latteArtPhotos = [];
+  if (!Array.isArray(data.latteArts)) return { ok: false, errors: ['檔案的 latteArts 格式錯誤'] };
+  if (!Array.isArray(data.latteArtPhotos)) return { ok: false, errors: ['檔案的 latteArtPhotos 格式錯誤'] };
   if (!Array.isArray(data.photos)) return { ok: false, errors: ['檔案的 photos 格式錯誤'] };
   if (!Array.isArray(data.beanPhotos)) return { ok: false, errors: ['檔案的 beanPhotos 格式錯誤'] };
   const legacyDrippers = data.schemaVersion < 4;
@@ -1074,6 +1222,16 @@ export async function importData(text, { replace = false, onProgress } = {}) {
     return wish;
   });
 
+  const latteArts = data.latteArts.map((input, i) => {
+    const art = normalizeLatteArt(input ?? {});
+    const label = `第 ${i + 1} 杯拉花`;
+    if (!input?.id) errors.push(`${label}：缺少 id`);
+    const v = validateLatteArt(art);
+    if (!v.ok) errors.push(`${label}：${describe(v.errors)}`);
+    else if (art.espressoBeanId && !knownBeanIds.has(art.espressoBeanId)) errors.push(`${label}：找不到對應的豆子`);
+    return art;
+  });
+
   // 照片引用的紀錄必須在檔案裡；合併模式下也可以是資料庫裡已有的
   const knownBrewIds = new Set(brews.map((b) => b.id));
   if (!replace) for (const id of await db.getAllKeys('brews')) knownBrewIds.add(id);
@@ -1082,6 +1240,10 @@ export async function importData(text, { replace = false, onProgress } = {}) {
   // 豆子照片引用的豆子：同上（合併模式下 knownBeanIds 已含資料庫裡的）
   const parsedBeans = parseImportPhotos(data.beanPhotos, knownBeanIds, 'bean');
   errors.push(...parsedBeans.errors);
+  const knownArtIds = new Set(latteArts.map((a) => a.id));
+  if (!replace) for (const id of await db.getAllKeys('latteArts')) knownArtIds.add(id);
+  const parsedLatte = parseImportPhotos(data.latteArtPhotos, knownArtIds, 'latte');
+  errors.push(...parsedLatte.errors);
 
   const fail = () => {
     const MAX = 5;
@@ -1095,9 +1257,11 @@ export async function importData(text, { replace = false, onProgress } = {}) {
   // （IndexedDB 交易在 await 其他工作時會自動結束，所以不能邊解碼邊寫）
   const photos = parsed.photos;
   const beanPhotos = parsedBeans.photos;
-  const total = photos.length + beanPhotos.length;
+  const latteArtPhotos = parsedLatte.photos;
+  const total = photos.length + beanPhotos.length + latteArtPhotos.length;
   const thumbs = [];
   const beanThumbs = [];
+  const latteArtThumbs = [];
   for (const [i, p] of photos.entries()) {
     onProgress?.(i + 1, total);
     try {
@@ -1114,14 +1278,24 @@ export async function importData(text, { replace = false, onProgress } = {}) {
       errors.push(`第 ${i + 1} 張豆子照片：無法解碼`);
     }
   }
+  for (const [i, p] of latteArtPhotos.entries()) {
+    onProgress?.(photos.length + beanPhotos.length + i + 1, total);
+    try {
+      latteArtThumbs.push({ artId: p.artId, blob: await makeThumb(p.blob) });
+    } catch {
+      errors.push(`第 ${i + 1} 張拉花照片：無法解碼`);
+    }
+  }
   if (errors.length) return fail();
 
-  await db.bulkPut({ beans, grinders, drippers, brews, wishlist, photos, thumbs, beanPhotos, beanThumbs }, { clear: replace });
+  await db.bulkPut({
+    beans, grinders, drippers, brews, wishlist, photos, thumbs, beanPhotos, beanThumbs, latteArts, latteArtPhotos, latteArtThumbs,
+  }, { clear: replace });
   requestSync(); // 本機為準：取代全部後，雲端上這台裝置分享過、現在不在的紀錄會被刪除
   ensurePersistentStorage();
   return {
     ok: true, beans: beans.length, grinders: grinders.length, drippers: drippers.length, brews: brews.length,
-    photos: total, beanPhotos: beanPhotos.length,
+    latteArts: latteArts.length, photos: total, beanPhotos: beanPhotos.length,
   };
 }
 
