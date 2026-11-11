@@ -868,15 +868,23 @@ export async function saveLatteArt(input, { photo } = {}) {
       s.latteArtThumbs.put({ artId: art.id, blob: thumb });
     }
   });
+  requestSync(); // 分享給好友的（visibility friends）會上傳到 shared_latte_arts
   ensurePersistentStorage();
   return { ok: true, art };
 }
 
-/** 刪除拉花，連同照片、縮圖（同一個交易） */
+/** 刪除拉花，連同照片、縮圖（同一個交易）；分享出去的會在同步時從雲端刪除 */
 export async function deleteLatteArt(id) {
   await db.transact(LATTE_STORES, (s) => {
     for (const store of Object.values(s)) store.delete(id);
   });
+  requestSync();
+}
+
+/** 拉花的分享狀態 { tone, text }（只讀本機）；只有我的回傳 null（文字和手沖共用 SHARE_STATUS） */
+export async function getLatteShareStatus(id) {
+  const art = await db.get('latteArts', id);
+  return SHARE_STATUS[await sync.postStatus('latte', art)] ?? null;
 }
 
 /** 「再拉一杯」要複製的：圖案（含說明）、牛奶、杯子、豆子；分項自評、筆記、照片是每杯的結果，不複製；可見度回到只有我 */
@@ -1689,12 +1697,40 @@ function toFeedItem(row, { myId, profiles, avatarUrls, photoUrls, likes, comment
   const num = (v) => (v == null ? null : Number(v)); // numeric 欄位
   const brew = { coffeeG: num(row.coffee_g), waterG: num(row.water_g) };
   const key = `${row.owner}/${row.id}`;
-  return {
+  const common = {
     owner: row.owner,
     id: row.id,
     mine: row.owner === myId,
     nickname: owner?.nickname ?? '（不明）',
     avatarUrl: avatarUrls[owner?.avatar_path] ?? null,
+    notes: row.notes,
+    photoUrl: photoUrls[row.photo_path] ?? null,
+    likeCount: brewLikes.length,
+    likedByMe: brewLikes.some((l) => l.user_id === myId),
+    // 按讚的人：看得到 profile 的列出暱稱（自己排最前面），其他人（不是我的好友）只算人數
+    likers: likers.sort((a, b) => Number(b.id === myId) - Number(a.id === myId)).map((p) => (p.id === myId ? '你' : p.nickname)),
+    otherLikers: brewLikes.length - likers.length,
+    commentCount: commentCounts[key] ?? 0,
+    hasNewComments: newCommentKeys.has(key),
+  };
+  if (row.kind === 'latte') {
+    const scores = { contrast: row.score_contrast, foam: row.score_foam, symmetry: row.score_symmetry, completion: row.score_completion };
+    const pattern = Object.hasOwn(LATTE_PATTERNS, row.pattern) ? row.pattern : 'other';
+    return {
+      ...common,
+      kind: 'latte',
+      brewedAt: row.made_at, // 卡片上方的時間（和手沖同一個欄位）
+      pattern,
+      patternName: pattern === 'other' && row.pattern_note ? row.pattern_note : LATTE_PATTERNS[pattern],
+      milk: row.milk,
+      cup: row.cup,
+      scores,
+      total: latteTotal({ scores }),
+    };
+  }
+  return {
+    ...common,
+    kind: 'brew',
     beanName: row.bean_name,
     origin: row.bean_origin,
     process: PROCESS[row.bean_process] ?? '',
@@ -1712,15 +1748,6 @@ function toFeedItem(row, { myId, profiles, avatarUrls, photoUrls, likes, comment
     rating: row.rating,
     flavor: Object.fromEntries(Object.keys(FLAVOR).map((k) => [k, row[k] ?? null])),
     flavorNotes: sortFlavorNotes((row.flavor_notes ?? []).filter(isFlavorNote)),
-    notes: row.notes,
-    photoUrl: photoUrls[row.photo_path] ?? null,
-    likeCount: brewLikes.length,
-    likedByMe: brewLikes.some((l) => l.user_id === myId),
-    // 按讚的人：看得到 profile 的列出暱稱（自己排最前面），其他人（不是我的好友）只算人數
-    likers: likers.sort((a, b) => Number(b.id === myId) - Number(a.id === myId)).map((p) => (p.id === myId ? '你' : p.nickname)),
-    otherLikers: brewLikes.length - likers.length,
-    commentCount: commentCounts[key] ?? 0,
-    hasNewComments: newCommentKeys.has(key),
   };
 }
 
@@ -1743,7 +1770,9 @@ async function toFeedItems(myId, rows, { newCommentKeys = new Set() } = {}) {
  * 讀第一頁時記下「看過了」（社群分頁的數字）：全部＝好友新貼文、我貼文的新留言、回覆我的；我的＝後兩個
  * 有新留言的貼文 hasNewComments 為 true（只在這次標示）
  */
-export async function listFeed(myId, { offset = 0, mine = false } = {}) {
+export const FEED_KINDS = [{ value: '', label: '全部' }, { value: 'brew', label: '手沖' }, { value: 'latte', label: '拉花' }];
+
+export async function listFeed(myId, { offset = 0, mine = false, kind = '' } = {}) {
   // 先查「最新的時間」再讀動態牆：讀的期間才新增的比它新，下次仍會算進數字
   let latestPost = null;
   let activity = null;
@@ -1754,7 +1783,9 @@ export async function listFeed(myId, { offset = 0, mine = false } = {}) {
         .then(([p, r]) => cloud.commentActivity(p, r)),
     ]);
   }
-  const rows = await cloud.listFeed({ offset, limit: FEED_PAGE_SIZE + 1, owner: mine ? myId : null }); // 多拿一筆判斷還有沒有
+  const rows = await cloud.listFeed({
+    offset, limit: FEED_PAGE_SIZE + 1, owner: mine ? myId : null, kind: FEED_KINDS.some((k) => k.value === kind) ? kind || null : null,
+  }); // 多拿一筆判斷還有沒有
   const items = await toFeedItems(myId, rows.slice(0, FEED_PAGE_SIZE), { newCommentKeys: new Set(activity?.posts ?? []) });
   const seen = (key, at) => (at ? db.setMeta(key, { userId: myId, at }) : null);
   await Promise.all([
@@ -1817,10 +1848,10 @@ export const badgeText = (n) => (!n ? '' : n > 99 ? '99+' : String(n));
  * 自己的紀錄：這台裝置有這筆時 canEdit 為 true（詳細頁顯示「編輯」）
  */
 export async function getFeedBrew(myId, owner, id) {
-  const row = await cloud.getSharedBrew(owner, id);
+  const row = await cloud.getSharedPost(owner, id);
   if (!row) return null;
   const [item] = await toFeedItems(myId, [row]);
-  item.canEdit = item.mine && Boolean(await db.get('brews', id));
+  item.canEdit = item.mine && Boolean(await db.get(item.kind === 'latte' ? 'latteArts' : 'brews', id));
   return item;
 }
 
@@ -1977,14 +2008,21 @@ export async function deleteAccount() {
   await cloud.deleteAccount();
   await push.unsubscribe().catch(() => {}); // 雲端的訂閱已經 cascade 刪除；這台裝置也退訂
   await sync.setActivityUploader(null);       // 熱度圖的雲端資料也已經 cascade 刪除
-  const [brews, states] = await Promise.all([db.getAll('brews'), db.getAll('sync')]);
+  // 手沖（brews／sync）和拉花（latteArts／latteSync）同樣處理
+  const [brews, states, arts, latteStates] = await Promise.all([
+    db.getAll('brews'), db.getAll('sync'), db.getAll('latteArts'), db.getAll('latteSync'),
+  ]);
   const otherAccount = new Set(states.filter((st) => st.userId !== userId).map((st) => st.brewId));
+  const otherLatte = new Set(latteStates.filter((st) => st.userId !== userId).map((st) => st.artId));
   const shared = brews.filter((b) => b.visibility === 'friends' && !otherAccount.has(b.id));
-  await db.transact(['brews', 'sync'], (s) => {
+  const sharedArts = arts.filter((a) => a.visibility === 'friends' && !otherLatte.has(a.id));
+  await db.transact(['brews', 'sync', 'latteArts', 'latteSync'], (s) => {
     for (const b of shared) s.brews.put({ ...b, visibility: 'private' });
     for (const st of states) if (!otherAccount.has(st.brewId)) s.sync.delete(st.brewId);
+    for (const a of sharedArts) s.latteArts.put({ ...a, visibility: 'private' });
+    for (const st of latteStates) if (!otherLatte.has(st.artId)) s.latteSync.delete(st.artId);
   });
-  return { privatized: shared.length };
+  return { privatized: shared.length + sharedArts.length };
 }
 
 /* ===== 推播通知 ===== */

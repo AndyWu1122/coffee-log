@@ -1,6 +1,6 @@
 // #/brew/new、#/brew/<id> 新增 / 編輯沖煮紀錄
 import {
-  getBrew, saveBrew, deleteBrew, listBeans, latestBrewByBean, brewTemplateFrom, defaultBeanId,
+  getBrew, saveBrew, deleteBrew, setHomeTab, listBeans, latestBrewByBean, brewTemplateFrom, defaultBeanId,
   listGrinders, defaultGrinderId, listDrippers, defaultDripperId, defaultBrewMethod, brewMethod, METHODS, formatStock, ratio, formatRatio, toSeconds, toLocalInputValue, fromLocalInputValue, FLAVOR,
   getPhoto, preparePhoto, PHOTO_ACCEPT, VISIBILITY, socialAvailable, getShareStatus,
 } from '../models.js';
@@ -299,6 +299,7 @@ export async function render(container, { id, query, isCurrent }) {
     e.preventDefault();
     if (!(await save())) return;
     toast('已儲存');
+    await setHomeTab('brews'); // 回到首頁的「手沖」分頁
     location.hash = '#/';
   });
 
@@ -336,6 +337,7 @@ export async function render(container, { id, query, isCurrent }) {
     if (!confirm(`確定刪除這筆紀錄？${extra}`)) return;
     await deleteBrew(id);
     toast('已刪除');
+    await setHomeTab('brews');
     location.hash = '#/';
   });
 

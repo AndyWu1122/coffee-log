@@ -12,7 +12,8 @@ const DB_NAME = 'coffee-log';
 // v7：新增 beanPhotos（每支豆子的照片，keyPath beanId）與 beanThumbs（豆子列表用 300px 縮圖）
 // v8：新增 wishlist（想買清單，keyPath key，例如 'region:ET.guji'）
 // v9：新增 latteArts（拉花紀錄，索引 madeAt、espressoBeanId）與 latteArtPhotos、latteArtThumbs（keyPath artId，和紀錄的照片分開）
-const DB_VERSION = 9;
+// v10：新增 latteSync（拉花分享到社群：每筆上次同步到雲端的內容，keyPath artId；結構同 sync，不匯出）
+const DB_VERSION = 10;
 
 // 濾杯轉換做過了沒（meta key）；記下時間與建立了幾支
 const DRIPPER_MIGRATION_KEY = 'dripperMigration';
@@ -80,6 +81,9 @@ export function openDB() {
       }
       if (!db.objectStoreNames.contains('latteArtThumbs')) {
         db.createObjectStore('latteArtThumbs', { keyPath: 'artId' });
+      }
+      if (!db.objectStoreNames.contains('latteSync')) {
+        db.createObjectStore('latteSync', { keyPath: 'artId' });
       }
     };
     req.onsuccess = () => {

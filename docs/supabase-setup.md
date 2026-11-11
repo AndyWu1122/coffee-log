@@ -355,6 +355,29 @@ git push                                    # 之後才推前端；GitHub Pages 
 1. 新增一筆紀錄選「賽風」→ 濾杯欄位消失；存檔後首頁卡片標「賽風」
 2. 把它設成「👥 好友」→ 請好友打開，卡片和詳細頁都寫「賽風」
 
+## 5-10. 部署拉花分享（1.25.0）
+
+只有一個 migration，**沒有新的 Edge Function、沒有新的 secret、沒有新的 bucket**（拉花照片沿用 `brew-photos`，路徑一樣是 `<user_id>/<id>.jpg`；推播沿用「好友新貼文」的格式）。**一定要後端先上、前端最後**：1.25.0 的動態牆讀 `feed_posts`，資料庫還沒有這個 view 時動態牆會讀不出來
+
+```sh
+npx supabase@2.120.0 db push --dry-run      # 應該只列出 20261111100000_latte_art.sql
+npx supabase@2.120.0 db push                # 套用（確認後輸入 Y）
+git push                                    # 之後才推前端；GitHub Pages 部署成 1.25.0
+```
+
+- migration：
+  - `private.posts`（手沖與拉花共同的上層，回填現有的 shared_brews）；`likes`、`comments`、`reports`、`private.push_throttle` 的外鍵改指向它 → 拉花也能按讚、留言、檢舉
+  - `public.shared_latte_arts`（權限和 shared_brews 同一套；每天 30 筆和手沖共用）、`public.feed_posts`（動態牆排序用的 view）
+  - `private.can_view` 加上「對方沒被停權」：停權的人，好友也看不到他的貼文、個人檔案、熱度圖
+  - `brew-photos` 的讀取／上傳／覆蓋政策改成兩種貼文都認；開發者後台的貼文列表、詳細、刪除都包含拉花；拉花的好友新貼文推播
+- 舊版 App（1.24.0 以前）照常運作：只讀得到手沖的貼文；`delete-account`、`admin-delete-user`、`send-push` 不用重新部署
+
+### 實機確認（你）
+
+1. App 更新到 1.25.0 後，紀錄頁切到「拉花」→ 新增一杯、拍照、「誰看得到」選「👥 好友」
+2. 請好友打開社群：看得到標「拉花」的卡片、總分和照片，切「拉花」只剩拉花；可以按讚、留言
+3. 把它改回「🔒 只有我」→ 好友重新整理後看不到
+
 ## 6. 實際登入一次（你）
 
 1. 手機用 Safari／Chrome 開 <https://andywu1122.github.io/coffee-log/> → ☰ →「帳號」→「用 Google 登入」→ 設定暱稱

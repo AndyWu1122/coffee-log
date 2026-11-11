@@ -237,36 +237,49 @@ export const listBlocks = () => run(async (sb) =>
 export const hasIncomingRequests = (myId) => run(async (sb) =>
   unwrap(await sb.from('friendships').select('requester').eq('addressee', uuid(myId)).eq('status', 'pending').limit(1)).length > 0);
 
-/* ===== 自己的 shared_brews（同步用） ===== */
+/* ===== 自己的貼文（同步用）：手沖 shared_brews、拉花 shared_latte_arts ===== */
 
-/** 自己在雲端的所有紀錄 [{ id, photo_path }]（分批讀，避開一次 1000 筆的上限） */
-export const listMySharedBrews = (userId) => run(async (sb) => {
+// 同步用到的兩張表（sync.js 傳種類進來，不直接寫表名）
+const POST_TABLES = { brew: 'shared_brews', latte: 'shared_latte_arts' };
+const postTable = (kind) => {
+  if (!Object.hasOwn(POST_TABLES, kind)) throw new CloudError('不認得的貼文種類', 'invalid');
+  return POST_TABLES[kind];
+};
+
+/** 自己在雲端的所有貼文 [{ id, photo_path }]（分批讀，避開一次 1000 筆的上限） */
+export const listMyPosts = (kind, userId) => run(async (sb) => {
   const all = [];
   for (let from = 0; ; from += PAGE) {
-    const rows = unwrap(await sb.from('shared_brews').select('id, photo_path')
+    const rows = unwrap(await sb.from(postTable(kind)).select('id, photo_path')
       .eq('owner', uuid(userId)).order('id').range(from, from + PAGE - 1));
     all.push(...rows);
     if (rows.length < PAGE) return all;
   }
 });
 
-/** 新增（owner 由資料庫用 auth.uid() 決定；每天 30 筆的上限由 trigger 檢查） */
-export const insertSharedBrew = (row) => run(async (sb) => {
-  unwrap(await sb.from('shared_brews').insert({ ...row, id: uuid(row.id) }));
+/** 新增（owner 由資料庫用 auth.uid() 決定；每天 30 筆的上限由 trigger 檢查，手沖和拉花共用） */
+export const insertPost = (kind, row) => run(async (sb) => {
+  unwrap(await sb.from(postTable(kind)).insert({ ...row, id: uuid(row.id) }));
 });
 
-/** 修改自己的紀錄（id、owner 不能改，不放進 update）；回傳有沒有改到 */
-export const updateSharedBrew = (userId, row) => run(async (sb) => {
+/** 修改自己的貼文（id、owner 不能改，不放進 update）；回傳有沒有改到 */
+export const updatePost = (kind, userId, row) => run(async (sb) => {
   const { id, ...fields } = row;
-  const rows = unwrap(await sb.from('shared_brews').update(fields)
+  const rows = unwrap(await sb.from(postTable(kind)).update(fields)
     .eq('owner', uuid(userId)).eq('id', uuid(id)).select('id'));
   return rows.length === 1;
 });
 
-/** 刪除自己的紀錄（讚、檢舉由外鍵 on delete cascade 一起刪掉） */
-export const deleteSharedBrew = (userId, id) => run(async (sb) => {
-  unwrap(await sb.from('shared_brews').delete().eq('owner', uuid(userId)).eq('id', uuid(id)));
+/** 刪除自己的貼文（讚、留言、檢舉由外鍵 on delete cascade 一起刪掉） */
+export const deletePost = (kind, userId, id) => run(async (sb) => {
+  unwrap(await sb.from(postTable(kind)).delete().eq('owner', uuid(userId)).eq('id', uuid(id)));
 });
+
+// 手沖的舊名稱（測試、其他地方用）
+export const listMySharedBrews = (userId) => listMyPosts('brew', userId);
+export const insertSharedBrew = (row) => insertPost('brew', row);
+export const updateSharedBrew = (userId, row) => updatePost('brew', userId, row);
+export const deleteSharedBrew = (userId, id) => deletePost('brew', userId, id);
 
 /** 上傳（覆蓋）紀錄的照片：紀錄的 photo_path 必須已經指向這個路徑（Storage 政策） */
 export const uploadBrewPhoto = (path, blob) => run(async (sb) => {
@@ -294,33 +307,58 @@ const BREW_COLUMNS = [
   'rating', 'acidity', 'sweetness', 'bitterness', 'body', 'flavor_notes', 'notes', 'photo_path',
 ].join(', ');
 
+const LATTE_COLUMNS = [
+  'owner', 'id', 'made_at', 'pattern', 'pattern_note', 'milk', 'cup',
+  'score_contrast', 'score_foam', 'score_symmetry', 'score_completion', 'notes', 'photo_path',
+].join(', ');
+const FEED_KINDS = ['brew', 'latte'];
+
 /**
- * 動態牆的紀錄，依沖煮時間新→舊；指定 owner 時只有那個人的（「我的」、個人檔案），否則是自己＋好友的
- * （RLS 只回傳自己、已接受且沒有封鎖的好友：不是好友的人的 owner 一律是空的）
+ * 動態牆的貼文（手沖、拉花），依時間（沖煮／拉花的時間）新→舊；每一列多一個 kind（'brew'｜'latte'）
+ * 指定 owner 時只有那個人的（「我的」、個人檔案），否則是自己＋好友的；kind 只列那一種（null 為全部）
+ * 先用 feed_posts（兩張表的 view，RLS 照常生效）排序分頁，再分兩張表讀內容
  */
-export const listFeed = ({ offset, limit, owner = null }) => run(async (sb) => {
-  let query = sb.from('shared_brews').select(BREW_COLUMNS);
+export const listFeed = ({ offset, limit, owner = null, kind = null }) => run(async (sb) => {
+  let query = sb.from('feed_posts').select('owner, id, kind');
   if (owner) query = query.eq('owner', uuid(owner));
-  return unwrap(await query
-    .order('brewed_at', { ascending: false }).order('id', { ascending: false })
+  if (kind) query = query.eq('kind', FEED_KINDS.includes(kind) ? kind : 'none');
+  const page = unwrap(await query
+    .order('at', { ascending: false }).order('id', { ascending: false })
     .range(offset, offset + limit - 1));
+  const ids = (k) => [...new Set(page.filter((p) => p.kind === k).map((p) => uuid(p.id)))];
+  const [brews, lattes] = await Promise.all([
+    ids('brew').length ? sb.from('shared_brews').select(BREW_COLUMNS).in('id', ids('brew')).then(unwrap) : [],
+    ids('latte').length ? sb.from('shared_latte_arts').select(LATTE_COLUMNS).in('id', ids('latte')).then(unwrap) : [],
+  ]);
+  const byKey = new Map([
+    ...brews.map((r) => [`brew/${r.owner}/${r.id}`, { ...r, kind: 'brew' }]),
+    ...lattes.map((r) => [`latte/${r.owner}/${r.id}`, { ...r, kind: 'latte' }]),
+  ]);
+  // 兩次查詢之間被刪掉的就略過
+  return page.map((p) => byKey.get(`${p.kind}/${p.owner}/${p.id}`)).filter(Boolean);
 });
 
-/** 好友最新一篇紀錄的建立時間（「好友」分頁的新貼文提示；RLS 只回傳看得到的）；沒有回傳 null */
+/** 好友最新一篇貼文的建立時間（新貼文提示；RLS 只回傳看得到的）；沒有回傳 null */
 export const latestFriendBrewAt = (myId) => run(async (sb) =>
-  unwrap(await sb.from('shared_brews').select('created_at').neq('owner', uuid(myId))
+  unwrap(await sb.from('feed_posts').select('created_at').neq('owner', uuid(myId))
     .order('created_at', { ascending: false }).limit(1))[0]?.created_at ?? null);
 
-/** 好友在 since 之後新增的紀錄數（社群分頁的數字；since 為 null 時算全部），最多算到 limit 筆 */
+/** 好友在 since 之後新增的貼文數（社群分頁的數字；since 為 null 時算全部），最多算到 limit 筆 */
 export const countFriendBrewsSince = (myId, since, limit = 100) => run(async (sb) => {
-  let query = sb.from('shared_brews').select('id').neq('owner', uuid(myId));
+  let query = sb.from('feed_posts').select('id').neq('owner', uuid(myId));
   if (since) query = query.gt('created_at', since);
   return unwrap(await query.order('created_at', { ascending: false }).limit(limit)).length;
 });
 
-/** 單筆紀錄；讀不到（不是好友、被封鎖、已刪除）回傳 null */
-export const getSharedBrew = (owner, id) => run(async (sb) =>
-  unwrap(await sb.from('shared_brews').select(BREW_COLUMNS).eq('owner', uuid(owner)).eq('id', uuid(id)).maybeSingle()));
+/** 單篇貼文（手沖或拉花，多一個 kind）；讀不到（不是好友、被封鎖、已刪除）回傳 null */
+export const getSharedPost = (owner, id) => run(async (sb) => {
+  const [brew, latte] = await Promise.all([
+    sb.from('shared_brews').select(BREW_COLUMNS).eq('owner', uuid(owner)).eq('id', uuid(id)).maybeSingle().then(unwrap),
+    sb.from('shared_latte_arts').select(LATTE_COLUMNS).eq('owner', uuid(owner)).eq('id', uuid(id)).maybeSingle().then(unwrap),
+  ]);
+  return brew ? { ...brew, kind: 'brew' } : latte ? { ...latte, kind: 'latte' } : null;
+});
+export const getSharedBrew = getSharedPost;
 
 /** 這些紀錄的讚 [{ brew_owner, brew_id, user_id }]（RLS：讀得到紀錄才讀得到讚） */
 export const listLikes = (brews) => run(async (sb) => {

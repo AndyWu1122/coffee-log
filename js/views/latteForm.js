@@ -2,7 +2,7 @@
 // 照片放最上面（拉花最重要的就是照片）；照片選完就重新編碼成 JPEG（移除 EXIF），按「儲存」才和紀錄一起寫入
 import {
   getLatteArt, saveLatteArt, deleteLatteArt, getLatteArtPhoto, latteTemplateFrom, defaultLatteBeanId, latteSuggestions, listBeans,
-  LATTE_PATTERNS, LATTE_SCORES, LATTE_TEXT_MAX, latteTotal, toLocalInputValue, fromLocalInputValue, preparePhoto, PHOTO_ACCEPT,
+  LATTE_PATTERNS, LATTE_SCORES, LATTE_TEXT_MAX, latteTotal, toLocalInputValue, VISIBILITY, socialAvailable, getLatteShareStatus, setHomeTab, fromLocalInputValue, preparePhoto, PHOTO_ACCEPT,
 } from '../models.js';
 import { esc, setTitle, toast, segmentedHtml, bindSegmented, segmentedValue, showErrors, photoFieldHtml, bindPhotoField } from './ui.js';
 
@@ -13,16 +13,19 @@ const totalText = (scores) => {
   const t = latteTotal({ scores });
   return t == null ? '總分：四項都打完就會算出來' : `總分 ${t.toFixed(1)}`;
 };
-const shortDate = new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric' });
+const VISIBILITY_ICON = { private: '🔒', friends: '👥' };
+const VISIBILITY_OPTIONS = Object.entries(VISIBILITY).map(([value, label]) => ({ value, label: `${VISIBILITY_ICON[value]} ${label}` }));
+const shortDate =new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric' });
 
 export async function render(container, { id, query, isCurrent }) {
   const isNew = id === null;
-  const [art, photo, beans, source, suggestions] = await Promise.all([
+  const [art, photo, beans, source, suggestions, shareStatus] = await Promise.all([
     isNew ? null : getLatteArt(id),
     isNew ? null : getLatteArtPhoto(id),
     listBeans({ includeArchived: true }),
     isNew && query.from ? getLatteArt(query.from) : null,
     latteSuggestions(),
+    isNew || !socialAvailable ? null : getLatteShareStatus(id),
   ]);
   if (!isCurrent()) return;
 
@@ -121,6 +124,15 @@ export async function render(container, { id, query, isCurrent }) {
         <div class="error"></div>
       </div>
 
+      ${socialAvailable ? `
+        <div class="field" data-field="visibility">
+          <span class="label">誰看得到</span>
+          ${segmentedHtml('visibility', VISIBILITY_OPTIONS, a.visibility ?? 'private')}
+          <p class="hint" id="visibility-hint"></p>
+          <p class="share-status" id="share-status" hidden></p>
+          <div class="error"></div>
+        </div>` : ''}
+
       <button class="btn btn-primary btn-block save-bar" type="submit">儲存</button>
       ${isNew ? '' : `<div class="actions">
         <a class="btn btn-block" href="#/latte/new?from=${esc(id)}" aria-label="用這杯的圖案、牛奶、杯子再拉一杯">再拉一杯</a>
@@ -131,6 +143,22 @@ export async function render(container, { id, query, isCurrent }) {
   const form = container.querySelector('form');
   const f = form.elements;
   const noteField = form.querySelector('[data-field="patternNote"]');
+  // 可見度：選「好友」時說明會分享哪些內容；分享狀態只在可見度沒改過時顯示（改了要存檔後才算數）
+  const visibilityHint = form.querySelector('#visibility-hint');
+  const statusEl = form.querySelector('#share-status');
+  const updateVisibility = (value) => {
+    if (!visibilityHint) return;
+    visibilityHint.textContent = value === 'friends'
+      ? '照片、圖案、四項自評、牛奶、杯子和筆記會讓好友看到（只有互相加好友的人；豆子不會上傳）'
+      : '只存在這支手機，不會上傳';
+    const showStatus = Boolean(shareStatus) && value === (a.visibility ?? 'private');
+    statusEl.hidden = !showStatus;
+    if (showStatus) {
+      statusEl.textContent = shareStatus.text;
+      statusEl.dataset.tone = shareStatus.tone;
+    }
+  };
+  updateVisibility(a.visibility ?? 'private');
   const readScores = () => Object.fromEntries(Object.keys(LATTE_SCORES).map((k) => [k, Number(segmentedValue(form, `scores.${k}`)) || null]));
   const totalEl = form.querySelector('#latte-total');
   bindSegmented(form, (name, value) => {
@@ -141,6 +169,7 @@ export async function render(container, { id, query, isCurrent }) {
       field.querySelector('.error').textContent = '';
     }
     if (name === 'pattern') noteField.hidden = value !== 'other';
+    if (name === 'visibility') updateVisibility(value);
     if (name.startsWith('scores.')) totalEl.textContent = totalText(readScores());
   });
   const photoField = bindPhotoField(form, { photo, prepare: preparePhoto, alt: '這杯拉花的照片' });
@@ -162,20 +191,23 @@ export async function render(container, { id, query, isCurrent }) {
         cup: f.cup.value,
         espressoBeanId: f.espressoBeanId.value,
         notes: f.notes.value,
-        visibility: art?.visibility ?? 'private', // 分享（誰看得到）之後才開放
+        visibility: socialAvailable ? segmentedValue(form, 'visibility') : (art?.visibility ?? 'private'),
       }, { photo: photoField.change() });
       if (!result.ok) { showErrors(form, result.errors); return; }
     } finally {
       saving = false;
     }
     toast('已儲存');
+    await setHomeTab('latte'); // 回到首頁的「拉花」分頁，看得到剛存的這杯
     location.hash = '#/';
   });
 
   form.querySelector('[data-action="delete"]')?.addEventListener('click', async () => {
-    if (!confirm(`確定刪除這杯拉花？${photo ? '照片也會一起刪除。' : ''}`)) return;
+    const extra = [photo ? '照片也會一起刪除。' : '', art.visibility === 'friends' ? '好友也會看不到。' : ''].join('');
+    if (!confirm(`確定刪除這杯拉花？${extra}`)) return;
     await deleteLatteArt(id);
     toast('已刪除');
+    await setHomeTab('latte');
     location.hash = '#/';
   });
 

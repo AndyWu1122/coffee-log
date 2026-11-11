@@ -44,6 +44,7 @@ select is(
     'private.blocked_with(uuid)',
     'private.can_view(uuid)',
     'private.is_admin()',
+    'private.post_visible(uuid,uuid)',
     'private.profile_visible(uuid)',
     'private.push_endpoint_ok(text)',
     'private.single_line(text)',

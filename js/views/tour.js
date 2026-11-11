@@ -38,7 +38,7 @@ const STEPS = [
     target: '.tabbar a[data-tab="social"]',
     when: () => socialAvailable,
     title: '咖啡社群',
-    body: '登入後可以加好友，把紀錄分享給好友看，互相按讚、留言。紀錄預設只有自己看得到。',
+    body: '登入後可以加好友，把沖煮紀錄和拉花分享給好友看，互相按讚、留言。紀錄預設只有自己看得到。',
   },
   {
     id: 'done',

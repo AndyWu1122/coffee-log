@@ -903,6 +903,21 @@ a.feed-body:active { background: var(--surface-2); }
 /* 社群頁：全部｜我的、自己的卡片標「我」、卡片上的留言數 */
 .feed-toolbar { justify-content: space-between; align-items: center; gap: 12px; }
 .feed-toolbar .segmented { flex: 0 1 200px; }
+/* 社群頁：全部｜手沖｜拉花 */
+.feed-kinds { margin: 0 0 12px; }
+/* 拉花的貼文：卡片上標「拉花」；照片是重點，接近正方形、不裁太多 */
+.kind-tag {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.feed-card.is-latte .card-title { min-width: 0; overflow-wrap: anywhere; }
+.feed-photo.latte-photo { aspect-ratio: 1 / 1; max-height: none; }
 .me-tag {
   display: inline-block;
   margin-left: 6px;

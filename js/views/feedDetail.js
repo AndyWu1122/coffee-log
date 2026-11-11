@@ -1,10 +1,10 @@
-// #/social/<owner>/<id> 紀錄的詳細內容：完整參數、風味、筆記、照片、按讚的人、留言（js/views/comments.js）
-// 好友的紀錄：檢舉這筆紀錄、封鎖對方；自己的紀錄：這台裝置有這筆時顯示「編輯」
+// #/social/<owner>/<id> 貼文的詳細內容：手沖（完整參數、風味、筆記、照片）或拉花（四項自評、牛奶、杯子、筆記、照片）、按讚的人、留言（js/views/comments.js）
+// 好友的貼文：檢舉、封鎖對方；自己的貼文：這台裝置有這筆時顯示「編輯」
 // ?comments=1（從卡片上的留言數點進來）：捲到留言區
 // 這頁的內容大多來自他人：文字、網址一律經過 esc() 才放進 innerHTML
 import {
   getSocialState, socialErrorMessage, getFeedBrew, FLAVOR, flavorNote, formatSeconds, METHODS,
-  REPORT_REASONS, REPORT_DETAIL_MAX, reportBrew, blockUser,
+  REPORT_REASONS, REPORT_DETAIL_MAX, reportBrew, blockUser, LATTE_SCORES,
 } from '../models.js';
 import { esc, setTitle, toast, showMessage, showErrors, segmentedHtml, bindSegmented, segmentedValue } from './ui.js';
 import { feedCardHtml, bindLikes } from './feed.js';
@@ -37,45 +37,15 @@ export async function render(container, { params: [owner, id], query = {}, isCur
     container.innerHTML = '<div class="empty"><p>找不到這筆紀錄（可能已經刪除，或不再分享）</p><a class="btn" href="#/social">回社群</a></div>';
     return;
   }
-  setTitle(item.mine ? '我的紀錄' : `${item.nickname} 的紀錄`);
-
-  const bean = [item.origin, item.process, item.roastLevel, item.restDays != null ? `養豆 ${item.restDays} 天` : '']
-    .filter(Boolean);
-  const rows = [
-    item.method === 'siphon' ? ['沖煮方式', METHODS.siphon] : ['濾杯', item.dripper],
-    ['磨豆機', [item.grinderName, item.grindSetting].filter(Boolean).join(' ')],
-    ['粉量／水量', `${item.coffeeG}g／${item.waterG}g`],
-    ['水溫', item.tempC != null ? `${item.tempC}°C` : ''],
-    ['總時間', item.totalTimeS != null ? formatSeconds(item.totalTimeS) : ''],
-  ].filter(([, v]) => v);
-  const scores = Object.entries(FLAVOR).filter(([k]) => item.flavor[k] != null);
-  const notes = item.flavorNotes.map(flavorNote).filter(Boolean);
+  const latte = item.kind === 'latte';
+  setTitle(latte ? (item.mine ? '我的拉花' : `${item.nickname} 的拉花`) : (item.mine ? '我的紀錄' : `${item.nickname} 的紀錄`));
+  const editHref = latte ? `#/latte/${encodeURIComponent(item.id)}` : `#/brew/${encodeURIComponent(item.id)}`;
 
   container.innerHTML = `<div id="feed-detail-page">
     <ul class="list feed">${feedCardHtml(item, { detail: true })}</ul>
-    ${bean.length ? `<section class="section"><h2>豆子</h2><p class="detail-text">${esc(bean.join('・'))}</p></section>` : ''}
-    <section class="section">
-      <h2>參數</h2>
-      <dl class="detail-list">
-        ${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}
-      </dl>
-    </section>
-    ${scores.length ? `
-      <section class="section">
-        <h2>風味</h2>
-        <dl class="detail-list">
-          ${scores.map(([k, label]) => `<div><dt>${esc(label)}</dt><dd>${esc(item.flavor[k])} / 5</dd></div>`).join('')}
-        </dl>
-      </section>` : ''}
-    ${notes.length ? `
-      <section class="section">
-        <h2>風味輪</h2>
-        <ul class="note-chips">
-          ${notes.map((n) => `<li class="note-chip"><i style="background:${n.color}"></i>${esc(n.zh)}</li>`).join('')}
-        </ul>
-      </section>` : ''}
+    ${latte ? latteSectionsHtml(item) : brewSectionsHtml(item)}
     ${item.notes ? `<section class="section"><h2>筆記</h2><p class="detail-text detail-notes">${esc(item.notes)}</p></section>` : ''}
-    ${item.canEdit ? `<a class="btn btn-block" href="#/brew/${encodeURIComponent(item.id)}" data-action="edit">編輯</a>` : ''}
+    ${item.canEdit ? `<a class="btn btn-block" href="${editHref}" data-action="edit">編輯</a>` : ''}
     <div id="comments-root"></div>
     <a class="btn btn-block" href="#/social">回社群</a>
 
@@ -106,7 +76,7 @@ export async function render(container, { params: [owner, id], query = {}, isCur
   renderComments(container.querySelector('#comments-root'), {
     myId: state.user.id, me: state.profile, item, isCurrent, scrollTo: query.comments === '1',
   });
-  if (item.mine) return; // 自己的紀錄：沒有檢舉、封鎖
+  if (item.mine) return; // 自己的貼文：沒有檢舉、封鎖
 
   // 檢舉：按「檢舉」才展開表單
   const form = container.querySelector('#report-form');
@@ -146,6 +116,58 @@ export async function render(container, { params: [owner, id], query = {}, isCur
       toast(socialErrorMessage(err));
     }
   });
+}
+
+/** 手沖：豆子、參數、風味、風味輪 */
+function brewSectionsHtml(item) {
+  const bean = [item.origin, item.process, item.roastLevel, item.restDays != null ? `養豆 ${item.restDays} 天` : '']
+    .filter(Boolean);
+  const rows = [
+    item.method === 'siphon' ? ['沖煮方式', METHODS.siphon] : ['濾杯', item.dripper],
+    ['磨豆機', [item.grinderName, item.grindSetting].filter(Boolean).join(' ')],
+    ['粉量／水量', `${item.coffeeG}g／${item.waterG}g`],
+    ['水溫', item.tempC != null ? `${item.tempC}°C` : ''],
+    ['總時間', item.totalTimeS != null ? formatSeconds(item.totalTimeS) : ''],
+  ].filter(([, v]) => v);
+  const scores = Object.entries(FLAVOR).filter(([k]) => item.flavor[k] != null);
+  const notes = item.flavorNotes.map(flavorNote).filter(Boolean);
+  return `
+    ${bean.length ? `<section class="section"><h2>豆子</h2><p class="detail-text">${esc(bean.join('・'))}</p></section>` : ''}
+    <section class="section">
+      <h2>參數</h2>
+      <dl class="detail-list">
+        ${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}
+      </dl>
+    </section>
+    ${scores.length ? `
+      <section class="section">
+        <h2>風味</h2>
+        <dl class="detail-list">
+          ${scores.map(([k, label]) => `<div><dt>${esc(label)}</dt><dd>${esc(item.flavor[k])} / 5</dd></div>`).join('')}
+        </dl>
+      </section>` : ''}
+    ${notes.length ? `
+      <section class="section">
+        <h2>風味輪</h2>
+        <ul class="note-chips">
+          ${notes.map((n) => `<li class="note-chip"><i style="background:${n.color}"></i>${esc(n.zh)}</li>`).join('')}
+        </ul>
+      </section>` : ''}`;
+}
+
+/** 拉花：四項自評（作者自己打的）、牛奶、杯子 */
+function latteSectionsHtml(item) {
+  const rows = [['牛奶', item.milk], ['杯子', item.cup]].filter(([, v]) => v);
+  return `
+    <section class="section latte-detail-scores">
+      <h2>自評${item.total != null ? `・${item.total.toFixed(1)}` : ''}</h2>
+      <dl class="detail-list">
+        ${Object.entries(LATTE_SCORES).map(([k, { label }]) => `<div><dt>${esc(label)}</dt><dd>${esc(item.scores[k] ?? '—')} / 5</dd></div>`).join('')}
+      </dl>
+      <p class="hint">作者自己打的分數，參考拉花比賽的評分項目</p>
+    </section>
+    ${rows.length ? `<section class="section"><h2>牛奶與杯子</h2><dl class="detail-list">
+      ${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl></section>` : ''}`;
 }
 
 const REASON_OPTIONS = Object.entries(REPORT_REASONS).map(([value, label]) => ({ value, label }));

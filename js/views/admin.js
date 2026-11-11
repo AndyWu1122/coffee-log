@@ -124,7 +124,12 @@ function userHtml(u) {
 
 /** 一篇貼文；detail 為 true 時（貼文詳細頁）不再連到自己 */
 function postHtml(item, { detail = false } = {}) {
-  const params = [
+  const latte = item.kind === 'latte';
+  // 拉花：牛奶、杯子、四項自評；手沖：器材與數字
+  const params = latte ? [
+    item.milk, item.cup,
+    item.total != null ? `自評 ${item.total.toFixed(1)}（${Object.values(item.scores).join('・')}）` : '',
+  ].filter(Boolean) : [
     item.dripper,
     [item.grinderName, item.grindSetting].filter(Boolean).join(' '),
     `${item.coffeeG}g → ${item.waterG}g`,
@@ -132,7 +137,7 @@ function postHtml(item, { detail = false } = {}) {
     item.tempC != null ? `${item.tempC}°C` : '',
     item.totalTimeS != null ? formatSeconds(item.totalTimeS) : '',
   ].filter(Boolean);
-  const notes = item.flavorNotes.map(flavorNote).filter(Boolean).map((n) => n.zh);
+  const notes = latte ? [] : item.flavorNotes.map(flavorNote).filter(Boolean).map((n) => n.zh);
   return `<li class="feed-card admin-post" data-owner="${esc(item.owner)}" data-id="${esc(item.id)}">
     <div class="feed-head">
       ${avatarHtml(item)}
@@ -143,13 +148,13 @@ function postHtml(item, { detail = false } = {}) {
     </div>
     <div class="feed-body">
       <div class="card-head">
-        <span class="card-title">${esc(item.beanName)}</span>
-        <span class="stars" aria-label="評分 ${esc(item.rating ?? '未評')}">${stars(item.rating)}</span>
+        <span class="card-title">${latte ? `<span class="kind-tag">拉花</span> ${esc(item.patternName)}` : esc(item.beanName)}</span>
+        ${latte ? '' : `<span class="stars" aria-label="評分 ${esc(item.rating ?? '未評')}">${stars(item.rating)}</span>`}
       </div>
       <div class="card-row">${params.map((p) => `<span>${esc(p)}</span>`).join('')}</div>
       ${notes.length ? `<div class="hint">${esc(notes.join('、'))}</div>` : ''}
       ${item.notes ? `<p class="admin-text">${esc(item.notes)}</p>` : ''}
-      ${item.photoUrl ? `<img class="feed-photo" src="${esc(item.photoUrl)}" alt="這杯咖啡的照片" loading="lazy" decoding="async">` : ''}
+      ${item.photoUrl ? `<img class="feed-photo" src="${esc(item.photoUrl)}" alt="${latte ? '這杯拉花的照片' : '這杯咖啡的照片'}" loading="lazy" decoding="async">` : ''}
     </div>
     <div class="feed-foot admin-counts">
       <span>讚 ${item.likeCount}</span><span>留言 ${item.commentCount}</span>

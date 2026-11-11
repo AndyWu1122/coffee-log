@@ -2,7 +2,7 @@
 // 上方切換「全部｜我的」（#/social?mine=1 只看自己的）；卡片顯示讚數、留言數，有新留言的留言數會標示
 // 這頁的內容大多來自他人：文字、網址一律經過 esc() 才放進 innerHTML
 import {
-  getSocialState, socialErrorMessage, listFeed, setLike, formatRatio, formatSeconds, flavorNote, METHODS,
+  getSocialState, socialErrorMessage, listFeed, setLike, formatRatio, formatSeconds, flavorNote, METHODS, FEED_KINDS,
 } from '../models.js';
 import {
   esc, setTitle, toast, avatarHtml, showMessage, notifyBadgesChanged, segmentedHtml, bindSegmented, profileHref,
@@ -22,6 +22,12 @@ const FILTERS = [{ value: 'all', label: '全部' }, { value: 'mine', label: '我
 export async function render(container, { query = {}, isCurrent }) {
   setTitle('社群');
   const mine = query.mine === '1';
+  // ?kind=brew|latte：只看手沖或拉花（可以和 mine=1 一起用）
+  const kind = FEED_KINDS.some((k) => k.value === query.kind) ? query.kind : '';
+  const hrefFor = (m, k) => {
+    const qs = new URLSearchParams({ ...(m ? { mine: '1' } : {}), ...(k ? { kind: k } : {}) }).toString();
+    return `#/social${qs ? `?${qs}` : ''}`;
+  };
   const rerender = () => render(container, { query, isCurrent });
   if (!navigator.onLine) return showMessage(container, '需要網路才能看社群', rerender);
 
@@ -30,7 +36,7 @@ export async function render(container, { query = {}, isCurrent }) {
   let page;
   try {
     state = await getSocialState();
-    if (state.status === 'ready') page = await listFeed(state.user.id, { mine });
+    if (state.status === 'ready') page = await listFeed(state.user.id, { mine, kind });
   } catch (err) {
     if (isCurrent()) showMessage(container, socialErrorMessage(err), rerender);
     return;
@@ -51,7 +57,11 @@ export async function render(container, { query = {}, isCurrent }) {
 
   const myId = state.user.id;
   const items = new Map(page.items.map((item) => [keyOf(item), item]));
-  const empty = mine ? `
+  const empty = kind ? `
+      <div class="empty">
+        <p>${kind === 'latte' ? '還沒有分享的拉花' : '還沒有分享的手沖紀錄'}</p>
+        <p class="hint">在${kind === 'latte' ? '拉花' : '沖煮紀錄'}的「誰看得到」選「👥 好友」，就會出現在這裡。</p>
+      </div>` : mine ? `
       <div class="empty">
         <p>你還沒有分享給好友的紀錄</p>
         <p class="hint">在沖煮紀錄的「誰看得到」選「👥 好友」，就會出現在這裡。</p>
@@ -66,6 +76,7 @@ export async function render(container, { query = {}, isCurrent }) {
       ${segmentedHtml('filter', FILTERS, mine ? 'mine' : 'all')}
       <a class="link-btn" href="#/friends">好友管理</a>
     </div>
+    <div class="feed-kinds">${segmentedHtml('kind', FEED_KINDS, kind)}</div>
     ${items.size ? `
       <ul class="list feed" id="feed">${page.items.map((item) => feedCardHtml(item)).join('')}</ul>
       <button type="button" class="btn btn-block" data-action="more" ${page.hasMore ? '' : 'hidden'}>載入更多</button>` : empty}
@@ -76,14 +87,17 @@ export async function render(container, { query = {}, isCurrent }) {
   const pageEl = container.querySelector('#feed-page');
   bindLikes(pageEl, myId, items);
   bindSegmented(pageEl.querySelector('.feed-toolbar'), (name, value) => {
-    location.hash = value === 'mine' ? '#/social?mine=1' : '#/social';
+    location.hash = hrefFor(value === 'mine', kind);
+  });
+  bindSegmented(pageEl.querySelector('.feed-kinds'), (name, value) => {
+    location.hash = hrefFor(mine, value);
   });
 
   const moreBtn = container.querySelector('[data-action="more"]');
   moreBtn?.addEventListener('click', async () => {
     moreBtn.disabled = true;
     try {
-      const next = await listFeed(myId, { offset: items.size, mine });
+      const next = await listFeed(myId, { offset: items.size, mine, kind });
       if (!isCurrent()) return;
       // 載入期間有人新增紀錄時，同一筆可能出現兩次：已經在畫面上的跳過
       const fresh = next.items.filter((item) => !items.has(keyOf(item)));
@@ -103,6 +117,36 @@ export async function render(container, { query = {}, isCurrent }) {
  * linkPerson 為 false 時（個人檔案頁）頭像和暱稱不連結：就是這個人的頁面
  */
 export function feedCardHtml(item, { detail = false, linkPerson = true } = {}) {
+  const body = item.kind === 'latte' ? latteBodyHtml(item) : brewBodyHtml(item);
+  return `
+    <li class="feed-card${item.kind === 'latte' ? ' is-latte' : ''}" data-key="${esc(keyOf(item))}">
+      ${linkPerson ? `<a class="feed-head person-link" href="${esc(profileHref(item.owner))}">${headHtml(item)}</a>`
+    : `<div class="feed-head">${headHtml(item)}</div>`}
+      ${detail ? `<div class="feed-body">${body}</div>` : `<a class="feed-body" href="${esc(detailHref(item))}">${body}</a>`}
+      <div class="feed-foot">${likeHtml(item)}${detail ? '' : commentLinkHtml(item)}</div>
+    </li>`;
+}
+
+/** 拉花的總分：星星（四捨五入）＋一位小數 */
+export const latteScoreHtml = (total) => {
+  if (total == null) return '';
+  const n = Math.round(total);
+  return `<span class="latte-total" aria-label="自評 ${total.toFixed(1)} 分"><span class="stars" aria-hidden="true">${'★'.repeat(n)}${'☆'.repeat(5 - n)}</span> ${total.toFixed(1)}</span>`;
+};
+
+/** 拉花卡片：標「拉花」、圖案（使用者輸入的說明要跳脫）、作者的總分；照片放大一點（拉花重點是照片） */
+function latteBodyHtml(item) {
+  const details = [item.milk, item.cup].filter(Boolean);
+  return `
+    <div class="card-head">
+      <span class="card-title"><span class="kind-tag">拉花</span> ${esc(item.patternName)}</span>
+      ${latteScoreHtml(item.total)}
+    </div>
+    ${details.length ? `<div class="card-row">${details.map((d) => `<span>${esc(d)}</span>`).join('')}</div>` : ''}
+    ${item.photoUrl ? `<img class="feed-photo latte-photo" src="${esc(item.photoUrl)}" alt="這杯拉花的照片" loading="lazy" decoding="async">` : ''}`;
+}
+
+function brewBodyHtml(item) {
   const params = [
     item.method === 'siphon' ? METHODS.siphon : item.dripper, // 賽風不用濾杯；手沖不另外標
     [item.grinderName, item.grindSetting].filter(Boolean).join(' '),
@@ -111,7 +155,7 @@ export function feedCardHtml(item, { detail = false, linkPerson = true } = {}) {
     item.tempC != null ? `${item.tempC}°C` : '',
     item.totalTimeS != null ? formatSeconds(item.totalTimeS) : '',
   ].filter(Boolean);
-  const body = `
+  return `
     <div class="card-head">
       <span class="card-title">${esc(item.beanName)}</span>
       <span class="stars" aria-label="評分 ${esc(item.rating ?? '未評')}">${stars(item.rating)}</span>
@@ -119,13 +163,6 @@ export function feedCardHtml(item, { detail = false, linkPerson = true } = {}) {
     <div class="card-row">${params.map((p) => `<span>${esc(p)}</span>`).join('')}</div>
     ${noteTags(item.flavorNotes)}
     ${item.photoUrl ? `<img class="feed-photo" src="${esc(item.photoUrl)}" alt="這杯咖啡的照片" loading="lazy" decoding="async">` : ''}`;
-  return `
-    <li class="feed-card" data-key="${esc(keyOf(item))}">
-      ${linkPerson ? `<a class="feed-head person-link" href="${esc(profileHref(item.owner))}">${headHtml(item)}</a>`
-    : `<div class="feed-head">${headHtml(item)}</div>`}
-      ${detail ? `<div class="feed-body">${body}</div>` : `<a class="feed-body" href="${esc(detailHref(item))}">${body}</a>`}
-      <div class="feed-foot">${likeHtml(item)}${detail ? '' : commentLinkHtml(item)}</div>
-    </li>`;
 }
 
 /** 卡片上方：頭像、暱稱（自己的標「我」）、沖煮時間 */

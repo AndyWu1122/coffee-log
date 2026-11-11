@@ -109,8 +109,8 @@ try {
     return { version: conn.version, stores: [...conn.objectStoreNames], indexes: [...t.objectStore('latteArts').indexNames],
       beans: (await db.getAll('beans')).length, brews: (await db.getAll('brews')).length, wish: (await db.getAll('wishlist')).length,
       photo: Boolean(await db.get('photos', 'old-brew')), thumb: Boolean(await db.get('thumbs', 'old-brew')) };`);
-  check('升級到 DB v9：多了 latteArts（索引 madeAt、espressoBeanId）、latteArtPhotos、latteArtThumbs',
-    upgraded.version === 9 && ['latteArts', 'latteArtPhotos', 'latteArtThumbs'].every((s) => upgraded.stores.includes(s))
+  check('升級到 DB v9 以上：多了 latteArts（索引 madeAt、espressoBeanId）、latteArtPhotos、latteArtThumbs',
+    upgraded.version >= 9 && ['latteArts', 'latteArtPhotos', 'latteArtThumbs'].every((s) => upgraded.stores.includes(s))
       && upgraded.indexes.includes('madeAt') && upgraded.indexes.includes('espressoBeanId'), q(upgraded));
   check('升級後舊的豆子、紀錄、照片、想買清單都還在', upgraded.beans === 1 && upgraded.brews === 1 && upgraded.photo && upgraded.thumb && upgraded.wish === 1, q(upgraded));
   check('有資料：不會跳出新手教學', !(await page.eval(`Boolean(document.querySelector('.tour-card'))`)));
@@ -149,7 +149,7 @@ try {
   check('圖案是五個大按鈕', (await page.eval(`[...document.querySelectorAll('[data-name="pattern"] button')].map((b) => b.dataset.v).join()`)) === 'heart,tulip,rosetta,swan,other'
     && (await page.eval(`document.querySelector('[data-name="pattern"] button').getBoundingClientRect().height`)) >= 56);
   check('「其他」的說明預設隱藏', await page.eval(`document.querySelector('[data-field="patternNote"]').hidden`));
-  check('還不能分享：沒有「誰看得到」', !(await page.eval(`Boolean(document.querySelector('[data-field="visibility"]'))`)));
+  check('有「誰看得到」，新增時預設只有我', (await page.eval(`document.querySelector('[data-name="visibility"]')?.dataset.value`)) === 'private');
   check('新增時沒有「再拉一杯」、刪除', !(await page.eval(`Boolean(document.querySelector('[data-action="delete"], a[href*="from="]'))`)));
   await submit(page, 'form');
   await page.waitFor(`document.querySelector('[data-field="pattern"] .error')?.textContent && document.querySelector('[data-field="scores.contrast"] .error')?.textContent && document.querySelector('[data-field="scores.completion"] .error')?.textContent`, { label: '必填的錯誤' });

@@ -44,7 +44,7 @@ js/views/          # brewList（首頁＋「手沖｜拉花」切換）, brewFor
 icons/             # icons/flags/<小寫國家代碼>.svg：產地地圖的國旗（只有 COUNTRIES 的 32 國，svgo 壓縮過，來源與壓縮方式見 icons/flags/README.md）
 docs/              # social-spec.md（咖啡社群規格，原文不改）、social-open-questions.md（待決事項與決定）、supabase-setup.md（正式專案與 Google 登入設定步驟、部署指令）、overnight-report.md（2026-10-26 通宵工作的報告）、roadmap.md（之後要開發、還沒開始的功能）、user-feedback.md（使用者回饋、判斷與決定）
 supabase/          # 咖啡社群後端：config.toml、migrations/（SQL）、tests/（pgTAP 權限測試）、functions/delete-account（刪除帳號的 Edge Function）、functions/admin-delete-user（開發者刪別人的帳號）、functions/_shared/account.ts（兩者共用的刪除流程）、functions/feedback（意見回饋：存檔＋寄 Email 給站長；mail.ts 是設定檢查與錯誤說明的純函式）、functions/send-push（推播通知）、functions/_shared/webpush.ts（VAPID 簽章與 RFC 8291 加密，只用 Web Crypto）、functions/_shared/local.ts（`isLocalSupabase`：只有已知的本機網址才用公開的測試金鑰，其他一律當正式環境）
-scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs、webpush-test.mjs、onboarding-test.mjs、bean-photo-test.mjs、heatmap-test.mjs、origins-test.mjs、origin-map-ui-test.mjs、brew-ui-test.mjs、storage-test.mjs、glass-contrast-test.mjs、latte-test.mjs、latte-ui-test.mjs（最後十六個不需要 Supabase）、build-worldmap.mjs（產生 js/worldMap.js，不是測試）、supabase-activity-test.mjs、social-heatmap-test.mjs、supabase-push-test.mjs、social-push-test.mjs、push-helpers.mjs（推播測試共用：解密、假推播伺服器）、vapid-keys.mjs（站長產生正式金鑰用，不是測試）
+scripts/           # 只連本機 Supabase 的測試：supabase-local.mjs、chrome.mjs（共用工具）、supabase-api-test.mjs、supabase-storage-test.mjs、supabase-comments-test.mjs、photo-exif-test.mjs、social-ui-test.mjs、social-feed-test.mjs、social-safety-test.mjs、social-feedback-test.mjs、social-comments-test.mjs、supabase-profile-test.mjs、social-profile-test.mjs、admin-api-test.mjs、admin-ui-test.mjs、feedback-mail-test.mjs、menu-alerts-test.mjs、stats-test.mjs、stats-ui-test.mjs、drippers-test.mjs、webpush-test.mjs、onboarding-test.mjs、bean-photo-test.mjs、heatmap-test.mjs、origins-test.mjs、origin-map-ui-test.mjs、brew-ui-test.mjs、storage-test.mjs、glass-contrast-test.mjs、latte-test.mjs、latte-ui-test.mjs（最後十六個不需要 Supabase）、social-latte-test.mjs（拉花分享）、build-worldmap.mjs（產生 js/worldMap.js，不是測試）、supabase-activity-test.mjs、social-heatmap-test.mjs、supabase-push-test.mjs、social-push-test.mjs、push-helpers.mjs（推播測試共用：解密、假推播伺服器）、vapid-keys.mjs（站長產生正式金鑰用，不是測試）
 tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mjs 用 headless Chrome 開；不屬於 App、不放進 ASSETS）
 ```
 
@@ -52,7 +52,7 @@ tests/             # photo.html（照片處理測試頁，由 photo-exif-test.mj
 views → models → db／cloud，每層只呼叫下一層。views 不可直接碰 IndexedDB 或 Supabase。
 - view 的事件監聽器掛在這一頁自己的元素上，**不要掛在 `render` 收到的 container（`#app`）**：`#app` 換頁不會被替換，監聽器會殘留並帶著舊資料處理之後的點擊
 
-## 資料模型（備份 schemaVersion: 9／IndexedDB DB_VERSION: 9）
+## 資料模型（備份 schemaVersion: 9／IndexedDB DB_VERSION: 10）
 **beans**：id, name, origin(產地文字，表單上叫「莊園 / 批次」), country(國家代碼，選填，'' ＝沒選；v1.15.0 加入), region(產區 key 如 'ET.yirgacheffe'，選填，必須屬於 country), process(washed/natural/honey/other), roastLevel(light/light-medium/medium-light/medium/dark，即 淺/淺中/中淺/中/深焙), roastDate(YYYY-MM-DD), bagWeightG(整包重量 g，選填), archived(bool), createdAt
 **grinders**：id, name(必填), notes(選填，例如刻度說明), archived(bool), createdAt
 **drippers**（DB v6 加入）：id, name(必填，≤ 100 字), notes(選填), archived(bool), createdAt
@@ -65,13 +65,15 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
   - 豆子列表卡片右邊顯示縮圖（和紀錄卡片同樣的 `.has-thumb`／`.card-thumb`），離開頁面時 revoke
   - **只存在這支手機、不上傳到社群**（雲端結構、權限都沒有豆子照片）；隱私說明有寫
 **wishlist**（DB v8 加入，keyPath key）：key(`region:<產區 key>`), kind('region'), target(產區 key), createdAt；想買清單，只存在這支手機、**會匯出**（之後「好友的豆子推薦」也放這裡，用別的 kind）
-**latteArts**（DB v9 加入，keyPath id，索引 madeAt、espressoBeanId）：id, madeAt, pattern(heart/tulip/rosetta/swan/other＝愛心/鬱金香/葉子/天鵝/其他，`models.LATTE_PATTERNS`，**key 不能改名**), patternNote(選「其他」時的說明，≤ 50 字), milk(≤ 50), cup(≤ 50), espressoBeanId(選填，'' ＝不指定), scores{contrast, foam, symmetry, completion}(各 1–5 整數，都必填；`models.LATTE_SCORES`，**key 不能改名**), notes, visibility(private/friends；1.24.0 表單還沒有「誰看得到」，一律 private), createdAt
+**latteArts**（DB v9 加入，keyPath id，索引 madeAt、espressoBeanId）：id, madeAt, pattern(heart/tulip/rosetta/swan/other＝愛心/鬱金香/葉子/天鵝/其他，`models.LATTE_PATTERNS`，**key 不能改名**), patternNote(選「其他」時的說明，≤ 50 字), milk(≤ 50), cup(≤ 50), espressoBeanId(選填，'' ＝不指定), scores{contrast, foam, symmetry, completion}(各 1–5 整數，都必填；`models.LATTE_SCORES`，**key 不能改名**), notes, visibility(private/friends；1.25.0 起表單有「誰看得到」，分享見「拉花分享」), createdAt
 **latteArtPhotos**／**latteArtThumbs**（DB v9 加入，keyPath artId）：拉花的照片（每杯最多 1 張），格式、處理方式和 photos／thumbs 完全一樣；**另開 store、不和紀錄照片共用**（photos 的 key 是 brewId，備份、匯入驗證、同步都直接 getAll('photos') 當成紀錄的照片）
   - `saveLatteArt(input, { photo })`／`deleteLatteArt` 和 `saveBrew` 同樣的語意（`db.transact` 涵蓋 latteArts、latteArtPhotos、latteArtThumbs）
   - 首頁上方「手沖｜拉花」（`.home-tabs`）記在 meta `homeTab`（不放 localStorage）；`#/?bean=` 會切回手沖；拉花分頁：依日期分組的卡片（圖案、自評星星、牛奶／杯子／豆子、縮圖）、圖案篩選（`.latte-filter .chip`，切頁後保留）；＋ 依分頁到 `#/brew/new` 或 `#/latte/new`
   - **自評分四項**（參考世界拉花大賽 WLAC 的視覺評分表：Contrast between ingredients、Visual foam quality、Harmony／size／position of pattern、Level of difficulty successfully achieved；這是自己打的，沒有好友打分）：對比（線條清楚、邊緣不糊）、奶泡（細緻有光澤、沒有氣泡）、對稱與位置（對稱、置中、大小合適）、完成度（想拉的圖案有拉出來）；總分＝四項平均，衍生值不儲存（`models.latteTotal`），卡片顯示星星（四捨五入）＋一位小數
   - 表單：照片在最上面 → 圖案（兩欄大按鈕，選「其他」才出現說明）→ 四項自評（名稱＋說明一行、1–5 一行，下面即時顯示總分；打了分那一項的錯誤馬上消失）→ 牛奶、杯子（`<datalist>` 列以前用過的）→ 豆子（選填，預設上一杯拉花用的）→ 時間 → 筆記；「再拉一杯」（`latteTemplateFrom`）帶入圖案（含說明）、牛奶、杯子、豆子
   - 被拉花引用的豆子也不能刪，只能封存；「有資料」（資料保存、新手教學、更新內容）與備份提醒都把拉花算進去
+**latteSync**（DB v10 加入，keyPath artId）：拉花的同步紀錄，欄位和 sync 一樣（brewId 換成 artId）；**不匯出、匯入取代全部時也不清除**
+  - 存檔、刪除拉花後回到首頁時切到「拉花」分頁（`setHomeTab('latte')`）；存紀錄則切回「手沖」
 **sync**（DB v5 加入，keyPath brewId）：brewId, userId, row(上次同步的 shared_brews 內容 JSON), photoAt(上次同步的照片 createdAt), error(''/rate_limited/invalid/failed/removed), failedRow, failedOn；**不匯出、匯入取代全部時也不清除**
 - brews 建索引：beanId、brewedAt、grinderId（v2 加入）、dripperId（v6 加入）
 - **沖煮方式（1.21.0）**：表單最上面「手沖｜賽風」；賽風隱藏濾杯欄位、存檔時 `dripperId` 一律 ''（`normalizeBrew`）；新紀錄預設和最近一筆一樣（`defaultBrewMethod`），「帶入上次參數」「再沖一杯」也帶入；首頁卡片、分享卡片、社群的賽風紀錄在濾杯的位置標「賽風」，手沖不另外標；沒有加 DB 欄位索引，所以 DB_VERSION 不變
@@ -271,7 +273,7 @@ views → models → db／cloud，每層只呼叫下一層。views 不可直接�
 
 ## 咖啡社群（後端：Supabase）
 規格見 `docs/social-spec.md`（分 5 階段，每階段通過測試、使用者確認後才進下一階段）；待決事項與決定見 `docs/social-open-questions.md`。
-目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）、階段 3（帳號與好友）、階段 4（動態牆與同步）、階段 5（安全與隱私收尾），之後加上留言與回覆、封鎖不解除好友（都已部署），開發者後台（已部署）；個人檔案（已部署，步驟見 `docs/supabase-setup.md` 5-5）、推播通知（已部署，步驟見 5-6）、沖煮熱度圖（已部署，步驟見 5-8）。正式專案：`rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），migration 與 `delete-account` 已部署；建立與設定步驟見 `docs/supabase-setup.md`。
+目前完成：階段 1（資料庫與權限）、階段 2（照片 Storage）、階段 3（帳號與好友）、階段 4（動態牆與同步）、階段 5（安全與隱私收尾），之後加上留言與回覆、封鎖不解除好友（都已部署），開發者後台（已部署）；個人檔案（已部署，步驟見 `docs/supabase-setup.md` 5-5）、推播通知（已部署，步驟見 5-6）、沖煮熱度圖（已部署，步驟見 5-8）、拉花分享（步驟見 5-10）。正式專案：`rygsjrzddhhhdqpoayoa`（Tokyo，免費方案），migration 與 `delete-account` 已部署；建立與設定步驟見 `docs/supabase-setup.md`。
 
 ### 資安規則（每個階段都必須遵守）
 - 每張表和 Storage bucket 都必須開 RLS，預設拒絕
@@ -344,6 +346,24 @@ profiles、friendships、blocks、shared_brews、likes、reports（public，API 
   - index.html 只放正式專案的網址；本機 Supabase（config.js 的 `LOCAL`）由測試用的靜態伺服器（`chrome.mjs` 的 `localCsp`）送出時才加上，所以 `python -m http.server` 開的頁面連不到本機 Supabase（本來就無法真的登入，社群功能一律用測試腳本測）
 - Service Worker 只攔截同網域的 GET，不會快取 API 或 signed URL（social-safety-test 會檢查快取內容）
 - **防點擊劫持**：meta 的 CSP 不能設 `frame-ancestors`、GitHub Pages 也不送 `X-Frame-Options`，所以 `js/theme.js` 開頭發現被 iframe 嵌入就整頁不顯示並把最上層換成 App（menu-alerts-test 會檢查）；App 自己不要用 iframe 嵌入自己
+
+### 拉花分享（1.25.0，`20261111100000_latte_art.sql`）
+- **沒有好友打分**（2026-11-11 決定：分數是自己打的）；好友只看得到作者的四項自評與總分，照樣可以按讚、留言、檢舉
+- **`private.posts`**（owner, id, kind 'brew'｜'latte'）：手沖與拉花共同的上層，(owner, id) 在兩種之間唯一；`likes`、`comments`、`reports`、`private.push_throttle` 的外鍵指向它（不是 shared_brews）
+  - 由 trigger 維護：`zz_posts_claim`（before insert，名稱 zz_ 排在每日上限、開發者移除的檢查之後）先佔用，**先擋不是自己的（42501，不能拿 23505 探測別人的 id）**，同一種重送照常、另一種用了同一個 id 才 23505；`posts_release`（after delete）刪掉 → 讚、留言、檢舉 cascade
+  - 新增貼文種類時：建表、掛這兩個 trigger、`post_visible` 加上那張表
+- `private.post_visible(owner, id)`（security invoker）：兩張表任一筆讀得到；likes、reports 的政策用它
+- **停權**：`private.can_view` 加上「對方沒被停權」（`auth.users.banned_until > now()`）→ 手沖、拉花、留言、個人檔案、熱度圖一起生效
+- `shared_latte_arts`：owner, id, made_at, pattern（check 5 種）, pattern_note／milk／cup（≤ 50、單行）, score_contrast／score_foam／score_symmetry／score_completion（各 1–5 not null）, notes（≤ 500）, photo_path（＝ `owner/id.jpg`）, created_at, updated_at；**不上傳豆子**
+  - 權限和 shared_brews 同一套（讀：本人或 `can_view`；寫：本人；欄位層級 grant 不能改 owner、id）；每天 30 筆**和手沖共用**（`count_today('brew_insert')`）；開發者移除過的不能再上傳（共用 `removed_brews`）
+- 照片：**沿用 `brew-photos`**（路徑一樣，id 在 posts 裡唯一）；讀取／上傳／覆蓋政策認兩種貼文 → 刪除帳號、開發者刪照片不用改
+- `public.feed_posts`（view，`security_invoker`）：owner, id, kind, at（brewed_at／made_at）, created_at；`cloud.listFeed` 先查它排序分頁，再分兩張表讀內容；新貼文提示（`latestFriendBrewAt`、`countFriendBrewsSince`）也查它
+- 推播：`shared_latte_arts_push` 和好友新貼文同一套（`push_notified_posts`、`friend:<owner>` 30 分鐘合併），送出的格式也一樣（kind `post`，`bean_name` 放 `private.latte_title`：「拉花・愛心」）→ send-push、sw.js 不用改
+- 開發者後台：`private.admin_posts`（兩種一起）、`admin_latte_json`；`admin_delete_post` 依 posts 的 kind 刪對的表；`profile_detail`、`admin_list_users` 的貼文數算 posts
+- 前端：`sync.js` 的 `syncKind` 一份邏輯跑兩種（`KINDS`：brew → shared_brews／sync，latte → shared_latte_arts／latteSync），撞到每天 30 筆後兩種的新增都先停；`postStatus(kind, item)`
+  - `toFeedItem` 依 `row.kind` 分兩種（拉花：pattern、patternName、milk、cup、scores、total；`brewedAt` 放 made_at）；`feedCardHtml` 拉花標「拉花」（`.kind-tag`）、總分、正方形照片；詳細頁有四項自評、編輯連到 `#/latte/<id>`
+  - 社群頁上方第二排「全部｜手沖｜拉花」（`#/social?kind=brew|latte`，可和 `mine=1` 一起）；個人檔案的貼文自動包含拉花
+- 測試：pgTAP `14_latte_art`、`social-latte-test.mjs`（API 層 A、B 好友，C 非好友，D 封鎖＋兩個 headless Chrome）
 
 ### 沖煮熱度圖（`20261031100000_brew_activity.sql`）
 - `activity_shares`：user_id（主鍵，references profiles on delete cascade）, device_id, updated_at；有這一列＝開啟；**只有本人讀寫**（好友讀不到開關，也讀不到 device_id）；`after delete` trigger（security definer）刪掉這個人所有的 `brew_activity`
